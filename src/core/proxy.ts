@@ -11,7 +11,12 @@ import { RateLimiter } from '../security/rate-limiter';
 import { DashboardServer } from '../dashboard/server';
 import { ContainerSandbox } from '../sandbox/container-sandbox';
 
-export class ProxyServer {
+export interface Lifecycle {
+  start(): Promise<number>;
+  stop(): Promise<void>;
+}
+
+export class ProxyServer implements Lifecycle {
   private child: ChildProcess | null = null;
   private inboundFramer = new JsonRpcStreamFramer();
   private outboundFramer = new JsonRpcStreamFramer();
@@ -30,10 +35,6 @@ export class ProxyServer {
     private options: { enableDashboard?: boolean } = {}
   ) {
     this.setupFramers();
-    if (this.options.enableDashboard || process.env.MCP_SHIELD_ENABLE_DASHBOARD === 'true') {
-      this.dashboard = new DashboardServer();
-      this.dashboard.start();
-    }
   }
 
   private logAndBroadcast(event: any) {
@@ -87,8 +88,8 @@ export class ProxyServer {
           if (this.sanitizer.checkHoneyTokens(JSON.stringify(args))) {
              this.logAndBroadcast({ type: 'honey_token_triggered', toolName, reason: 'LLM attempted to use a decoy credential.' });
              this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: Honey-token accessed! Session terminated.`);
-             this.stop();
-             process.exit(1);
+             if (this.child) { this.child.kill('SIGKILL'); }
+             return;
           }
           
           // 0.5 Egress Network Firewall
@@ -100,7 +101,8 @@ export class ProxyServer {
           }
 
           // 1. Evaluate Policy
-          const { action, rule } = this.policyEngine.evaluateToolCall(toolName, args);
+          const securityResult = this.policyEngine.evaluateToolCall(toolName, args);
+          const action = securityResult.decision;
 
           // 2. AST Firewall
           const isShellTool = /bash|shell|terminal|exec|run|do_cmd|cmd/i.test(toolName);
@@ -116,21 +118,21 @@ export class ProxyServer {
 
           // Apply Rule Action
           if (action === 'block') {
-             this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: rule?.id, reason: rule?.name });
-             this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: Rule '${rule?.name}' triggered.`);
+             this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: securityResult.ruleId, reason: securityResult.reasonCode });
+             this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: Rule '${securityResult.ruleId}' triggered.`);
              return;
           } else if (action === 'prompt') {
              const result = await PromptBridge.ask(
                 `Intercepted ${toolName}`,
                 `Tool: ${toolName}\nArgs: ${JSON.stringify(sanitizedArgs, null, 2)}`,
-                rule?.riskLevel || 'HIGH'
+                'HIGH'
              );
              if (result.action !== 'approve') {
-                this.logAndBroadcast({ type: 'user_denied', toolName, ruleId: rule?.id });
+                this.logAndBroadcast({ type: 'user_denied', toolName, ruleId: securityResult.ruleId });
                 this.sendErrorToHost(message.id, -32000, `USER DENIED: Execution rejected by human operator.`);
                 return;
              }
-             this.logAndBroadcast({ type: 'user_allowed', toolName, ruleId: rule?.id });
+             this.logAndBroadcast({ type: 'user_allowed', toolName, ruleId: securityResult.ruleId });
           } else if (action === 'sandbox') {
              const targetPath = args.path || args.file || args.filename || args.filepath || args.target;
              const content = args.content || args.text || args.data;
@@ -141,7 +143,7 @@ export class ProxyServer {
                 const result = await PromptBridge.ask(
                    `Sandbox Write: ${toolName}`,
                    `Tool: ${toolName}\nTarget: ${targetPath}`,
-                   rule?.riskLevel || 'HIGH',
+                   'HIGH',
                    staged.diff
                 );
                 if (result.action === 'approve') {
@@ -291,93 +293,100 @@ export class ProxyServer {
      return safeEnv;
   }
 
-  public stop(): void {
+  public async stop(): Promise<void> {
     if (this.dashboard) {
-      try { this.dashboard.stop(); } catch {}
+      try { await this.dashboard.stop(); } catch {}
     }
     if (this.policyEngine) {
       try { this.policyEngine.close(); } catch {}
     }
   }
 
-  public start() {
-    const config = this.policyEngine.getConfig();
-    const containerConfig = (config.sandbox as any)?.container;
-    const containerSandbox = new ContainerSandbox(containerConfig || {});
-    const { cmd, args } = containerSandbox.spawnProcess(this.targetCmd, this.targetArgs);
-
-    this.child = spawn(cmd, args, {
-      stdio: ['pipe', 'pipe', process.stderr],
-      env: ProxyServer.buildSafeEnv()
-    });
-
-    this.child.on('error', (err) => {
-       console.error(`[MCP-SHIELD] Failed to spawn target process: ${err.message}`);
-       this.stop();
-       process.exit(1);
-    });
-
-    if (this.child.stdin) {
-      this.child.stdin.on('error', () => {
-        // Suppress EPIPE on child stdin disconnect
-      });
-    }
-
-    process.stdin.on('data', (chunk: Buffer) => {
-      this.inboundFramer.append(chunk);
-    });
-
-    process.stdin.on('end', () => {
-      if (this.child && this.child.stdin && !this.child.stdin.destroyed && this.child.stdin.writable) {
-        try {
-          this.child.stdin.end();
-        } catch {}
+  public start(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      if (this.options.enableDashboard || process.env.MCP_SHIELD_ENABLE_DASHBOARD === 'true') {
+        this.dashboard = new DashboardServer();
+        this.dashboard.start();
       }
-    });
 
-    if (this.child.stdout) {
-      this.child.stdout.on('data', (chunk: Buffer) => {
-        this.outboundFramer.append(chunk);
+      const config = this.policyEngine.getConfig();
+      const containerConfig = (config.sandbox as any)?.container;
+      const containerSandbox = new ContainerSandbox(containerConfig || {});
+      const { cmd, args } = containerSandbox.spawnProcess(this.targetCmd, this.targetArgs);
+
+      this.child = spawn(cmd, args, {
+        stdio: ['pipe', 'pipe', process.stderr],
+        env: ProxyServer.buildSafeEnv()
       });
-    }
 
-    this.child.on('exit', (code, signal) => {
-      this.stop();
-      if (code !== null) {
-        process.exit(code);
-      } else if (signal === 'SIGINT') {
-        process.exit(130);
-      } else if (signal === 'SIGTERM') {
-        process.exit(143);
-      } else {
-        process.exit(1);
+      this.child.on('error', (err) => {
+         console.error(`[MCP-SHIELD] Failed to spawn target process: ${err.message}`);
+         this.stop();
+         reject(err);
+      });
+
+      if (this.child.stdin) {
+        this.child.stdin.on('error', () => {
+          // Suppress EPIPE on child stdin disconnect
+        });
       }
-    });
 
-    const handleShutdown = (signal: string) => {
-      if (this.child) {
-        try {
-          this.child.kill(signal as NodeJS.Signals);
-        } catch {}
-        
-        // Grace period before escalating to force kill
-        const killTimer = setTimeout(() => {
+      process.stdin.on('data', (chunk: Buffer) => {
+        this.inboundFramer.append(chunk);
+      });
+
+      process.stdin.on('end', () => {
+        if (this.child && this.child.stdin && !this.child.stdin.destroyed && this.child.stdin.writable) {
           try {
-            if (this.child && !this.child.killed) {
-              this.child.kill('SIGKILL');
-            }
+            this.child.stdin.end();
           } catch {}
-          this.stop();
-          process.exit(signal === 'SIGINT' ? 130 : 143);
-        }, 3000);
-        killTimer.unref();
-      } else {
-        this.stop();
-        process.exit(signal === 'SIGINT' ? 130 : 143);
-      }
-    };
+        }
+      });
 
-    process.on('SIGINT', () => handleShutdown('SIGINT'));
-    process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+      if (this.child.stdout) {
+        this.child.stdout.on('data', (chunk: Buffer) => {
+          this.outboundFramer.append(chunk);
+        });
+      }
+
+      this.child.on('exit', (code, signal) => {
+        this.stop();
+        if (code !== null) {
+          resolve(code);
+        } else if (signal === 'SIGINT') {
+          resolve(130);
+        } else if (signal === 'SIGTERM') {
+          resolve(143);
+        } else {
+          resolve(1);
+        }
+      });
+
+      const handleShutdown = (signal: string) => {
+        if (this.child) {
+          try {
+            this.child.kill(signal as NodeJS.Signals);
+          } catch {}
+          
+          // Grace period before escalating to force kill
+          const killTimer = setTimeout(() => {
+            try {
+              if (this.child && !this.child.killed) {
+                this.child.kill('SIGKILL');
+              }
+            } catch {}
+            this.stop();
+            resolve(signal === 'SIGINT' ? 130 : 143);
+          }, 3000);
+          killTimer.unref();
+        } else {
+          this.stop();
+          resolve(signal === 'SIGINT' ? 130 : 143);
+        }
+      };
+
+      process.on('SIGINT', () => handleShutdown('SIGINT'));
+      process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+    });
   }
 }

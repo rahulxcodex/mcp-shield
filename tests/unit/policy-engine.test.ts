@@ -73,53 +73,53 @@ describe('PolicyEngine', () => {
 
   it('should evaluate tool call and return matching action', () => {
     const result = engine.evaluateToolCall('run_command', { cmd: 'ls' });
-    expect(result.action).toBe('sandbox');
-    expect(result.rule?.id).toBe('2');
+    expect(result.decision).toBe('sandbox');
+    expect(result.ruleId).toBe('2');
   });
 
   it('should evaluate wildcard tool target and allow safe paths', () => {
     const result = engine.evaluateToolCall('fs_read', { file: '/tmp/test.txt' });
-    expect(result.action).toBe('allow');
+    expect(result.decision).toBe('allow');
   });
 
   it('should block forbidden paths using path matcher', () => {
     const result = engine.evaluateToolCall('read_file', { path: '/etc/passwd' });
-    expect(result.action).toBe('block');
-    expect(result.rule?.id).toBe('1');
+    expect(result.decision).toBe('block');
+    expect(result.ruleId).toBe('1');
   });
   
   it('should block wildcard forbidden paths', () => {
     const result = engine.evaluateToolCall('fs_write', { filename: '/var/log/app.log' });
-    expect(result.action).toBe('block');
-    expect(result.rule?.id).toBe('1');
+    expect(result.decision).toBe('block');
+    expect(result.ruleId).toBe('1');
   });
 
   it('should block relative path etc/passwd without leading slash', () => {
     const result = engine.evaluateToolCall('read_file', { path: 'etc/passwd' });
-    expect(result.action).toBe('block');
+    expect(result.decision).toBe('block');
   });
 
   it('should block uppercase /ETC/passwd path', () => {
     const result = engine.evaluateToolCall('read_file', { path: '/ETC/passwd' });
-    expect(result.action).toBe('block');
+    expect(result.decision).toBe('block');
   });
 
   it('should block traversal paths like /tmp/../etc/passwd', () => {
     const result = engine.evaluateToolCall('read_file', { path: '/tmp/../etc/passwd' });
-    expect(result.action).toBe('block');
+    expect(result.decision).toBe('block');
   });
 
   it('should block Windows backslash and drive-prefixed paths matching forbidden rules', () => {
     const res1 = engine.evaluateToolCall('read_file', { path: 'C:\\etc\\passwd' });
-    expect(res1.action).toBe('block');
+    expect(res1.decision).toBe('block');
 
     const res2 = engine.evaluateToolCall('read_file', { path: 'C:/var/log/system.log' });
-    expect(res2.action).toBe('block');
+    expect(res2.decision).toBe('block');
   });
 
   it('should allow legitimate paths that merely contain etc as substring', () => {
     const result = engine.evaluateToolCall('read_file', { path: '/home/dev/etc-configs/notes.txt' });
-    expect(result.action).toBe('allow');
+    expect(result.decision).toBe('allow');
   });
 
   it('should close file watcher on close()', () => {
@@ -128,6 +128,6 @@ describe('PolicyEngine', () => {
 
   it('should default to allow if no rules match', () => {
     const result = engine.evaluateToolCall('unknown_tool', { foo: 'bar' });
-    expect(result.action).toBe('allow');
+    expect(result.decision).toBe('allow');
   });
 });

@@ -27,7 +27,7 @@ describe('COWFileSystem', () => {
     expect(fs.readFileSync(staged.stagingPath, 'utf8')).toBe('Hello World');
     
     // Commit
-    cowFs.commit(staged.absoluteOriginalPath, staged.stagingPath);
+    cowFs.commit(staged.stagingPath, staged.absoluteOriginalPath);
     expect(fs.existsSync(testFile)).toBe(true);
     expect(fs.readFileSync(testFile, 'utf8')).toBe('Hello World');
   });
@@ -44,6 +44,11 @@ describe('COWFileSystem', () => {
     const outsidePath = path.resolve(process.cwd(), '../../../../outside-test.txt');
     expect(() => {
       cowFs.stageWrite(outsidePath, 'Malicious payload');
+    }).toThrow(/SANDBOX ESCAPE/);
+
+    const traversalPath = path.join(process.cwd(), '../sibling-project/file.txt');
+    expect(() => {
+      cowFs.stageWrite(traversalPath, 'Malicious payload');
     }).toThrow(/SANDBOX ESCAPE/);
   });
 });

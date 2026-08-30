@@ -55,7 +55,8 @@
     "tree-sitter": "^0.25.1",
     "tree-sitter-bash": "^0.25.1",
     "uuid": "^14.0.2",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/diff": "^7.0.2",

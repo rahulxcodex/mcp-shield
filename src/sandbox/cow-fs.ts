@@ -33,7 +33,7 @@ export class COWFileSystem {
     }
     
     const rel = path.relative(this.rootDir, canonicalTarget);
-    const isInside = rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+    const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
     if (!isInside) {
       throw new Error(`SANDBOX ESCAPE ATTEMPT: Target path "${originalPath}" resolves outside workspace root.`);
     }
@@ -61,14 +61,10 @@ export class COWFileSystem {
     return { diff, stagingPath, absoluteOriginalPath: resolvedPath };
   }
 
-  public commit(arg1: string, arg2: string): void {
-    const isFirstStaged = arg1.endsWith('.staged');
-    const stagingPath = isFirstStaged ? arg1 : arg2;
-    const absoluteOriginalPath = isFirstStaged ? arg2 : arg1;
-
+  public commit(stagingPath: string, absoluteOriginalPath: string): void {
     const canonicalTarget = fs.existsSync(absoluteOriginalPath) ? fs.realpathSync(absoluteOriginalPath) : absoluteOriginalPath;
     const rel = path.relative(this.rootDir, canonicalTarget);
-    const isInside = rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+    const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
     if (!isInside) {
       throw new Error('SANDBOX ESCAPE: Cannot commit outside workspace root.');
     }

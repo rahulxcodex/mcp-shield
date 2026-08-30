@@ -22,7 +22,10 @@ if (command === 'protect') {
   
   // Start the proxy with the downstream MCP server
   const proxy = new ProxyServer(targetCmd, targetArgs, { enableDashboard: true });
-  proxy.start();
+  proxy.start().then(code => process.exit(code)).catch(err => {
+    console.error('Fatal proxy error:', err);
+    process.exit(1);
+  });
 } else {
   console.log(`
 🛡️  MCP-SHIELD

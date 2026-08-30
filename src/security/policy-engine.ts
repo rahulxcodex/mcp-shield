@@ -1,48 +1,52 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { z } from 'zod';
+import { SecurityResult } from './types';
 
-export interface PolicyRule {
-  id: string;
-  name: string;
-  targetTools: string[];
-  riskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  action: 'block' | 'prompt' | 'sandbox' | 'allow';
-  matchers?: {
-    astRules?: {
-      disallowedCommands: string[];
-    };
-    pathMatches?: {
-      forbiddenPaths: string[];
-    };
-  };
-}
+export const PolicyRuleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  targetTools: z.array(z.string()),
+  riskLevel: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
+  action: z.enum(['block', 'prompt', 'sandbox', 'allow']),
+  matchers: z.object({
+    astRules: z.object({
+      disallowedCommands: z.array(z.string()),
+    }).optional(),
+    pathMatches: z.object({
+      forbiddenPaths: z.array(z.string()),
+    }).optional(),
+  }).optional(),
+});
+export type PolicyRule = z.infer<typeof PolicyRuleSchema>;
 
-export interface ShieldConfig {
-  version: string;
-  profile: string;
-  redaction: {
-    enabled: boolean;
-    maskStyle: string;
-    highEntropyCheck: boolean;
-    entropyThreshold: number;
-  };
-  sandbox: {
-    cowEnabled: boolean;
-    cowStagingDir: string;
-    autoCommitOnApproval: boolean;
-  };
-  egress: {
-    enabled: boolean;
-    blockedDomains: string[];
-  };
-  rules: PolicyRule[];
-  audit: {
-    enabled: boolean;
-    logDir: string;
-    tamperProofHashing: boolean;
-  };
-}
+export const ShieldConfigSchema = z.object({
+  version: z.string(),
+  profile: z.string(),
+  redaction: z.object({
+    enabled: z.boolean(),
+    maskStyle: z.string(),
+    highEntropyCheck: z.boolean(),
+    entropyThreshold: z.number(),
+  }),
+  sandbox: z.object({
+    cowEnabled: z.boolean(),
+    cowStagingDir: z.string(),
+    autoCommitOnApproval: z.boolean(),
+  }),
+  egress: z.object({
+    enabled: z.boolean(),
+    blockedDomains: z.array(z.string()),
+  }),
+  rules: z.array(PolicyRuleSchema),
+  audit: z.object({
+    enabled: z.boolean(),
+    logDir: z.string(),
+    tamperProofHashing: z.boolean(),
+  }),
+});
+export type ShieldConfig = z.infer<typeof ShieldConfigSchema>;
 
 export class PolicyEngine {
   private config: ShieldConfig | null = null;
@@ -73,7 +77,8 @@ export class PolicyEngine {
   public loadConfig(): void {
     if (fs.existsSync(this.configPath)) {
       const fileContents = fs.readFileSync(this.configPath, 'utf8');
-      this.config = yaml.load(fileContents) as ShieldConfig;
+      const parsedYaml = yaml.load(fileContents);
+      this.config = ShieldConfigSchema.parse(parsedYaml);
     } else {
       throw new Error(`Config file not found: ${this.configPath}`);
     }
@@ -83,40 +88,23 @@ export class PolicyEngine {
     if (!this.config) {
       try {
         this.loadConfig();
-      } catch {
-        this.config = {
-          version: "1.0",
-          profile: "developer",
-          redaction: {
-            enabled: true,
-            maskStyle: "token",
-            highEntropyCheck: true,
-            entropyThreshold: 4.5
-          },
-          sandbox: {
-            cowEnabled: true,
-            cowStagingDir: ".mcp-shield/cow",
-            autoCommitOnApproval: true
-          },
-          egress: {
-            enabled: true,
-            blockedDomains: ["*.ngrok.io", "*.evil.com"]
-          },
-          rules: [
-            {
-              id: "block-destructive-rm",
-              name: "Block Recursive Root Deletion",
-              targetTools: ["*bash*", "*terminal*", "*exec*"],
-              riskLevel: "CRITICAL",
-              action: "block"
-            }
-          ],
-          audit: {
-            enabled: true,
-            logDir: ".mcp-shield/logs",
-            tamperProofHashing: true
-          }
-        };
+      } catch (err) {
+        // Fallback config for development/testing if no config file exists
+        // but it must pass validation
+        if (err instanceof Error && err.message.includes('Config file not found')) {
+          const defaultConfig = {
+            version: "1.0",
+            profile: "developer",
+            redaction: { enabled: true, maskStyle: "token", highEntropyCheck: true, entropyThreshold: 4.5 },
+            sandbox: { cowEnabled: true, cowStagingDir: ".mcp-shield/cow", autoCommitOnApproval: true },
+            egress: { enabled: true, blockedDomains: ["*.ngrok.io", "*.evil.com"] },
+            rules: [{ id: "block-destructive-rm", name: "Block Recursive Root Deletion", targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }],
+            audit: { enabled: true, logDir: ".mcp-shield/logs", tamperProofHashing: true }
+          };
+          this.config = ShieldConfigSchema.parse(defaultConfig);
+        } else {
+          throw err;
+        }
       }
     }
     return this.config!;
@@ -207,7 +195,7 @@ export class PolicyEngine {
     return paths;
   }
 
-  public evaluateToolCall(toolName: string, args: Record<string, any>): { action: PolicyRule['action']; rule?: PolicyRule } {
+  public evaluateToolCall(toolName: string, args: Record<string, any>): SecurityResult {
     const config = this.getConfig();
 
     for (const rule of config.rules) {
@@ -235,14 +223,14 @@ export class PolicyEngine {
                  .replace(/\*/g, '[^/]*');
                return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
             });
-            if (isForbidden) return { action: rule.action, rule };
+            if (isForbidden) return { decision: rule.action as any, detector: 'policy-engine', reasonCode: 'PATH_FORBIDDEN', ruleId: rule.id };
           }
         }
       } else {
-         return { action: rule.action, rule };
+         return { decision: rule.action as any, detector: 'policy-engine', reasonCode: 'RULE_MATCH', ruleId: rule.id };
       }
     }
 
-    return { action: 'allow' };
+    return { decision: 'allow', detector: 'policy-engine', reasonCode: 'DEFAULT_ALLOW' };
   }
 }
