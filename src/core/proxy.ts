@@ -123,13 +123,15 @@ export class ProxyServer {
              }
              this.logAndBroadcast({ type: 'user_allowed', toolName, ruleId: rule?.id });
           } else if (action === 'sandbox') {
-             if (args.path && args.content) {
-                const staged = this.cowFs.stageWrite(args.path, args.content);
+             const targetPath = args.path || args.file || args.filename || args.filepath || args.target;
+             const content = args.content || args.text || args.data;
+             if (targetPath && typeof content === 'string') {
+                const staged = this.cowFs.stageWrite(targetPath, content);
                 this.logAndBroadcast({ type: 'cow_staged', toolName, payload: staged });
                 
                 const result = await PromptBridge.ask(
                    `Sandbox Write: ${toolName}`,
-                   `Tool: ${toolName}\nTarget: ${args.path}`,
+                   `Tool: ${toolName}\nTarget: ${targetPath}`,
                    rule?.riskLevel || 'HIGH',
                    staged.diff
                 );
@@ -142,6 +144,11 @@ export class ProxyServer {
                    this.logAndBroadcast({ type: 'cow_discarded', toolName });
                    this.sendErrorToHost(message.id, -32000, 'USER DENIED: Staged file changes rejected.');
                 }
+                return;
+             } else {
+                // Fail-Closed: Do NOT fall through to unisolated execution!
+                this.logAndBroadcast({ type: 'sandbox_blocked', toolName, reason: 'Sandbox write action requested but target path or content was missing.' });
+                this.sendErrorToHost(message.id, -32000, 'SANDBOX POLICY BLOCKED: Missing path or content for staged execution.');
                 return;
              }
           }
@@ -209,6 +216,22 @@ export class ProxyServer {
      } catch {}
   }
 
+  private buildSafeEnv(): NodeJS.ProcessEnv {
+     const safeEnvVars = [
+       'PATH', 'PATHEXT', 'HOME', 'USER', 'USERNAME', 'USERPROFILE',
+       'TMP', 'TEMP', 'TMPDIR', 'LANG', 'LC_ALL', 'SHELL', 'TERM',
+       'SYSTEMROOT', 'WINDIR', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
+       'PROGRAMFILES', 'PROGRAMFILES(X86)', 'COMSPEC', 'PSMODULEPATH'
+     ];
+     const safeEnv: NodeJS.ProcessEnv = {};
+     for (const key of safeEnvVars) {
+       if (process.env[key] !== undefined) {
+         safeEnv[key] = process.env[key];
+       }
+     }
+     return safeEnv;
+  }
+
   public stop(): void {
     if (this.dashboard) {
       try { this.dashboard.stop(); } catch {}
@@ -226,7 +249,7 @@ export class ProxyServer {
 
     this.child = spawn(cmd, args, {
       stdio: ['pipe', 'pipe', process.stderr],
-      env: process.env
+      env: this.buildSafeEnv()
     });
 
     this.child.on('error', (err) => {

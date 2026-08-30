@@ -249,7 +249,11 @@ export class ASTAnalyzer {
     return { cmdName: '', args: [] };
   }
 
-  private walk(node: Parser.SyntaxNode, depth: number): ASTAnalysisResult {
+  private walk(node: Parser.SyntaxNode | null | undefined, depth: number): ASTAnalysisResult {
+    if (!node || typeof node.type !== 'string') {
+      return { isSafe: true };
+    }
+
     if (depth > this.MAX_RECURSION_DEPTH) {
       return { isSafe: false, reason: 'Command AST recursion depth exceeded maximum limit' };
     }
@@ -261,14 +265,16 @@ export class ASTAnalyzer {
 
     // 2. Check for redirected statements (e.g. bash <<< "...", bash < evil.sh, heredocs)
     if (node.type === 'redirected_statement') {
-      const hasRedirect = node.namedChildren.some(c =>
-        c.type === 'herestring_redirect' || c.type === 'heredoc_redirect' || c.type === 'file_redirect'
+      const children = Array.isArray(node.namedChildren) ? node.namedChildren : [];
+      const hasRedirect = children.some(c =>
+        c && (c.type === 'herestring_redirect' || c.type === 'heredoc_redirect' || c.type === 'file_redirect')
       );
       if (hasRedirect) {
-        const cmdChild = node.namedChildren.find(n => n.type === 'command') || (node.childForFieldName('body') as any);
-        if (cmdChild) {
-          const tokenNodes = (cmdChild.namedChildren || []).filter((n: Parser.SyntaxNode) =>
-            n.type !== 'comment' && !n.type.includes('redirect')
+        const cmdChild = children.find(n => n && n.type === 'command') || 
+          (typeof (node as any).childForFieldName === 'function' ? (node as any).childForFieldName('body') : null);
+        if (cmdChild && Array.isArray(cmdChild.namedChildren)) {
+          const tokenNodes = cmdChild.namedChildren.filter((n: Parser.SyntaxNode) =>
+            n && n.type && n.type !== 'comment' && !n.type.includes('redirect')
           );
           const { cmdName } = this.unwrapCommandTokens(tokenNodes.map((n: Parser.SyntaxNode) => n.text));
           if (this.INTERPRETERS.has(cmdName)) {
@@ -280,8 +286,9 @@ export class ASTAnalyzer {
 
     // 3. Check for raw disk output redirections (e.g. > /dev/sda)
     if (node.type === 'file_redirect') {
-      const dest = node.namedChildren.find(n => n.type === 'word' || n.type === 'string');
-      if (dest) {
+      const children = Array.isArray(node.namedChildren) ? node.namedChildren : [];
+      const dest = children.find(n => n && (n.type === 'word' || n.type === 'string'));
+      if (dest && dest.text) {
         const normalizedDest = this.normalizeToken(dest.text);
         if (/^\/dev\/(sd[a-z]|nvme\d|hd[a-z]|vd[a-z]|loop\d|mem|kmem)/i.test(normalizedDest)) {
           return { isSafe: false, reason: `Direct raw disk device write redirection blocked: "${node.text}"` };
@@ -291,8 +298,9 @@ export class ASTAnalyzer {
 
     // 4. Command node validation
     if (node.type === 'command') {
-      const tokenNodes = node.namedChildren.filter(n =>
-        n.type !== 'comment' && !n.type.includes('redirect')
+      const children = Array.isArray(node.namedChildren) ? node.namedChildren : [];
+      const tokenNodes = children.filter(n =>
+        n && n.type && n.type !== 'comment' && !n.type.includes('redirect')
       );
 
       const tokens = tokenNodes.map(n => n.text);
@@ -405,8 +413,8 @@ export class ASTAnalyzer {
             text === '-c' || text === '-e' || text === '-r' ||
             text.startsWith('/tmp/') || text.startsWith('/var/tmp/') || text.startsWith('/dev/shm/')
           );
-          const hasRedirect = node.namedChildren.some(n =>
-            n.type === 'herestring_redirect' || n.type === 'heredoc_redirect' || n.type === 'file_redirect'
+          const hasRedirect = children.some(n =>
+            n && (n.type === 'herestring_redirect' || n.type === 'heredoc_redirect' || n.type === 'file_redirect')
           );
           const isParentRedirected = node.parent?.type === 'redirected_statement';
           if (hasInlineExec || hasRedirect || isParentRedirected) {
@@ -418,12 +426,14 @@ export class ASTAnalyzer {
 
     // 5. Pipeline validation
     if (node.type === 'pipeline') {
-      const commands = node.namedChildren;
+      const commands = Array.isArray(node.namedChildren) ? node.namedChildren : [];
       for (let i = 1; i < commands.length; i++) {
         const pipedCmd = commands[i];
+        if (!pipedCmd) continue;
         if (pipedCmd.type === 'command') {
-          const tokenNodes = pipedCmd.namedChildren.filter(n =>
-            n.type === 'command_name' || n.type === 'word' || n.type === 'string'
+          const children = Array.isArray(pipedCmd.namedChildren) ? pipedCmd.namedChildren : [];
+          const tokenNodes = children.filter(n =>
+            n && (n.type === 'command_name' || n.type === 'word' || n.type === 'string')
           );
           const tokens = tokenNodes.map(n => n.text);
           const { cmdName } = this.unwrapCommandTokens(tokens);
@@ -440,9 +450,13 @@ export class ASTAnalyzer {
     }
 
     // Recurse down the tree
-    for (const child of node.namedChildren) {
-      const result = this.walk(child, depth + 1);
-      if (!result.isSafe) return result;
+    if (Array.isArray(node.namedChildren)) {
+      for (const child of node.namedChildren) {
+        if (child && typeof child.type === 'string') {
+          const result = this.walk(child, depth + 1);
+          if (!result.isSafe) return result;
+        }
+      }
     }
 
     return { isSafe: true };

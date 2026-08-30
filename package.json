@@ -44,7 +44,7 @@
     "container"
   ],
   "author": "MCP-Shield Contributors",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "diff": "^9.0.0",
