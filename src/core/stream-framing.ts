@@ -12,45 +12,49 @@ class ChunkNode {
 export class JsonRpcStreamFramer extends EventEmitter {
   private head: ChunkNode | null = null;
   private tail: ChunkNode | null = null;
+  
+  // Pointers for O(N) strict single-pass scanning
+  private searchNode: ChunkNode | null = null;
+  private searchOffset: number = 0;
 
   public append(chunk: Buffer) {
     const node = new ChunkNode(chunk);
     if (!this.head) {
       this.head = node;
       this.tail = node;
+      this.searchNode = node;
+      this.searchOffset = 0;
     } else {
       this.tail!.next = node;
       this.tail = node;
+      if (!this.searchNode) {
+        this.searchNode = node;
+        this.searchOffset = 0;
+      }
     }
     this.process();
   }
 
   private process() {
-    // Look for newline (0x0A) character
-    while (this.head) {
-      let found = false;
-      let matchNode: ChunkNode | null = null;
-      let matchIndex = -1;
-
-      let iter: ChunkNode | null = this.head;
-      while (iter) {
-        const idx = iter.buffer.indexOf(10); // \n
-        if (idx !== -1) {
-          found = true;
-          matchNode = iter;
-          matchIndex = idx;
-          break;
-        }
-        iter = iter.next;
+    // Only search starting from where we left off last time
+    while (this.searchNode) {
+      const idx = this.searchNode.buffer.indexOf(10, this.searchOffset); // 10 is \n
+      
+      if (idx === -1) {
+        // Not found in this chunk. Move to next chunk to continue searching.
+        this.searchNode = this.searchNode.next;
+        this.searchOffset = 0;
+        continue;
       }
 
-      if (!found) {
-        return; // Incomplete message, wait for more chunks
-      }
-
+      // We found a newline at `idx` in `this.searchNode`.
+      const matchNode = this.searchNode;
+      const matchIndex = idx;
+      
       // Collect buffers up to the match
       const buffers: Buffer[] = [];
       let current: ChunkNode | null = this.head;
+      
       while (current && current !== matchNode) {
         buffers.push(current.buffer);
         current = current.next;
@@ -58,16 +62,25 @@ export class JsonRpcStreamFramer extends EventEmitter {
       
       // Slice the matchNode
       if (matchIndex > 0) {
-        buffers.push(matchNode!.buffer.subarray(0, matchIndex));
+        buffers.push(matchNode.buffer.subarray(0, matchIndex));
       }
       
-      // Move head forward
-      if (matchIndex === matchNode!.buffer.length - 1) {
-        this.head = matchNode!.next;
-        if (!this.head) this.tail = null;
+      // Advance head past the matched frame
+      if (matchIndex === matchNode.buffer.length - 1) {
+        this.head = matchNode.next;
+        if (!this.head) {
+          this.tail = null;
+        }
+        // Update search pointers for next iteration
+        this.searchNode = this.head;
+        this.searchOffset = 0;
       } else {
-        matchNode!.buffer = matchNode!.buffer.subarray(matchIndex + 1);
+        // Slice the remaining part of matchNode to act as the new head
+        matchNode.buffer = matchNode.buffer.subarray(matchIndex + 1);
         this.head = matchNode;
+        // Update search pointers
+        this.searchNode = matchNode;
+        this.searchOffset = 0;
       }
       
       // Combine if necessary (most of the time it's just 1 buffer, making it zero-copy)
