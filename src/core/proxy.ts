@@ -22,16 +22,25 @@ export class ProxyServer {
   private logger = new SessionLogger();
   private cowFs = new COWFileSystem();
   private rateLimiter = new RateLimiter(15, 60000); // Max 15 calls per minute per tool
-  private dashboard = new DashboardServer();
+  private dashboard: DashboardServer | null = null;
 
-  constructor(private targetCmd: string, private targetArgs: string[]) {
+  constructor(
+    private targetCmd: string,
+    private targetArgs: string[],
+    private options: { enableDashboard?: boolean } = {}
+  ) {
     this.setupFramers();
-    this.dashboard.start();
+    if (this.options.enableDashboard || process.env.MCP_SHIELD_ENABLE_DASHBOARD === 'true') {
+      this.dashboard = new DashboardServer();
+      this.dashboard.start();
+    }
   }
 
   private logAndBroadcast(event: any) {
     this.logger.log(event);
-    this.dashboard.broadcast(event);
+    if (this.dashboard) {
+      this.dashboard.broadcast(event);
+    }
   }
 
   private setupFramers() {

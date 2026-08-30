@@ -21,7 +21,7 @@ if (command === 'protect') {
   }
   
   // Start the proxy with the downstream MCP server
-  const proxy = new ProxyServer(targetCmd, targetArgs);
+  const proxy = new ProxyServer(targetCmd, targetArgs, { enableDashboard: true });
   proxy.start();
 } else {
   console.log(`

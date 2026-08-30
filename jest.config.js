@@ -9,6 +9,7 @@ module.exports = {
   testTimeout: 30000,
   testMatch: ["**/tests/**/*.test.ts"],
   modulePathIgnorePatterns: ["<rootDir>/dist"],
+  setupFiles: ["<rootDir>/tests/setup-tree-sitter.ts"],
   transform: {
     ...tsJestTransformCfg,
   },

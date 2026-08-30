@@ -5,33 +5,28 @@ import * as path from 'path';
 export interface ASTAnalysisResult {
   isSafe: boolean;
   reason?: string;
+  isParseError?: boolean;
 }
 
-// Ensure tree-sitter Tree and SyntaxNode instanceof checks succeed across Jest VM context boundaries
-try {
-  const ParserModule: any = Parser;
-  if (ParserModule) {
-    if (ParserModule.Tree) {
-      Object.defineProperty(ParserModule.Tree, Symbol.hasInstance, {
-        value: (inst: any) => {
-          if (!inst || typeof inst !== 'object') return false;
-          return inst.constructor?.name === 'Tree' || typeof inst.edit === 'function' || inst.rootNode !== undefined;
-        },
-        configurable: true
-      });
+// Preserve Tree-sitter prototype descriptors across multi-realm (Jest) evaluations in memory
+const TreeClass = (Parser as any).Tree;
+if (TreeClass?.prototype) {
+  if (!TreeClass.prototype._savedRootNodeDesc) {
+    TreeClass.prototype._savedRootNodeDesc = Object.getOwnPropertyDescriptor(TreeClass.prototype, 'rootNode');
+    TreeClass.prototype._savedRootNodeWithOffsetDesc = Object.getOwnPropertyDescriptor(TreeClass.prototype, 'rootNodeWithOffset');
+    TreeClass.prototype._savedEditDesc = Object.getOwnPropertyDescriptor(TreeClass.prototype, 'edit');
+  } else {
+    if (TreeClass.prototype._savedRootNodeDesc) {
+      Object.defineProperty(TreeClass.prototype, 'rootNode', TreeClass.prototype._savedRootNodeDesc);
     }
-    if (ParserModule.SyntaxNode) {
-      Object.defineProperty(ParserModule.SyntaxNode, Symbol.hasInstance, {
-        value: (inst: any) => {
-          if (!inst || typeof inst !== 'object') return false;
-          return true;
-        },
-        configurable: true
-      });
+    if (TreeClass.prototype._savedRootNodeWithOffsetDesc) {
+      Object.defineProperty(TreeClass.prototype, 'rootNodeWithOffset', TreeClass.prototype._savedRootNodeWithOffsetDesc);
+    }
+    if (TreeClass.prototype._savedEditDesc) {
+      Object.defineProperty(TreeClass.prototype, 'edit', TreeClass.prototype._savedEditDesc);
     }
   }
-  delete (Bash as any).nodeSubclasses;
-} catch {}
+}
 
 export class ASTAnalyzer {
   private parser: Parser;
@@ -115,6 +110,9 @@ export class ASTAnalyzer {
       let tree = this.parser.parse(command);
       let root = this.getRoot(tree);
       if (!root) {
+        try {
+          delete (Bash as any).nodeSubclasses;
+        } catch {}
         this.parser = new Parser();
         this.parser.setLanguage(Bash);
         tree = this.parser.parse(command);
@@ -123,9 +121,9 @@ export class ASTAnalyzer {
       if (root) {
         return this.walk(root, 0);
       }
-      return { isSafe: false, reason: 'AST Parsing Failure: Unable to obtain syntax tree root node' };
+      return { isSafe: false, isParseError: true, reason: 'AST Parsing Failure: Unable to obtain syntax tree root node' };
     } catch (err: any) {
-      return { isSafe: false, reason: `AST Parsing Failure: ${err.message}` };
+      return { isSafe: false, isParseError: true, reason: `AST Parsing Failure: ${err.message}` };
     }
   }
 

@@ -1,13 +1,9 @@
 import { EventEmitter } from 'events';
 
-class ChunkNode {
-  constructor(public buffer: Buffer, public next: ChunkNode | null = null) {}
-}
-
 /**
- * JsonRpcStreamFramer implements a Vectored Buffer Queue for zero-copy 
- * stream ingestion and SIMD-optimized boundary detection (looking for \n).
- * Emits 'message' with the complete message Buffer.
+ * JsonRpcStreamFramer handles newline-delimited (\n / \r\n) JSON-RPC stream framing
+ * with bounded memory safeguards (10MB max frame size) to prevent OOM/DoS.
+ * Emits 'message' with each complete message Buffer.
  */
 export class JsonRpcStreamFramer extends EventEmitter {
   private buffer: Buffer = Buffer.alloc(0);

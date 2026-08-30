@@ -29,7 +29,6 @@
     "test:integration": "node scripts/run-tests.js tests/integration",
     "fuzz": "ts-node scripts/fuzz.ts",
     "bench": "ts-node benchmarks/proxy-latency.bench.ts",
-    "postinstall": "node scripts/patch-tree-sitter.js",
     "prepack": "npm run build"
   },
   "keywords": [
