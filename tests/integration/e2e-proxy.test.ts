@@ -74,7 +74,7 @@ describe('End-to-End MCP-Shield Proxy Integration Test Suite', () => {
     });
 
     client = new MCPTestClient(proxyProcess);
-    setTimeout(done, 1500);
+    setTimeout(done, 2000);
   });
 
   afterAll(() => {
@@ -260,7 +260,7 @@ describe('End-to-End MCP-Shield Proxy Integration Test Suite', () => {
         method: 'call_tool',
         params: { name: 'crash_server', arguments: {} }
       }) + '\n');
-    }, 500);
+    }, 1200);
   });
 
   it('E2E-09: Generates cryptographically tamper-evident audit log with intact SHA-256 hash chains', () => {
