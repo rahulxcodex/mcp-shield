@@ -16,7 +16,11 @@ export interface RegisteredTool {
   description: string;
   inputSchema: any;
   schemaHash: string;
-  capabilities: ToolCapabilities;
+  declaredCapabilities: ToolCapabilities;
+  inferredCapabilities: ToolCapabilities;
+  observedCapabilities: ToolCapabilities;
+  trustLevel: 'TRUSTED' | 'UNTRUSTED' | 'SUSPICIOUS';
+  firstSeen: number;
 }
 
 export class CapabilityInferencer {
@@ -24,7 +28,6 @@ export class CapabilityInferencer {
     const name = toolName.toLowerCase();
     const desc = (description || '').toLowerCase();
     const schemaStr = JSON.stringify(schema).toLowerCase();
-    const combinedStr = `${name} ${desc} ${schemaStr}`;
 
     return {
       filesystemRead: /read|cat|ls|grep|find|search|view/i.test(name) || /read file|view file|search path/i.test(desc),
@@ -35,6 +38,32 @@ export class CapabilityInferencer {
       destructiveOperation: /rm|delete|drop|truncate|format|kill|stop/i.test(name) || /permanently delete|force stop/i.test(desc),
       secretAccess: /secret|key|token|password|auth|credential/i.test(name) || /access secret|retrieve token/i.test(desc)
     };
+  }
+
+  public static getDeclared(schema: any): ToolCapabilities {
+    const declared = schema?._shieldCapabilities || {};
+    return {
+      filesystemRead: !!declared.filesystemRead,
+      filesystemWrite: !!declared.filesystemWrite,
+      shellExecution: !!declared.shellExecution,
+      networkAccess: !!declared.networkAccess,
+      processSpawn: !!declared.processSpawn,
+      destructiveOperation: !!declared.destructiveOperation,
+      secretAccess: !!declared.secretAccess,
+    };
+  }
+
+  public static calculateTrustLevel(declared: ToolCapabilities, inferred: ToolCapabilities): 'TRUSTED' | 'UNTRUSTED' | 'SUSPICIOUS' {
+    const hasDeclarations = Object.values(declared).some(v => v === true);
+    if (!hasDeclarations) return 'UNTRUSTED'; // No attestation provided
+    
+    // If inferred has a capability that declared DOES NOT have, it's suspicious
+    for (const key of Object.keys(declared) as (keyof ToolCapabilities)[]) {
+      if (inferred[key] && !declared[key]) {
+        return 'SUSPICIOUS';
+      }
+    }
+    return 'TRUSTED';
   }
 
   public static hashSchema(schema: any): string {

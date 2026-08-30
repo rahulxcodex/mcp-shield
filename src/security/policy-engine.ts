@@ -39,7 +39,13 @@ export const ShieldConfigSchema = z.object({
   }),
   egress: z.object({
     enabled: z.boolean(),
-    blockedDomains: z.array(z.string()),
+    allowMode: z.enum(['allow', 'deny']).default('allow'),
+    allowedDomains: z.array(z.string()).optional(),
+    blockedDomains: z.array(z.string()).optional(),
+    allowPrivateNetworks: z.boolean().default(true),
+    blockLoopback: z.boolean().default(false),
+    blockLinkLocal: z.boolean().default(false),
+    blockMetadataEndpoints: z.boolean().default(false)
   }),
   rules: z.array(PolicyRuleSchema),
   audit: z.object({
@@ -77,7 +83,7 @@ export class PolicyEngine {
         profile: "developer",
         redaction: { enabled: true, maskStyle: "token", highEntropyCheck: true, entropyThreshold: 4.5 },
         sandbox: { cowEnabled: true, cowStagingDir: ".mcp-shield/cow", autoCommitOnApproval: true },
-        egress: { enabled: true, blockedDomains: ["*.ngrok.io", "*.evil.com"] },
+        egress: { enabled: true, allowMode: "allow", blockedDomains: ["*.ngrok.io", "*.evil.com"], allowPrivateNetworks: true, blockLoopback: false, blockLinkLocal: false, blockMetadataEndpoints: false },
         rules: [{ id: "allow-all-safe", name: "Allow safe commands", priority: 10, riskLevel: "LOW", action: "allow" }, { id: "block-destructive-rm", name: "Block Recursive Root Deletion", priority: 100, targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }],
         audit: { enabled: true, logDir: ".mcp-shield/logs", tamperProofHashing: true }
       };
@@ -93,48 +99,76 @@ export class PolicyEngine {
     return this.config;
   }
 
-  public checkEgress(args: Record<string, any>): { isBlocked: boolean; domain?: string } {
+  public checkEgress(args: Record<string, any>): { isBlocked: boolean; domain?: string; reason?: string } {
     const config = this.getConfig();
-    if (!config.egress?.enabled || !config.egress.blockedDomains) return { isBlocked: false };
+    if (!config.egress?.enabled) return { isBlocked: false };
 
     const argStr = JSON.stringify(args);
+    const urls: URL[] = [];
     
-    // 1. Check for standard domain names and hostnames
-    const urlRegex = /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+    // Extract anything that looks like a URL
+    const urlRegex = /(?:https?|ftp):\/\/[^\s"'<>]+/gi;
     let match;
     while ((match = urlRegex.exec(argStr)) !== null) {
-      const domain = match[1].toLowerCase();
-      const isBlocked = config.egress.blockedDomains.some(blocked => {
-        const lowerBlocked = blocked.toLowerCase();
-        if (lowerBlocked.startsWith('*.')) {
-          const apex = lowerBlocked.slice(2);
-          if (domain === apex || domain.endsWith('.' + apex)) {
-            return true;
-          }
-        }
-        const regexStr = lowerBlocked.replace(/\./g, '\\.').replace(/\*/g, '.*');
-        return new RegExp(`^${regexStr}$`, 'i').test(domain);
-      });
-      
-      if (isBlocked) return { isBlocked: true, domain };
+      try {
+        urls.push(new URL(match[0]));
+      } catch {
+        // Unparseable URL
+      }
     }
 
-    // 2. Check for raw IP literals, Hex-encoded IPs, and Dword IPs targeted at egress exfiltration
-    const ipPatterns = [
-      /(?:https?:\/\/)?((?:\d{1,3}\.){3}\d{1,3})(?::\d+)?/g,
-      /(?:https?:\/\/)?(0x[0-9a-fA-F]{8})/g,
-      /(?:https?:\/\/)?(\[(?:[0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}\])(?::\d+)?/g
-    ];
+    // SSRF and Domain Checks
+    for (const url of urls) {
+      const hostname = url.hostname.toLowerCase();
+      
+      const isLoopback = /^(localhost|127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1|0x7f000001)$/.test(hostname) || hostname.endsWith('.localhost');
+      if (config.egress.blockLoopback && isLoopback) {
+         return { isBlocked: true, domain: hostname, reason: 'Loopback address blocked' };
+      }
+      
+      const isLinkLocal = /^169\.254\.\d+\.\d+$/.test(hostname);
+      if (config.egress.blockLinkLocal && isLinkLocal) {
+         return { isBlocked: true, domain: hostname, reason: 'Link-local address blocked' };
+      }
 
-    for (const ipRegex of ipPatterns) {
-      let ipMatch;
-      while ((ipMatch = ipRegex.exec(argStr)) !== null) {
-        const targetIp = ipMatch[1];
-        // If blacklisted specifically or if blocked domain matches
-        const isBlocked = config.egress.blockedDomains.some(blocked => {
-          return blocked === targetIp || blocked === '*' || blocked === '0.0.0.0/0';
-        });
-        if (isBlocked) return { isBlocked: true, domain: targetIp };
+      if (config.egress.blockMetadataEndpoints && hostname === '169.254.169.254') {
+         return { isBlocked: true, domain: hostname, reason: 'Metadata endpoint blocked' };
+      }
+
+      const isPrivate = /^(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+|fd[0-9a-f]{2}:.+|fc[0-9a-f]{2}:.+)$/.test(hostname);
+      if (!config.egress.allowPrivateNetworks && isPrivate) {
+         return { isBlocked: true, domain: hostname, reason: 'Private network blocked' };
+      }
+
+      if (config.egress.allowMode === 'deny') {
+         let allowed = false;
+         if (config.egress.allowedDomains) {
+            allowed = config.egress.allowedDomains.some(d => {
+               const lowerAllowed = d.toLowerCase();
+               if (lowerAllowed.startsWith('*.')) {
+                 const apex = lowerAllowed.slice(2);
+                 return hostname === apex || hostname.endsWith('.' + apex);
+               }
+               return hostname === lowerAllowed;
+            });
+         }
+         if (!allowed) {
+            return { isBlocked: true, domain: hostname, reason: 'Domain not in allowed list' };
+         }
+      } else {
+         if (config.egress.blockedDomains) {
+            const blocked = config.egress.blockedDomains.some(d => {
+               const lowerBlocked = d.toLowerCase();
+               if (lowerBlocked.startsWith('*.')) {
+                 const apex = lowerBlocked.slice(2);
+                 return hostname === apex || hostname.endsWith('.' + apex);
+               }
+               return hostname === lowerBlocked;
+            });
+            if (blocked) {
+               return { isBlocked: true, domain: hostname, reason: 'Domain blocked' };
+            }
+         }
       }
     }
     
@@ -189,11 +223,20 @@ export class PolicyEngine {
     }
 
     const highEvidence = context.evidence.find(e => e.risk === 'HIGH');
+    
+    const actionSeverity: Record<string, number> = {
+      'quarantine': 5,
+      'block': 4,
+      'sandbox': 3,
+      'prompt': 2,
+      'allow': 1
+    };
 
-    // Sort rules by priority (highest first)
-    const sortedRules = [...config.rules].sort((a, b) => b.priority - a.priority);
+    let finalDecision: SecurityResult | null = null;
+    let highestSeverity = -1;
+    let highestPriority = -1;
 
-    for (const rule of sortedRules) {
+    for (const rule of config.rules) {
       let isTarget = false;
 
       // Check tool names
@@ -214,32 +257,58 @@ export class PolicyEngine {
       }
 
       if (isTarget) {
-        if (rule.matchers) {
-          if (rule.matchers.pathMatches) {
-            const candidatePaths = this.extractCandidatePaths(context.args);
-            for (const rawTarget of candidatePaths) {
-              const normalizedTarget = this.normalizePathForMatching(rawTarget);
+        let ruleMatches = true;
+        let reasonCode = 'RULE_MATCH';
 
-              const isForbidden = rule.matchers.pathMatches.forbiddenPaths.some(p => {
-                 const normalizedRule = this.normalizePathForMatching(p);
-                 const regexStr = normalizedRule
-                   .replace(/\./g, '\\.')
-                   .replace(/\*\*/g, '.*')
-                   .replace(/\*/g, '[^/]*');
-                 return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
-              });
-              if (isForbidden) return { decision: rule.action as any, detector: 'policy-engine', reasonCode: 'PATH_FORBIDDEN', ruleId: rule.id };
+        if (rule.matchers?.pathMatches) {
+          const candidatePaths = this.extractCandidatePaths(context.args);
+          let pathMatched = false;
+          for (const rawTarget of candidatePaths) {
+            const normalizedTarget = this.normalizePathForMatching(rawTarget);
+            const isForbidden = rule.matchers.pathMatches.forbiddenPaths.some(p => {
+               const normalizedRule = this.normalizePathForMatching(p);
+               const regexStr = normalizedRule
+                 .replace(/\./g, '\\.')
+                 .replace(/\*\*/g, '.*')
+                 .replace(/\*/g, '[^/]*');
+               return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
+            });
+            if (isForbidden) {
+               pathMatched = true;
+               reasonCode = 'PATH_FORBIDDEN';
+               break;
             }
           }
-        } else {
-           // Rule matches tool/capability without extra matchers
-           if (highEvidence && rule.action === 'allow') {
-              // High risk evidence escalates 'allow' to 'sandbox' or 'prompt' by default, or just fallback to block if unsupported
-              return { decision: 'sandbox', detector: highEvidence.detector, reasonCode: highEvidence.finding, ruleId: rule.id };
-           }
-           return { decision: rule.action as any, detector: 'policy-engine', reasonCode: 'RULE_MATCH', ruleId: rule.id };
+          if (!pathMatched) {
+             ruleMatches = false; // Required matcher didn't match
+          }
+        }
+
+        if (ruleMatches) {
+          let effectiveAction = rule.action;
+          if (highEvidence && effectiveAction === 'allow') {
+             effectiveAction = 'sandbox'; // Escalate
+          }
+
+          const severity = actionSeverity[effectiveAction];
+          
+          // Selection logic: Highest severity wins. If tie, highest priority wins.
+          if (severity > highestSeverity || (severity === highestSeverity && rule.priority > highestPriority)) {
+             highestSeverity = severity;
+             highestPriority = rule.priority;
+             finalDecision = {
+               decision: effectiveAction as any,
+               detector: 'policy-engine',
+               reasonCode: highEvidence ? highEvidence.finding : reasonCode,
+               ruleId: rule.id
+             };
+          }
         }
       }
+    }
+
+    if (finalDecision) {
+       return finalDecision;
     }
 
     // Default hardened mode: Fail-closed (Allowlist first)

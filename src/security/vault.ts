@@ -1,24 +1,27 @@
 import * as crypto from 'crypto';
 
-export class SecretVault {
-  private key: Buffer;
-  private readonly algorithm = 'aes-256-gcm';
-  private secrets = new Map<string, { encrypted: Buffer; iv: Buffer; tag: Buffer }>();
-  private tokenToId = new Map<string, string>();
-  private idToToken = new Map<string, string>();
+interface VaultEntry {
+  encrypted: Buffer;
+  iv: Buffer;
+  tag: Buffer;
+  token: string;
+  expiresAt: number;
+}
 
-  // Ring buffer for eviction
+export class SecretVault {
+  private key: Buffer | null;
+  private readonly algorithm = 'aes-256-gcm';
+  private secrets = new Map<string, VaultEntry>(); // id -> entry
+  private tokenToId = new Map<string, string>();
   private readonly MAX_CACHE_SIZE = 5000;
-  private evictionRing = new Array<string>(5000);
-  private ringIndex = 0;
-  private currentSize = 0;
+  private readonly DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
 
   constructor() {
-    // Generate a fresh session-scoped encryption key
     this.key = crypto.randomBytes(32);
   }
 
   private encrypt(secret: string): { encrypted: Buffer; iv: Buffer; tag: Buffer } {
+    if (!this.key) throw new Error("Vault is cleared");
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
     const encrypted = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
@@ -26,38 +29,48 @@ export class SecretVault {
   }
 
   private decrypt(encrypted: Buffer, iv: Buffer, tag: Buffer): string {
+    if (!this.key) throw new Error("Vault is cleared");
     const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
   }
 
-  public store(secret: string): string {
-    // Check if we already have it (we hash the secret to check without keeping plaintext in memory)
+  private evictStale(now: number) {
+    for (const [id, entry] of this.secrets.entries()) {
+      if (entry.expiresAt <= now) {
+        this.tokenToId.delete(entry.token);
+        this.secrets.delete(id);
+      }
+    }
+  }
+
+  public store(secret: string, ttlMs: number = this.DEFAULT_TTL_MS): string {
+    const now = Date.now();
+    this.evictStale(now);
+
     const secretHash = crypto.createHash('sha256').update(secret).digest('hex');
     
-    if (this.idToToken.has(secretHash)) {
-      return this.idToToken.get(secretHash)!;
+    if (this.secrets.has(secretHash)) {
+      const entry = this.secrets.get(secretHash)!;
+      this.secrets.delete(secretHash); // Refresh LRU position
+      this.secrets.set(secretHash, entry);
+      return entry.token;
     }
 
-    if (this.currentSize >= this.MAX_CACHE_SIZE) {
-      const oldestId = this.evictionRing[this.ringIndex];
-      const oldToken = this.idToToken.get(oldestId)!;
-      this.secrets.delete(oldestId);
-      this.idToToken.delete(oldestId);
-      this.tokenToId.delete(oldToken);
-    } else {
-      this.currentSize++;
+    if (this.secrets.size >= this.MAX_CACHE_SIZE) {
+      const oldestId = this.secrets.keys().next().value;
+      if (oldestId) {
+        const oldestEntry = this.secrets.get(oldestId)!;
+        this.tokenToId.delete(oldestEntry.token);
+        this.secrets.delete(oldestId);
+      }
     }
 
     const token = `[[SHIELD_SECRET_${crypto.randomUUID()}]]`;
-    const encryptedData = this.encrypt(secret);
+    const { encrypted, iv, tag } = this.encrypt(secret);
     
-    this.secrets.set(secretHash, encryptedData);
-    this.idToToken.set(secretHash, token);
+    this.secrets.set(secretHash, { encrypted, iv, tag, token, expiresAt: now + ttlMs });
     this.tokenToId.set(token, secretHash);
-
-    this.evictionRing[this.ringIndex] = secretHash;
-    this.ringIndex = (this.ringIndex + 1) % this.MAX_CACHE_SIZE;
 
     return token;
   }
@@ -66,13 +79,28 @@ export class SecretVault {
     const id = this.tokenToId.get(token);
     if (!id) return null;
 
-    const data = this.secrets.get(id);
-    if (!data) return null;
+    const entry = this.secrets.get(id);
+    if (!entry) return null;
+
+    if (entry.expiresAt <= Date.now()) {
+       this.secrets.delete(id);
+       this.tokenToId.delete(token);
+       return null;
+    }
 
     try {
-      return this.decrypt(data.encrypted, data.iv, data.tag);
+      return this.decrypt(entry.encrypted, entry.iv, entry.tag);
     } catch {
       return null;
     }
+  }
+
+  public clear(): void {
+    if (this.key) {
+      crypto.randomFillSync(this.key);
+      this.key = null;
+    }
+    this.secrets.clear();
+    this.tokenToId.clear();
   }
 }

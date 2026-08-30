@@ -3,6 +3,13 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as Diff from 'diff';
 
+export interface FileIdentity {
+  ino: number;
+  dev: number;
+  mode: number;
+  exists: boolean;
+}
+
 export class COWFileSystem {
   private stagingRoot: string;
   private sessionId = crypto.randomUUID();
@@ -23,13 +30,16 @@ export class COWFileSystem {
     return path.join(this.stagingRoot, this.sessionId);
   }
 
-  public stageWrite(originalPath: string, newContent: string): { diff: string; stagingPath: string; absoluteOriginalPath: string } {
+  public stageWrite(originalPath: string, newContent: string): { diff: string; stagingPath: string; absoluteOriginalPath: string; originalIdentity: FileIdentity } {
     const resolvedPath = path.resolve(this.rootDir, originalPath);
 
-    // Symlink / Path traversal validation: Target must be contained within rootDir
     let canonicalTarget = resolvedPath;
+    let identity: FileIdentity = { ino: 0, dev: 0, mode: 0, exists: false };
+    
     if (fs.existsSync(resolvedPath)) {
       canonicalTarget = fs.realpathSync(resolvedPath);
+      const stat = fs.lstatSync(canonicalTarget);
+      identity = { ino: stat.ino, dev: stat.dev, mode: stat.mode, exists: true };
     }
     
     const rel = path.relative(this.rootDir, canonicalTarget);
@@ -38,30 +48,54 @@ export class COWFileSystem {
       throw new Error(`SANDBOX ESCAPE ATTEMPT: Target path "${originalPath}" resolves outside workspace root.`);
     }
 
-    const safeHash = crypto.createHash('sha256').update(resolvedPath).digest('hex');
+    const safeHash = crypto.createHash('sha256').update(canonicalTarget).digest('hex');
     const stagingPath = path.join(this.stagingRoot, this.sessionId, `${safeHash}.staged`);
 
     fs.mkdirSync(path.dirname(stagingPath), { recursive: true });
     fs.writeFileSync(stagingPath, newContent, { encoding: 'utf8', mode: 0o600 });
 
     let oldContent = '';
-    if (fs.existsSync(resolvedPath)) {
-      oldContent = fs.readFileSync(resolvedPath, 'utf8');
+    if (identity.exists) {
+      oldContent = fs.readFileSync(canonicalTarget, 'utf8');
     }
 
     const diff = Diff.createTwoFilesPatch(
-      resolvedPath,
-      resolvedPath + ' (staged)',
+      canonicalTarget,
+      canonicalTarget + ' (staged)',
       oldContent,
       newContent,
       'Original',
       'Staged'
     );
 
-    return { diff, stagingPath, absoluteOriginalPath: resolvedPath };
+    return { diff, stagingPath, absoluteOriginalPath: canonicalTarget, originalIdentity: identity };
   }
 
-  public commit(stagingPath: string, absoluteOriginalPath: string): void {
+  public commit(stagingPath: string, absoluteOriginalPath: string, originalIdentity?: FileIdentity): void {
+    if (originalIdentity && originalIdentity.exists) {
+      if (!fs.existsSync(absoluteOriginalPath)) {
+        throw new Error('COW TOCTOU DETECTED: Original file was deleted before commit.');
+      }
+      const currentStat = fs.lstatSync(absoluteOriginalPath);
+      if (currentStat.ino !== originalIdentity.ino || currentStat.dev !== originalIdentity.dev) {
+        throw new Error('COW TOCTOU DETECTED: File identity changed (symlink swap or replacement).');
+      }
+    } else if (originalIdentity && !originalIdentity.exists) {
+      if (fs.existsSync(absoluteOriginalPath)) {
+        throw new Error('COW TOCTOU DETECTED: File was created before commit by another process.');
+      }
+      // Ensure parent directory is safe and inside workspace
+      const parentDir = path.dirname(absoluteOriginalPath);
+      if (fs.existsSync(parentDir)) {
+          const canonicalParent = fs.realpathSync(parentDir);
+          const rel = path.relative(this.rootDir, canonicalParent);
+          const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
+          if (!isInside) {
+             throw new Error('SANDBOX ESCAPE: Parent directory resolves outside workspace root.');
+          }
+      }
+    }
+    
     const canonicalTarget = fs.existsSync(absoluteOriginalPath) ? fs.realpathSync(absoluteOriginalPath) : absoluteOriginalPath;
     const rel = path.relative(this.rootDir, canonicalTarget);
     const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
@@ -70,10 +104,16 @@ export class COWFileSystem {
     }
 
     const newContent = fs.readFileSync(stagingPath);
+    
     // Atomic file replacement via temp file
-    const tempFile = `${absoluteOriginalPath}.tmp.${Date.now()}`;
-    fs.writeFileSync(tempFile, newContent);
+    const tempFile = `${absoluteOriginalPath}.tmp.${crypto.randomBytes(4).toString('hex')}`;
+    const fd = fs.openSync(tempFile, 'wx', originalIdentity?.exists ? originalIdentity.mode : 0o644);
+    fs.writeSync(fd, newContent);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    
     fs.renameSync(tempFile, absoluteOriginalPath);
+    
     if (fs.existsSync(stagingPath)) {
       fs.unlinkSync(stagingPath);
     }

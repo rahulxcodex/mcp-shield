@@ -90,7 +90,9 @@ export class SecuritySession {
       throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool '${toolName}' changed its schema dynamically.`);
     }
 
-    const capabilities = CapabilityInferencer.infer(toolName, schema, description);
+    const inferredCapabilities = CapabilityInferencer.infer(toolName, schema, description);
+    const declaredCapabilities = CapabilityInferencer.getDeclared(schema);
+    const trustLevel = CapabilityInferencer.calculateTrustLevel(declaredCapabilities, inferredCapabilities);
     
     const registered: RegisteredTool = {
       serverId: this.serverIdentity,
@@ -98,7 +100,19 @@ export class SecuritySession {
       description,
       inputSchema: schema,
       schemaHash: hash,
-      capabilities
+      declaredCapabilities,
+      inferredCapabilities,
+      observedCapabilities: existing ? existing.observedCapabilities : {
+        filesystemRead: false,
+        filesystemWrite: false,
+        shellExecution: false,
+        networkAccess: false,
+        processSpawn: false,
+        destructiveOperation: false,
+        secretAccess: false
+      },
+      trustLevel,
+      firstSeen: existing ? existing.firstSeen : Date.now()
     };
 
     this.toolRegistry.set(toolName, registered);

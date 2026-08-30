@@ -150,7 +150,7 @@ export class ProxyServer implements Lifecycle {
         }
 
         // 2. AST Firewall
-        if (registeredTool?.capabilities.shellExecution || /bash|shell|terminal|exec|run|do_cmd|cmd/i.test(toolName)) {
+        if (registeredTool?.inferredCapabilities.shellExecution || /bash|shell|terminal|exec|run|do_cmd|cmd/i.test(toolName)) {
            const cmd = args.command || args.cmd || '';
            const astResult = this.astAnalyzer.analyzeCommand(cmd);
            if (!astResult.isSafe) {
@@ -158,11 +158,16 @@ export class ProxyServer implements Lifecycle {
               evidence.push({ detector: 'ast-analyzer', finding: astResult.reason || 'AST_BLOCKED', risk });
            }
         }
+        
+        // 3. Capability Attestation Check
+        if (registeredTool?.trustLevel === 'SUSPICIOUS') {
+           evidence.push({ detector: 'capability-attestation', finding: 'CAPABILITY_MISMATCH: Inferred capabilities exceed declared capabilities.', risk: 'HIGH' });
+        }
 
         // Evaluate Policy Unified Engine
         const evaluationContext: EvaluationContext = {
            toolName,
-           capabilities: registeredTool ? Object.keys(registeredTool.capabilities).filter((k) => (registeredTool.capabilities as any)[k]) : undefined,
+           capabilities: registeredTool ? Object.keys(registeredTool.inferredCapabilities).filter((k) => (registeredTool.inferredCapabilities as any)[k]) : undefined,
            args,
            evidence
         };
@@ -241,7 +246,7 @@ ${red}BLOCKED${reset}
                  staged.diff
               );
               if (result.action === 'approve') {
-                 this.cowFs.commit(staged.stagingPath, staged.absoluteOriginalPath);
+                 this.cowFs.commit(staged.stagingPath, staged.absoluteOriginalPath, staged.originalIdentity);
                  this.logAndBroadcast({ type: 'cow_committed', toolName, payload: { path: staged.absoluteOriginalPath } });
                  this.sendSuccessToHost(message.id, { content: [{ type: 'text', text: 'File changes approved and written.' }] });
               } else {
@@ -260,9 +265,17 @@ ${red}BLOCKED${reset}
       
       // Restore tokenized secrets in inbound tool call parameters before sending to downstream server
       if (message.method === 'call_tool') {
-         const payloadStr = JSON.stringify(message.params);
-         const restoredStr = this.session.sanitizer.restore(payloadStr);
-         message.params = JSON.parse(restoredStr);
+         const toolName = message.params.name;
+         const registeredTool = this.session.toolRegistry.get(toolName);
+         
+         // Trust-aware secret restoration
+         if (registeredTool?.trustLevel === 'TRUSTED') {
+            const payloadStr = JSON.stringify(message.params);
+            const restoredStr = this.session.sanitizer.restore(payloadStr);
+            message.params = JSON.parse(restoredStr);
+         } else {
+            this.logAndBroadcast({ type: 'secret_forwarding_blocked', toolName, reason: `Server trust level is ${registeredTool?.trustLevel || 'UNKNOWN'}, skipping secret restoration.` });
+         }
       }
       
       // Pass to child stdin
