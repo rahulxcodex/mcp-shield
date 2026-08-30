@@ -5,7 +5,7 @@ import * as path from 'path';
 export class ASTAnalyzer {
   private parser: Parser;
   private readonly SAFE_PIPE_TARGETS = new Set([
-    'grep', 'awk', 'sed', 'sort', 'uniq', 'wc', 'cat', 'head', 'tail', 'less', 'more', 'jq', 'xargs', 'find', 'cut', 'tr'
+    'grep', 'awk', 'sed', 'sort', 'uniq', 'wc', 'cat', 'head', 'tail', 'less', 'more', 'jq', 'cut', 'tr'
   ]);
 
   constructor() {
@@ -15,6 +15,16 @@ export class ASTAnalyzer {
 
   public analyzeCommand(command: string): { isSafe: boolean; reason?: string } {
     if (!command || !command.trim()) return { isSafe: true };
+    // Prevent synchronous tree-sitter parsing DoS on oversized commands
+    if (command.length > 64 * 1024) {
+      return { isSafe: false, reason: 'Command size exceeds 64KB safety limit (DoS prevention)' };
+    }
+
+    // Check for fork bomb patterns
+    if (command.includes(':(){ :|:& };:') || command.includes(':(){:|:&};:')) {
+      return { isSafe: false, reason: 'Fork bomb pattern detected' };
+    }
+
     try {
       const tree = this.parser.parse(command);
       return this.walk(tree.rootNode);
@@ -36,6 +46,11 @@ export class ASTAnalyzer {
         const rawCmdText = cmdNameNode.text.trim();
         const normalizedCmd = rawCmdText.replace(/^['"]|['"]$/g, '').replace(/\\/g, '');
         const cmdName = path.basename(normalizedCmd.toLowerCase());
+
+        // Block dynamic execution primitives
+        if (cmdName === 'eval' || cmdName === 'exec') {
+          return { isSafe: false, reason: `Dynamic evaluation primitive "${cmdName}" is blocked: "${node.text}"` };
+        }
 
         const isDangerousTarget = (t: string) => {
           const clean = t.replace(/^['"]|['"]$/g, '');
@@ -85,15 +100,23 @@ export class ASTAnalyzer {
           }
         }
 
-        // Direct execution of scripts via shell interpreters (e.g. bash /tmp/x.sh)
-        if (['bash', 'sh', 'zsh', 'python', 'python3', 'perl', 'ruby', 'php'].includes(cmdName)) {
+        // Check find with dangerous flags (-exec, -delete)
+        if (cmdName === 'find') {
           const args = node.namedChildren.filter((n: Parser.SyntaxNode) => n.type === 'word' || n.type === 'string');
-          const targetScript = args.find((a: Parser.SyntaxNode) => {
+          if (args.some((a: Parser.SyntaxNode) => a.text.includes('-exec') || a.text.includes('-delete'))) {
+            return { isSafe: false, reason: `Dangerous find command with -exec or -delete blocked: "${node.text}"` };
+          }
+        }
+
+        // Direct execution of scripts or inline code via shell/interpreters (e.g. bash /tmp/x.sh, python3 -c "...")
+        if (['bash', 'sh', 'zsh', 'python', 'python3', 'perl', 'ruby', 'php', 'node'].includes(cmdName)) {
+          const args = node.namedChildren.filter((n: Parser.SyntaxNode) => n.type === 'word' || n.type === 'string');
+          const hasInlineExec = args.some((a: Parser.SyntaxNode) => {
             const text = a.text.replace(/^['"]|['"]$/g, '');
-            return text.startsWith('/tmp/') || text.startsWith('/var/tmp/') || text.startsWith('/dev/shm/') || text.endsWith('.sh');
+            return text === '-c' || text === '-e' || text.startsWith('/tmp/') || text.startsWith('/var/tmp/') || text.startsWith('/dev/shm/') || text.endsWith('.sh');
           });
-          if (targetScript) {
-            return { isSafe: false, reason: `Executing untrusted script file via interpreter blocked: "${node.text}"` };
+          if (hasInlineExec) {
+            return { isSafe: false, reason: `Direct interpreter inline/script execution blocked: "${node.text}"` };
           }
         }
       }
@@ -107,7 +130,8 @@ export class ASTAnalyzer {
         if (pipedCmd.type === 'command') {
           const nameNode = pipedCmd.namedChildren.find((n: Parser.SyntaxNode) => n.type === 'command_name');
           if (nameNode) {
-            const name = path.basename(nameNode.text.trim().toLowerCase());
+            const rawText = nameNode.text.trim().replace(/^['"]|['"]$/g, '');
+            const name = path.basename(rawText.toLowerCase());
             if (!this.SAFE_PIPE_TARGETS.has(name)) {
               return { isSafe: false, reason: `Piping to non-allowlisted command "${name}" is blocked.` };
             }

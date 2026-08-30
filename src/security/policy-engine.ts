@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as yaml from 'js-yaml';
 
 export interface PolicyRule {
@@ -141,26 +142,47 @@ export class PolicyEngine {
     return { isBlocked: false };
   }
 
+  public close(): void {
+    if (this.watcher) {
+      this.watcher.close();
+      this.watcher = null;
+    }
+  }
+
+  private normalizePathForMatching(rawPath: string): string {
+    let clean = rawPath.trim().replace(/\\/g, '/');
+    if (!clean.startsWith('/')) {
+      clean = '/' + clean;
+    }
+    return path.posix.normalize(clean).toLowerCase();
+  }
+
   public evaluateToolCall(toolName: string, args: Record<string, any>): { action: PolicyRule['action']; rule?: PolicyRule } {
     const config = this.getConfig();
 
     for (const rule of config.rules) {
       const isTarget = rule.targetTools.some(t => {
         if (t.includes('*')) {
-          const regex = new RegExp('^' + t.replace(/\*/g, '.*') + '$');
+          const regex = new RegExp('^' + t.replace(/\*/g, '.*') + '$', 'i');
           return regex.test(toolName);
         }
-        return t === toolName;
+        return t.toLowerCase() === toolName.toLowerCase();
       });
 
       if (!isTarget) continue;
 
       if (rule.matchers) {
         if (rule.matchers.pathMatches && (args.path || args.file || args.filename)) {
-          const targetPath = (args.path || args.file || args.filename) as string;
+          const rawTarget = (args.path || args.file || args.filename) as string;
+          const normalizedTarget = this.normalizePathForMatching(rawTarget);
+
           const isForbidden = rule.matchers.pathMatches.forbiddenPaths.some(p => {
-             const regexStr = p.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*');
-             return new RegExp(`^${regexStr}$`).test(targetPath) || new RegExp(regexStr).test(targetPath);
+             const normalizedRule = this.normalizePathForMatching(p);
+             const regexStr = normalizedRule
+               .replace(/\./g, '\\.')
+               .replace(/\*\*/g, '.*')
+               .replace(/\*/g, '[^/]*');
+             return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
           });
           if (isForbidden) return { action: rule.action, rule };
         }

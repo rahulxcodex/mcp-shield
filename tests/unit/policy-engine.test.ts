@@ -81,6 +81,30 @@ describe('PolicyEngine', () => {
     expect(result.rule?.id).toBe('1');
   });
 
+  it('should block relative path etc/passwd without leading slash', () => {
+    const result = engine.evaluateToolCall('read_file', { path: 'etc/passwd' });
+    expect(result.action).toBe('block');
+  });
+
+  it('should block uppercase /ETC/passwd path', () => {
+    const result = engine.evaluateToolCall('read_file', { path: '/ETC/passwd' });
+    expect(result.action).toBe('block');
+  });
+
+  it('should block traversal paths like /tmp/../etc/passwd', () => {
+    const result = engine.evaluateToolCall('read_file', { path: '/tmp/../etc/passwd' });
+    expect(result.action).toBe('block');
+  });
+
+  it('should allow legitimate paths that merely contain etc as substring', () => {
+    const result = engine.evaluateToolCall('read_file', { path: '/home/dev/etc-configs/notes.txt' });
+    expect(result.action).toBe('allow');
+  });
+
+  it('should close file watcher on close()', () => {
+    expect(() => engine.close()).not.toThrow();
+  });
+
   it('should default to allow if no rules match', () => {
     const result = engine.evaluateToolCall('safe_tool', {});
     expect(result.action).toBe('allow');

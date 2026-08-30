@@ -25,10 +25,10 @@ const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-z
 export class SecretSanitizer {
   private secretToToken = new Map<string, string>();
   private tokenToSecret = new Map<string, string>();
-  private readonly MAX_CACHE_SIZE = 1000;
+  private readonly MAX_CACHE_SIZE = 5000;
   
   // Eviction Ring Buffer (Replaces iterator allocations)
-  private evictionRing = new Array<string>(1000);
+  private evictionRing = new Array<string>(5000);
   private ringIndex = 0;
   private currentSize = 0;
 

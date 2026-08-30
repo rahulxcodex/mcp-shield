@@ -34,6 +34,15 @@ export class ProxyServer {
   }
 
   private setupFramers() {
+    this.inboundFramer.on('error', (err: Error) => {
+      this.logAndBroadcast({ type: 'stream_error', stream: 'inbound', reason: err.message });
+      this.sendErrorToHost(null, -32000, `STREAM ERROR: ${err.message}`);
+    });
+
+    this.outboundFramer.on('error', (err: Error) => {
+      this.logAndBroadcast({ type: 'stream_error', stream: 'outbound', reason: err.message });
+    });
+
     this.inboundFramer.on('message', async (buffer: Buffer) => {
       let message: any = null;
       try {
