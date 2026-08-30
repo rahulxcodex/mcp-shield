@@ -7,20 +7,29 @@ export interface ASTAnalysisResult {
   reason?: string;
 }
 
-// Ensure tree-sitter Tree instanceof checks succeed across Jest VM context boundaries
+// Ensure tree-sitter Tree and SyntaxNode instanceof checks succeed across Jest VM context boundaries
 try {
-  const TreeClass = (Parser as any).Tree;
-  if (TreeClass) {
-    Object.defineProperty(TreeClass, Symbol.hasInstance, {
-      value: (inst: any) => {
-        if (!inst || typeof inst !== 'object') return false;
-        if (inst.constructor?.prototype === inst) return false;
-        return inst.constructor?.name === 'Tree' || typeof inst.edit === 'function';
-      },
-      configurable: true
-    });
+  const ParserModule: any = Parser;
+  if (ParserModule) {
+    if (ParserModule.Tree) {
+      Object.defineProperty(ParserModule.Tree, Symbol.hasInstance, {
+        value: (inst: any) => {
+          if (!inst || typeof inst !== 'object') return false;
+          return inst.constructor?.name === 'Tree' || typeof inst.edit === 'function' || inst.rootNode !== undefined;
+        },
+        configurable: true
+      });
+    }
+    if (ParserModule.SyntaxNode) {
+      Object.defineProperty(ParserModule.SyntaxNode, Symbol.hasInstance, {
+        value: (inst: any) => {
+          if (!inst || typeof inst !== 'object') return false;
+          return true;
+        },
+        configurable: true
+      });
+    }
   }
-  // Reset language node classes once per VM realm
   delete (Bash as any).nodeSubclasses;
 } catch {}
 
@@ -56,6 +65,9 @@ export class ASTAnalyzer {
 
   constructor() {
     this.parser = new Parser();
+    try {
+      delete (Bash as any).nodeSubclasses;
+    } catch {}
     this.parser.setLanguage(Bash);
   }
 
