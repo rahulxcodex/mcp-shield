@@ -17,7 +17,7 @@ describe('PolicyEngine', () => {
     redaction: { enabled: true, maskStyle: 'uuid', highEntropyCheck: false, entropyThreshold: 4.2 },
     sandbox: { cowEnabled: true, cowStagingDir: '/tmp/cow', autoCommitOnApproval: false },
     egress: { enabled: true, allowMode: 'allow', allowPrivateNetworks: true, blockLoopback: false, blockLinkLocal: false, blockMetadataEndpoints: false, blockedDomains: ['*.evil.com'] },
-    audit: { enabled: true, logDir: '/tmp/logs', tamperProofHashing: true },
+    audit: { enabled: true, logDir: '/tmp/logs', tamperEvidentHashing: true },
     rules: [
       {
         id: '1',

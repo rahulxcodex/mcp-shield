@@ -47,7 +47,7 @@ describe('Property-Based Tests', () => {
         sandbox: { cowEnabled: false, cowStagingDir: 'test', autoCommitOnApproval: false },
         egress: { enabled: true, allowMode: 'allow', allowPrivateNetworks: true, blockLoopback: false, blockLinkLocal: false, blockMetadataEndpoints: false },
         rules: [],
-        audit: { enabled: false, logDir: 'test', tamperProofHashing: false }
+        audit: { enabled: false, logDir: 'test', tamperEvidentHashing: false }
       });
 
       fc.assert(

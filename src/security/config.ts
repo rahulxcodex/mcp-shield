@@ -33,7 +33,7 @@ export class ConfigLoader {
         { id: "allow-safe", name: "Allow safe tools", priority: 10, riskLevel: "LOW", action: "sandbox" },
         { id: "block-destructive", name: "Block Destructive", priority: 100, targetTools: ["*bash*", "*terminal*"], riskLevel: "CRITICAL", action: "block" }
       ],
-      audit: { enabled: true, logDir: '.mcp-shield/logs', tamperProofHashing: true }
+      audit: { enabled: true, logDir: '.mcp-shield/logs', tamperEvidentHashing: true }
     };
   }
 }
