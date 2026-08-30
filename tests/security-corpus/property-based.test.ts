@@ -45,7 +45,7 @@ describe('Property-Based Tests', () => {
         profile: 'test',
         redaction: { enabled: false, maskStyle: 'hash', highEntropyCheck: false, entropyThreshold: 5 },
         sandbox: { cowEnabled: false, cowStagingDir: 'test', autoCommitOnApproval: false },
-        egress: { enabled: true, allowMode: 'allow' },
+        egress: { enabled: true, allowMode: 'allow', allowPrivateNetworks: true, blockLoopback: false, blockLinkLocal: false, blockMetadataEndpoints: false },
         rules: [],
         audit: { enabled: false, logDir: 'test', tamperProofHashing: false }
       });
@@ -54,9 +54,9 @@ describe('Property-Based Tests', () => {
         fc.property(
           fc.record({
             toolName: fc.string(),
-            capabilities: fc.option(fc.array(fc.string())),
+            capabilities: fc.option(fc.array(fc.string()), { nil: undefined }),
             args: fc.dictionary(fc.string(), fc.anything()),
-            evidence: fc.array(fc.record({ detector: fc.string(), finding: fc.string(), risk: fc.constantFrom('LOW', 'MEDIUM', 'HIGH', 'CRITICAL') as any }))
+            evidence: fc.array(fc.record({ detector: fc.string(), finding: fc.string(), risk: fc.constantFrom('LOW', 'MEDIUM', 'HIGH', 'CRITICAL') as fc.Arbitrary<'LOW'|'MEDIUM'|'HIGH'|'CRITICAL'> }))
           }),
           (context) => {
             try {

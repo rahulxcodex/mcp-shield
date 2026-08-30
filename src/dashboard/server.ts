@@ -72,7 +72,7 @@ export class DashboardServer {
 
     // Enforce Origin Check against Cross-Site WebSocket Hijacking (CSWSH) and Token Auth
     this.wss.on('connection', (ws, req) => {
-      const url = new URL(req.url || '/', \`http://\${req.headers.host || 'localhost'}\`);
+      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       if (url.searchParams.get('token') !== this.authToken) {
         ws.close(4001, 'Unauthorized: Invalid token');
         return;
