@@ -30,7 +30,21 @@ export class DashboardServer {
                 color = '#f00';
               }
               
-              div.innerHTML = \`<span style="color: \${color}">[\${data.timestamp}] \${data.type.toUpperCase()}</span> \${data.toolName ? 'Tool: ' + data.toolName : ''} \${data.reason ? '<br/>Reason: ' + data.reason : ''}\`;
+              const escapeHtml = (unsafe) => {
+                return (unsafe || '').toString()
+                     .replace(/&/g, "&amp;")
+                     .replace(/</g, "&lt;")
+                     .replace(/>/g, "&gt;")
+                     .replace(/"/g, "&quot;")
+                     .replace(/'/g, "&#039;");
+              };
+              
+              const safeToolName = escapeHtml(data.toolName);
+              const safeReason = escapeHtml(data.reason);
+              const safeType = escapeHtml(data.type).toUpperCase();
+              const safeTimestamp = escapeHtml(data.timestamp);
+              
+              div.innerHTML = \`<span style="color: \${color}">[\${safeTimestamp}] \${safeType}</span> \${safeToolName ? 'Tool: ' + safeToolName : ''} \${safeReason ? '<br/>Reason: ' + safeReason : ''}\`;
               logs.prepend(div);
             };
           </script>
@@ -46,8 +60,8 @@ export class DashboardServer {
   }
 
   public start() {
-    this.server.listen(this.port, () => {
-      console.error(`[MCP-SHIELD] Real-time Dashboard running at http://localhost:${this.port}`);
+    this.server.listen(this.port, '127.0.0.1', () => {
+      console.error(`[MCP-SHIELD] Real-time Dashboard running at http://127.0.0.1:${this.port}`);
     });
   }
 

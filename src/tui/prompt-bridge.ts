@@ -3,7 +3,7 @@ import { render, Box, Text, useInput } from 'ink';
 import * as fs from 'fs';
 
 export interface PromptResult {
-  action: 'approve' | 'reject' | 'always_allow' | 'sandbox' | 'timeout';
+  action: 'approve' | 'reject' | 'timeout';
 }
 
 interface PromptAppProps {
@@ -25,8 +25,6 @@ const PromptApp: React.FC<PromptAppProps> = ({ title, message, riskLevel, diff, 
   useInput((input, key) => {
     if (input === 'y') onResult({ action: 'approve' });
     if (input === 'n') onResult({ action: 'reject' });
-    if (input === 'a') onResult({ action: 'always_allow' });
-    if (input === 's') onResult({ action: 'sandbox' });
   });
 
   const borderColor = riskLevel === 'CRITICAL' ? 'red' : 'yellow';
@@ -39,7 +37,7 @@ const PromptApp: React.FC<PromptAppProps> = ({ title, message, riskLevel, diff, 
       React.createElement(Text, null, diff)
     ) : null,
     React.createElement(Box, { marginTop: 1 },
-      React.createElement(Text, { bold: true }, '[y] Approve  [n] Reject  [a] Always Allow  [s] Sandbox (Timeout: 60s)')
+      React.createElement(Text, { bold: true }, '[y] Approve  [n] Reject (Timeout: 60s)')
     )
   );
 };

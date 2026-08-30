@@ -46,10 +46,10 @@ export class ProtectCommand {
 
       if (config.mcpServers) {
         for (const [serverName, serverDetails] of Object.entries<any>(config.mcpServers)) {
-          if (serverDetails.command && !serverDetails.command.includes('mcp-shield')) {
+          if (serverDetails.command && !serverDetails.args?.includes('mcp-shield')) {
             const originalCmd = serverDetails.command;
-            serverDetails.args = ['wrap', '--', originalCmd, ...(serverDetails.args || [])];
-            serverDetails.command = 'npx mcp-shield'; 
+            serverDetails.args = ['-y', 'mcp-shield', 'wrap', '--', originalCmd, ...(serverDetails.args || [])];
+            serverDetails.command = 'npx'; 
             patched = true;
           }
         }

@@ -43,7 +43,12 @@ export class ProxyServer {
           const toolName = message.params.name;
           const args = message.params.arguments || {};
           
-          this.logAndBroadcast({ type: 'tool_call_intercepted', toolName, payload: args });
+          // Apply DLP sanitization to inbound arguments before logging or TUI bridging
+          // This prevents secrets typed by the user/LLM from leaking to plaintext logs
+          const sanitizedArgsStr = this.sanitizer.sanitize(JSON.stringify(args));
+          const sanitizedArgs = JSON.parse(sanitizedArgsStr);
+          
+          this.logAndBroadcast({ type: 'tool_call_intercepted', toolName, payload: sanitizedArgs });
 
           // -1. Rate Limit Check (Runaway loop prevention)
           if (!this.rateLimiter.checkLimit(toolName)) {
@@ -107,7 +112,7 @@ export class ProxyServer {
 
              const result = await PromptBridge.ask(
                 `Intercepted ${toolName}`,
-                `Tool: ${toolName}\nArgs: ${JSON.stringify(args, null, 2)}`,
+                `Tool: ${toolName}\nArgs: ${JSON.stringify(sanitizedArgs, null, 2)}`,
                 rule?.riskLevel || 'HIGH',
                 diffText
              );
