@@ -34,6 +34,13 @@ export class ProxyServer {
           
           this.logger.log({ type: 'tool_call_intercepted', toolName, payload: args });
 
+          // 0. Honey-Token DLP Check
+          if (this.sanitizer.checkHoneyTokens(JSON.stringify(args))) {
+             this.logger.log({ type: 'honey_token_triggered', toolName, reason: 'LLM attempted to use a decoy credential.' });
+             this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: Honey-token accessed! Session terminated.`);
+             process.exit(1);
+          }
+
           // 1. Evaluate Policy
           const { action, rule } = this.policyEngine.evaluateToolCall(toolName, args);
 

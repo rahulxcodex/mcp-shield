@@ -7,10 +7,22 @@ export const SECRET_PATTERNS = [
   { name: 'SSH_PRIVATE_KEY', regex: /-----BEGIN [A-Z]+ PRIVATE KEY-----[a-zA-Z0-9+/\s=]+-----END [A-Z]+ PRIVATE KEY-----/g }
 ];
 
+export const HONEY_TOKENS = [
+  'AKIA_HONEY_TOKEN_DO_NOT_USE_123',
+  'ghp_honey_token_do_not_use_12345678901'
+];
+
 export class SecretSanitizer {
   private secretToToken = new Map<string, string>();
   private tokenToSecret = new Map<string, string>();
   private readonly MAX_CACHE_SIZE = 1000;
+
+  public checkHoneyTokens(payload: string): boolean {
+    for (const token of HONEY_TOKENS) {
+      if (payload.includes(token)) return true;
+    }
+    return false;
+  }
 
   private calculateEntropy(str: string): number {
     const len = str.length;
