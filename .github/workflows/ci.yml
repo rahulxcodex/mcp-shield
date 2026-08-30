@@ -35,10 +35,10 @@ jobs:
         run: npm run build
 
       - name: Run Full Test Suite
-        run: npm test -- --verbose
+        run: npm test
 
       - name: Run Red-Team Challenges
-        run: npm run test:redteam -- --verbose
+        run: npm run test:redteam
 
       - name: Run Adversarial Fuzzer
         run: npm run fuzz
