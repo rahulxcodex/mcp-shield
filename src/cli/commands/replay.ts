@@ -2,6 +2,21 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 
 export class ReplayCommand {
+  private static canonicalStringify(obj: any): string {
+    if (obj === null || typeof obj !== 'object') {
+      return JSON.stringify(obj);
+    }
+    if (Array.isArray(obj)) {
+      return '[' + obj.map((item) => ReplayCommand.canonicalStringify(item)).join(',') + ']';
+    }
+    const sortedKeys = Object.keys(obj).sort();
+    const result: string[] = [];
+    for (const key of sortedKeys) {
+      result.push(JSON.stringify(key) + ':' + ReplayCommand.canonicalStringify(obj[key]));
+    }
+    return '{' + result.join(',') + '}';
+  }
+
   public static run(logPath: string) {
     if (!logPath) {
       console.error('Usage: mcp-shield replay <path-to-session.jsonl>');
@@ -21,9 +36,9 @@ export class ReplayCommand {
        if (!line.trim()) continue;
        const entry = JSON.parse(line);
        
-       // Verify integrity
-       const rawData = JSON.stringify(entry.data);
-       const computedHash = crypto.createHash('sha256').update(prevHash + rawData).digest('hex');
+       // Verify integrity using canonical JSON serialization
+       const canonicalData = ReplayCommand.canonicalStringify(entry.data);
+       const computedHash = crypto.createHash('sha256').update(prevHash + canonicalData).digest('hex');
        
        if (computedHash !== entry.hash || prevHash !== entry.previousHash) {
           console.error(`❌ TAMPER DETECTED! Hash chain broken at timestamp ${entry.data.timestamp}`);

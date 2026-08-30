@@ -53,7 +53,16 @@ export class DashboardServer {
       `);
     });
 
-    this.wss.on('connection', (ws) => {
+    // Enforce Origin Check against Cross-Site WebSocket Hijacking (CSWSH)
+    this.wss.on('connection', (ws, req) => {
+      const origin = req.headers.origin;
+      const allowedOrigins = [`http://127.0.0.1:${this.port}`, `http://localhost:${this.port}`];
+
+      if (origin && !allowedOrigins.includes(origin)) {
+        ws.close(4003, 'Forbidden: Cross-Origin WebSocket Connection Rejected');
+        return;
+      }
+
       this.clients.add(ws);
       ws.on('close', () => this.clients.delete(ws));
     });
@@ -69,7 +78,7 @@ export class DashboardServer {
     const payload = { timestamp: new Date().toISOString(), ...event };
     const message = JSON.stringify(payload);
     for (const client of this.clients) {
-      if (client.readyState === WebSocket.OPEN) {
+      if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 64 * 1024) {
         client.send(message);
       }
     }
