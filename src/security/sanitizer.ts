@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { SecretVault } from './vault';
 
 export const SECRET_PATTERNS = [
   { name: 'AWS_ACCESS_KEY', regex: /(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}/g },
@@ -21,14 +22,7 @@ export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MC
 const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9]{20,})|(xox[baprs]-[a-zA-Z0-9]{10,})|(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----)|([a-zA-Z0-9+\/=\-_]{40,})/g;
 
 export class SecretSanitizer {
-  private secretToToken = new Map<string, string>();
-  private tokenToSecret = new Map<string, string>();
-  private readonly MAX_CACHE_SIZE = 5000;
-  
-  // Eviction Ring Buffer (Replaces iterator allocations)
-  private evictionRing = new Array<string>(5000);
-  private ringIndex = 0;
-  private currentSize = 0;
+  private vault = new SecretVault();
 
   // Pre-allocated array for entropy calculation (0 allocations per check)
   private charFrequencies = new Uint32Array(256);
@@ -68,29 +62,7 @@ export class SecretSanitizer {
   }
 
   private registerSecret(secret: string): string {
-    if (this.secretToToken.has(secret)) {
-      return this.secretToToken.get(secret)!;
-    }
-
-    if (this.currentSize >= this.MAX_CACHE_SIZE) {
-      // Evict oldest using ring buffer
-      const oldestSecret = this.evictionRing[this.ringIndex];
-      const oldToken = this.secretToToken.get(oldestSecret)!;
-      this.secretToToken.delete(oldestSecret);
-      this.tokenToSecret.delete(oldToken);
-    } else {
-      this.currentSize++;
-    }
-
-    const token = `[[SHIELD_SECRET_${crypto.randomUUID()}]]`;
-    this.secretToToken.set(secret, token);
-    this.tokenToSecret.set(token, secret);
-    
-    // Store in ring buffer and advance
-    this.evictionRing[this.ringIndex] = secret;
-    this.ringIndex = (this.ringIndex + 1) % this.MAX_CACHE_SIZE;
-
-    return token;
+    return this.vault.store(secret);
   }
 
   public sanitize(payload: string): string {
@@ -118,8 +90,9 @@ export class SecretSanitizer {
   public restore(payload: string): string {
     const tokenRegex = /\[\[SHIELD_SECRET_[0-9a-fA-F-]{36}\]\]/g;
     return payload.replace(tokenRegex, (match) => {
-      if (this.tokenToSecret.has(match)) {
-        return this.tokenToSecret.get(match)!;
+      const secret = this.vault.retrieve(match);
+      if (secret) {
+        return secret;
       }
       return match;
     });

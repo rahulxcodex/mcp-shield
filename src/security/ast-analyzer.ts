@@ -469,7 +469,7 @@ export class ASTAnalyzer {
           );
           const isParentRedirected = node.parent?.type === 'redirected_statement';
           if (hasInlineExec || hasRedirect || isParentRedirected) {
-            return { isSafe: false, reason: `Direct interpreter inline/script execution blocked: "${node.text}"` };
+            return { isSafe: false, reason: `ARBITRARY_CODE_EXECUTION: Direct interpreter inline/script execution blocked: "${node.text}"` };
           }
         }
       }

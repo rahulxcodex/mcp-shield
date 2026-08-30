@@ -16,8 +16,8 @@ describe('Prolonged Session Stability & Memory Resilience Suite', () => {
     }
 
     // Check that internal maps don't exceed MAX_CACHE_SIZE (5000)
-    const tokenMapSize = (sanitizer as any).secretToToken.size;
-    expect(tokenMapSize).toBeLessThanOrEqual(5000);
+    const vaultSize = (sanitizer as any).vault.secrets.size;
+    expect(vaultSize).toBeLessThanOrEqual(5000);
   });
 
   it('RES-02: RateLimiter enforces MAX_TRACKED_TOOLS bound under flood of 5,000 distinct tool names', () => {

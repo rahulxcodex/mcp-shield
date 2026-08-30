@@ -22,6 +22,7 @@ describe('PolicyEngine', () => {
       {
         id: '1',
         name: 'Block dangerous filesystem access',
+        priority: 100,
         targetTools: ['fs_*', 'read_file', 'write_file'],
         riskLevel: 'CRITICAL',
         action: 'block',
@@ -34,9 +35,18 @@ describe('PolicyEngine', () => {
       {
         id: '2',
         name: 'Require approval for shell',
+        priority: 90,
         targetTools: ['run_command'],
         riskLevel: 'HIGH',
         action: 'sandbox'
+      },
+      {
+        id: '3',
+        name: 'Allow safe filesystem access',
+        priority: 50,
+        targetTools: ['fs_*', 'read_file', 'write_file'],
+        riskLevel: 'LOW',
+        action: 'allow'
       }
     ]
   };
@@ -63,7 +73,7 @@ describe('PolicyEngine', () => {
   it('should load config correctly', () => {
     engine.loadConfig();
     expect(engine.getConfig().profile).toBe('test');
-    expect(engine.getConfig().rules.length).toBe(2);
+    expect(engine.getConfig().rules.length).toBe(3);
   });
 
   it('should throw error if config not found', () => {
@@ -72,53 +82,53 @@ describe('PolicyEngine', () => {
   });
 
   it('should evaluate tool call and return matching action', () => {
-    const result = engine.evaluateToolCall('run_command', { cmd: 'ls' });
+    const result = engine.evaluate({ toolName: 'run_command', args: { cmd: 'ls' }, evidence: [] });
     expect(result.decision).toBe('sandbox');
     expect(result.ruleId).toBe('2');
   });
 
   it('should evaluate wildcard tool target and allow safe paths', () => {
-    const result = engine.evaluateToolCall('fs_read', { file: '/tmp/test.txt' });
+    const result = engine.evaluate({ toolName: 'fs_read', args: { file: '/tmp/test.txt' }, evidence: [] });
     expect(result.decision).toBe('allow');
   });
 
   it('should block forbidden paths using path matcher', () => {
-    const result = engine.evaluateToolCall('read_file', { path: '/etc/passwd' });
+    const result = engine.evaluate({ toolName: 'read_file', args: { path: '/etc/passwd' }, evidence: [] });
     expect(result.decision).toBe('block');
     expect(result.ruleId).toBe('1');
   });
   
   it('should block wildcard forbidden paths', () => {
-    const result = engine.evaluateToolCall('fs_write', { filename: '/var/log/app.log' });
+    const result = engine.evaluate({ toolName: 'fs_write', args: { filename: '/var/log/app.log' }, evidence: [] });
     expect(result.decision).toBe('block');
     expect(result.ruleId).toBe('1');
   });
 
   it('should block relative path etc/passwd without leading slash', () => {
-    const result = engine.evaluateToolCall('read_file', { path: 'etc/passwd' });
+    const result = engine.evaluate({ toolName: 'read_file', args: { path: 'etc/passwd' }, evidence: [] });
     expect(result.decision).toBe('block');
   });
 
   it('should block uppercase /ETC/passwd path', () => {
-    const result = engine.evaluateToolCall('read_file', { path: '/ETC/passwd' });
+    const result = engine.evaluate({ toolName: 'read_file', args: { path: '/ETC/passwd' }, evidence: [] });
     expect(result.decision).toBe('block');
   });
 
   it('should block traversal paths like /tmp/../etc/passwd', () => {
-    const result = engine.evaluateToolCall('read_file', { path: '/tmp/../etc/passwd' });
+    const result = engine.evaluate({ toolName: 'read_file', args: { path: '/tmp/../etc/passwd' }, evidence: [] });
     expect(result.decision).toBe('block');
   });
 
   it('should block Windows backslash and drive-prefixed paths matching forbidden rules', () => {
-    const res1 = engine.evaluateToolCall('read_file', { path: 'C:\\etc\\passwd' });
+    const res1 = engine.evaluate({ toolName: 'read_file', args: { path: 'C:\\etc\\passwd' }, evidence: [] });
     expect(res1.decision).toBe('block');
 
-    const res2 = engine.evaluateToolCall('read_file', { path: 'C:/var/log/system.log' });
+    const res2 = engine.evaluate({ toolName: 'read_file', args: { path: 'C:/var/log/system.log' }, evidence: [] });
     expect(res2.decision).toBe('block');
   });
 
   it('should allow legitimate paths that merely contain etc as substring', () => {
-    const result = engine.evaluateToolCall('read_file', { path: '/home/dev/etc-configs/notes.txt' });
+    const result = engine.evaluate({ toolName: 'read_file', args: { path: '/home/dev/etc-configs/notes.txt' }, evidence: [] });
     expect(result.decision).toBe('allow');
   });
 
@@ -127,7 +137,8 @@ describe('PolicyEngine', () => {
   });
 
   it('should default to allow if no rules match', () => {
-    const result = engine.evaluateToolCall('unknown_tool', { foo: 'bar' });
-    expect(result.decision).toBe('allow');
+    const result = engine.evaluate({ toolName: 'unknown_tool', args: { foo: 'bar' }, evidence: [] });
+    // Default hardened mode now blocks unknown tools
+    expect(result.decision).toBe('block');
   });
 });

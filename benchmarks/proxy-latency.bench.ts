@@ -177,7 +177,7 @@ export function runAllBenchmarks(): BenchmarkResult[] {
 
   results.push(
     runBenchmark('PolicyEngine: Rule Evaluation (Allowed Tool)', 2000, 100, () => {
-      policyEngine.evaluateToolCall('read_file', { path: '/home/user/code/index.ts' });
+      policyEngine.evaluate({ toolName: 'read_file', args: { path: '/home/user/code/index.ts' }, evidence: [] });
     })
   );
 
@@ -230,7 +230,7 @@ export function runAllBenchmarks(): BenchmarkResult[] {
         policyEngine.checkEgress(args);
 
         // 6. Policy evaluation
-        policyEngine.evaluateToolCall(toolName, args);
+        policyEngine.evaluate({ toolName, args, evidence: [] });
 
         // 7. AST check
         if (/bash|terminal|exec|command/i.test(toolName) && (args.cmd || args.command)) {

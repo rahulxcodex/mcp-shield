@@ -1,0 +1,94 @@
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import { RegisteredTool, CapabilityInferencer, ToolCapabilities } from '../security/capabilities';
+import { PolicyEngine } from '../security/policy-engine';
+import { SecretSanitizer } from '../security/sanitizer';
+import { RateLimiter } from '../security/rate-limiter';
+import { SessionLogger } from '../audit/session-logger';
+
+export type SessionState = 'CONNECTING' | 'INITIALIZING' | 'READY' | 'DEGRADED' | 'CLOSING' | 'CLOSED';
+
+export class SecuritySession {
+  public readonly sessionId = crypto.randomUUID();
+  private state: SessionState = 'CONNECTING';
+  
+  public serverIdentity: string = 'unknown';
+  public readonly toolRegistry = new Map<string, RegisteredTool>();
+  
+  public readonly policyEngine = new PolicyEngine();
+  public readonly sanitizer = new SecretSanitizer();
+  public readonly rateLimiter = new RateLimiter(15, 60000); // Max 15 calls per minute per tool
+  public readonly logger = new SessionLogger();
+
+  constructor(targetCmd: string, targetArgs: string[]) {
+    this.calculateServerIdentity(targetCmd, targetArgs);
+  }
+
+  private calculateServerIdentity(cmd: string, args: string[]) {
+    try {
+      // Very naive approach: If it's a local file, hash it. Otherwise hash the command strings.
+      let fileToHash = cmd;
+      if (fs.existsSync(cmd)) {
+        fileToHash = fs.realpathSync(cmd);
+      }
+      
+      const hasher = crypto.createHash('sha256');
+      if (fs.existsSync(fileToHash) && fs.statSync(fileToHash).isFile()) {
+         hasher.update(fs.readFileSync(fileToHash));
+      } else {
+         hasher.update(cmd);
+      }
+      
+      hasher.update(args.join('|'));
+      this.serverIdentity = hasher.digest('hex');
+    } catch (e) {
+      // Fallback
+      this.serverIdentity = crypto.createHash('sha256').update(cmd + args.join('|')).digest('hex');
+    }
+  }
+
+  public transitionState(newState: SessionState): void {
+    const validTransitions: Record<SessionState, SessionState[]> = {
+      'CONNECTING': ['INITIALIZING', 'CLOSING', 'CLOSED'],
+      'INITIALIZING': ['READY', 'DEGRADED', 'CLOSING', 'CLOSED'],
+      'READY': ['DEGRADED', 'CLOSING', 'CLOSED'],
+      'DEGRADED': ['READY', 'CLOSING', 'CLOSED'],
+      'CLOSING': ['CLOSED'],
+      'CLOSED': []
+    };
+
+    if (!validTransitions[this.state].includes(newState)) {
+      throw new Error(`[MCP-SHIELD] Invalid state transition: ${this.state} -> ${newState}`);
+    }
+
+    this.state = newState;
+  }
+
+  public getState(): SessionState {
+    return this.state;
+  }
+
+  public registerTool(toolName: string, description: string, schema: any): RegisteredTool {
+    const hash = CapabilityInferencer.hashSchema(schema);
+    
+    // Check if tool already exists and if the schema changed
+    const existing = this.toolRegistry.get(toolName);
+    if (existing && existing.schemaHash !== hash) {
+      throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool '${toolName}' changed its schema dynamically.`);
+    }
+
+    const capabilities = CapabilityInferencer.infer(toolName, schema, description);
+    
+    const registered: RegisteredTool = {
+      serverId: this.serverIdentity,
+      toolName,
+      description,
+      inputSchema: schema,
+      schemaHash: hash,
+      capabilities
+    };
+
+    this.toolRegistry.set(toolName, registered);
+    return registered;
+  }
+}

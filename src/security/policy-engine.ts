@@ -7,9 +7,11 @@ import { SecurityResult } from './types';
 export const PolicyRuleSchema = z.object({
   id: z.string(),
   name: z.string(),
-  targetTools: z.array(z.string()),
+  priority: z.number().default(100),
+  targetTools: z.array(z.string()).optional(),
+  targetCapabilities: z.array(z.string()).optional(),
   riskLevel: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
-  action: z.enum(['block', 'prompt', 'sandbox', 'allow']),
+  action: z.enum(['quarantine', 'block', 'prompt', 'sandbox', 'allow']),
   matchers: z.object({
     astRules: z.object({
       disallowedCommands: z.array(z.string()),
@@ -47,6 +49,20 @@ export const ShieldConfigSchema = z.object({
   }),
 });
 export type ShieldConfig = z.infer<typeof ShieldConfigSchema>;
+
+export interface Evidence {
+  detector: string;
+  finding: string;
+  risk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  details?: any;
+}
+
+export interface EvaluationContext {
+  toolName: string;
+  capabilities?: string[];
+  args: Record<string, any>;
+  evidence: Evidence[];
+}
 
 export class PolicyEngine {
   private config: ShieldConfig | null = null;
@@ -98,7 +114,7 @@ export class PolicyEngine {
             redaction: { enabled: true, maskStyle: "token", highEntropyCheck: true, entropyThreshold: 4.5 },
             sandbox: { cowEnabled: true, cowStagingDir: ".mcp-shield/cow", autoCommitOnApproval: true },
             egress: { enabled: true, blockedDomains: ["*.ngrok.io", "*.evil.com"] },
-            rules: [{ id: "block-destructive-rm", name: "Block Recursive Root Deletion", targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }],
+          rules: [{ id: "allow-all-safe", name: "Allow safe commands", priority: 10, action: "allow" }, { id: "block-destructive-rm", name: "Block Recursive Root Deletion", priority: 100, targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }],
             audit: { enabled: true, logDir: ".mcp-shield/logs", tamperProofHashing: true }
           };
           this.config = ShieldConfigSchema.parse(defaultConfig);
@@ -195,42 +211,73 @@ export class PolicyEngine {
     return paths;
   }
 
-  public evaluateToolCall(toolName: string, args: Record<string, any>): SecurityResult {
+  public evaluate(context: EvaluationContext): SecurityResult {
     const config = this.getConfig();
 
-    for (const rule of config.rules) {
-      const isTarget = rule.targetTools.some(t => {
-        if (t.includes('*')) {
-          const regex = new RegExp('^' + t.replace(/\*/g, '.*') + '$', 'i');
-          return regex.test(toolName);
-        }
-        return t.toLowerCase() === toolName.toLowerCase();
-      });
+    // Any critical evidence immediately causes a quarantine or block
+    const criticalEvidence = context.evidence.find(e => e.risk === 'CRITICAL');
+    if (criticalEvidence) {
+      return {
+        decision: criticalEvidence.finding.includes('HONEY_TOKEN') ? 'quarantine' : 'block',
+        detector: criticalEvidence.detector,
+        reasonCode: criticalEvidence.finding
+      };
+    }
 
-      if (!isTarget) continue;
+    const highEvidence = context.evidence.find(e => e.risk === 'HIGH');
 
-      if (rule.matchers) {
-        if (rule.matchers.pathMatches) {
-          const candidatePaths = this.extractCandidatePaths(args);
-          for (const rawTarget of candidatePaths) {
-            const normalizedTarget = this.normalizePathForMatching(rawTarget);
+    // Sort rules by priority (highest first)
+    const sortedRules = [...config.rules].sort((a, b) => b.priority - a.priority);
 
-            const isForbidden = rule.matchers.pathMatches.forbiddenPaths.some(p => {
-               const normalizedRule = this.normalizePathForMatching(p);
-               const regexStr = normalizedRule
-                 .replace(/\./g, '\\.')
-                 .replace(/\*\*/g, '.*')
-                 .replace(/\*/g, '[^/]*');
-               return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
-            });
-            if (isForbidden) return { decision: rule.action as any, detector: 'policy-engine', reasonCode: 'PATH_FORBIDDEN', ruleId: rule.id };
+    for (const rule of sortedRules) {
+      let isTarget = false;
+
+      // Check tool names
+      if (rule.targetTools) {
+        isTarget = rule.targetTools.some(t => {
+          if (t.includes('*')) {
+            const regex = new RegExp('^' + t.replace(/\*/g, '.*') + '$', 'i');
+            return regex.test(context.toolName);
           }
+          return t.toLowerCase() === context.toolName.toLowerCase();
+        });
+      }
+
+      // Check capabilities
+      if (!isTarget && rule.targetCapabilities && context.capabilities) {
+        isTarget = rule.targetCapabilities.some(c => context.capabilities?.includes(c));
+      }
+
+      if (isTarget) {
+        if (rule.matchers) {
+          if (rule.matchers.pathMatches) {
+            const candidatePaths = this.extractCandidatePaths(context.args);
+            for (const rawTarget of candidatePaths) {
+              const normalizedTarget = this.normalizePathForMatching(rawTarget);
+
+              const isForbidden = rule.matchers.pathMatches.forbiddenPaths.some(p => {
+                 const normalizedRule = this.normalizePathForMatching(p);
+                 const regexStr = normalizedRule
+                   .replace(/\./g, '\\.')
+                   .replace(/\*\*/g, '.*')
+                   .replace(/\*/g, '[^/]*');
+                 return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
+              });
+              if (isForbidden) return { decision: rule.action as any, detector: 'policy-engine', reasonCode: 'PATH_FORBIDDEN', ruleId: rule.id };
+            }
+          }
+        } else {
+           // Rule matches tool/capability without extra matchers
+           if (highEvidence && rule.action === 'allow') {
+              // High risk evidence escalates 'allow' to 'sandbox' or 'prompt' by default, or just fallback to block if unsupported
+              return { decision: 'sandbox', detector: highEvidence.detector, reasonCode: highEvidence.finding, ruleId: rule.id };
+           }
+           return { decision: rule.action as any, detector: 'policy-engine', reasonCode: 'RULE_MATCH', ruleId: rule.id };
         }
-      } else {
-         return { decision: rule.action as any, detector: 'policy-engine', reasonCode: 'RULE_MATCH', ruleId: rule.id };
       }
     }
 
-    return { decision: 'allow', detector: 'policy-engine', reasonCode: 'DEFAULT_ALLOW' };
+    // Default hardened mode: Fail-closed (Allowlist first)
+    return { decision: 'block', detector: 'policy-engine', reasonCode: 'DEFAULT_DENY_NO_CAPABILITY_MATCH' };
   }
 }
