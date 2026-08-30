@@ -79,9 +79,6 @@ describe('End-to-End MCP-Shield Proxy Integration Test Suite', () => {
 
   afterAll(() => {
     client.close();
-    try {
-      proxyProcess.kill('SIGKILL');
-    } catch {}
   });
 
   it('E2E-01: Completes standard MCP handshake (initialize -> initialized -> tools/list)', async () => {

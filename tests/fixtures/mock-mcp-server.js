@@ -13,9 +13,9 @@ const rl = readline.createInterface({
   terminal: false
 });
 
-rl.on('close', () => {
-  process.exit(0);
-});
+rl.on('close', () => process.exit(0));
+process.stdin.on('end', () => process.exit(0));
+process.stdin.on('error', () => process.exit(0));
 
 rl.on('line', (line) => {
   const trimmed = line.trim();
