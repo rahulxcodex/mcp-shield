@@ -51,8 +51,25 @@ export class RequestDispatcher {
   private isValidJsonRpc(message: any): boolean {
     if (!message || typeof message !== 'object') return false;
     if (message.jsonrpc !== '2.0') return false;
-    if (!message.method || typeof message.method !== 'string') return false;
-    if (message.params !== undefined && typeof message.params !== 'object') return false;
+    
+    const hasMethod = typeof message.method === 'string';
+    const hasResult = 'result' in message;
+    const hasError = 'error' in message;
+    
+    if (hasMethod && (hasResult || hasError)) return false;
+    if (!hasMethod && !hasResult && !hasError) return false;
+    
+    if (hasMethod) {
+       if (message.params !== undefined && typeof message.params !== 'object' && !Array.isArray(message.params)) return false;
+    }
+    
+    if ('id' in message) {
+       const type = typeof message.id;
+       if (type !== 'string' && type !== 'number' && message.id !== null) return false;
+    }
+    
+    if (hasError && (typeof message.error !== 'object' || message.error === null || typeof message.error.code !== 'number' || typeof message.error.message !== 'string')) return false;
+
     return true;
   }
 

@@ -29,8 +29,7 @@ export class SecretSanitizer {
     this.config = config;
   }
 
-  // Pre-allocated array for entropy calculation (0 allocations per check)
-  private charFrequencies = new Uint32Array(256);
+  // Removed class-level charFrequencies to fix concurrency bug
 
   public checkHoneyTokens(payload: string): boolean {
     if (!payload) return false;
@@ -47,19 +46,17 @@ export class SecretSanitizer {
     const len = str.length;
     if (len === 0) return 0;
     
-    // Count frequencies using pre-allocated typed array
+    const charFrequencies = new Uint32Array(256);
     for (let i = 0; i < len; i++) {
-      this.charFrequencies[str.charCodeAt(i) & 0xFF]++;
+      charFrequencies[str.charCodeAt(i) & 0xFF]++;
     }
     
     let entropy = 0;
-    // Calculate entropy and clear array in the same pass
     for (let i = 0; i < 256; i++) {
-      const count = this.charFrequencies[i];
+      const count = charFrequencies[i];
       if (count > 0) {
         const p = count / len;
         entropy -= p * Math.log2(p);
-        this.charFrequencies[i] = 0; // Reset for next use without reallocating
       }
     }
     
@@ -71,8 +68,7 @@ export class SecretSanitizer {
   }
 
   public sanitize(payload: string): string {
-    // Single-pass Lexer for all patterns and entropy! Time complexity reduced from O(K*N) to O(N)
-    return payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, google, stripe, hf, gitlab, jwt, ssh, highEntropy) => {
+    return payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, google, stripe, hf, gitlab, jwt, ssh, highEntropy, offset, fullString) => {
       // If it matched a known pattern (groups 1-11), register immediately
       if (aws || anthropic || openai || slack || github || google || stripe || hf || gitlab || jwt || ssh) {
         return this.registerSecret(match);
@@ -80,12 +76,23 @@ export class SecretSanitizer {
       
       // If it matched the high entropy fallback (group 12)
       if (highEntropy) {
-        // Skip already tokenized sections (avoids recursive matching edge cases)
         if (match.startsWith('[[SHIELD_SECRET_')) return match;
         
+        let score = 0;
         const entropy = this.calculateEntropy(match);
-        const threshold = this.config?.entropyThreshold || 4.2;
-        if (entropy > threshold) {
+        
+        if (entropy > 3.8) score += 10;
+        if (entropy > 4.2) score += 20;
+        if (match.length >= 40) score += 10;
+        
+        // Context analysis
+        const prefix = fullString.substring(Math.max(0, offset - 25), offset).toLowerCase();
+        if (/(key|secret|token|password|auth|credential|api)[^a-z0-9]/i.test(prefix)) {
+           score += 40;
+        }
+
+        const threshold = this.config?.confidenceThreshold || 60;
+        if (score >= threshold) {
           return this.registerSecret(match);
         }
       }

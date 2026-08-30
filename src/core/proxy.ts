@@ -9,6 +9,8 @@ import { SecuritySession } from './session';
 import { RequestDispatcher } from './dispatcher';
 import { EvaluationContext, Evidence } from '../security/policy-engine';
 import { ConfigLoader } from '../security/config';
+import { NetworkEgressProxy } from '../security/network-proxy';
+import { CapabilityInferencer } from '../security/capabilities';
 
 export interface Lifecycle {
   start(): Promise<number>;
@@ -25,6 +27,7 @@ export class ProxyServer implements Lifecycle {
   private cowFs = new COWFileSystem();
   private dashboard: DashboardServer | null = null;
   private dispatcher: RequestDispatcher;
+  private networkEgressProxy: NetworkEgressProxy;
 
   constructor(
     private targetCmd: string,
@@ -37,6 +40,7 @@ export class ProxyServer implements Lifecycle {
       this.handleInboundMessage.bind(this),
       this.sendErrorToHost.bind(this)
     );
+    this.networkEgressProxy = new NetworkEgressProxy(this.session.policyEngine);
   }
 
   private logAndBroadcast(event: any) {
@@ -131,6 +135,27 @@ export class ProxyServer implements Lifecycle {
         
         this.logAndBroadcast({ type: 'tool_call_intercepted', toolName, payload: sanitizedArgs });
 
+        if (registeredTool) {
+           const inferred = this.session.toolRegistry.get(toolName)?.inferredCapabilities;
+           // If we're executing this tool, we're observing its inferred capabilities in action
+           if (inferred) {
+               registeredTool.observedCapabilities.filesystemRead = registeredTool.observedCapabilities.filesystemRead || inferred.filesystemRead;
+               registeredTool.observedCapabilities.filesystemWrite = registeredTool.observedCapabilities.filesystemWrite || inferred.filesystemWrite;
+               registeredTool.observedCapabilities.shellExecution = registeredTool.observedCapabilities.shellExecution || inferred.shellExecution;
+               registeredTool.observedCapabilities.networkAccess = registeredTool.observedCapabilities.networkAccess || inferred.networkAccess;
+               registeredTool.observedCapabilities.processSpawn = registeredTool.observedCapabilities.processSpawn || inferred.processSpawn;
+               registeredTool.observedCapabilities.destructiveOperation = registeredTool.observedCapabilities.destructiveOperation || inferred.destructiveOperation;
+               registeredTool.observedCapabilities.secretAccess = registeredTool.observedCapabilities.secretAccess || inferred.secretAccess;
+           }
+           
+           // Re-calculate trust with observed behavior
+           registeredTool.trustLevel = CapabilityInferencer.calculateTrustLevel(
+               registeredTool.declaredCapabilities, 
+               registeredTool.inferredCapabilities,
+               registeredTool.observedCapabilities
+           );
+        }
+
         const evidence: Evidence[] = [];
 
         // -1. Rate Limit Check (Runaway loop prevention)
@@ -143,10 +168,10 @@ export class ProxyServer implements Lifecycle {
            evidence.push({ detector: 'sanitizer', finding: 'HONEY_TOKEN_ACCESSED: LLM attempted to use a decoy credential.', risk: 'CRITICAL' });
         }
         
-        // 0.5 Egress Network Firewall
+        // 0.5 Egress Network Firewall (URL/argument-level check)
         const egressCheck = this.session.policyEngine.checkEgress(args);
         if (egressCheck.isBlocked) {
-           evidence.push({ detector: 'egress-firewall', finding: `EGRESS_BLOCKED: Unauthorized access to ${egressCheck.domain}`, risk: 'CRITICAL' });
+           evidence.push({ detector: 'url-egress-filter', finding: `EGRESS_BLOCKED: Unauthorized URL argument to ${egressCheck.domain}`, risk: 'CRITICAL' });
         }
 
         // 2. AST Firewall
@@ -356,6 +381,11 @@ ${red}BLOCKED${reset}
   public async start(): Promise<number> {
     this.setupFramers();
     await this.session.start();
+    
+    let proxyPort = 0;
+    if (this.session.policyEngine.getConfig().egress?.enabled) {
+      proxyPort = await this.networkEgressProxy.start();
+    }
 
     return new Promise((resolve, reject) => {
       this.session.transitionState('INITIALIZING');
@@ -369,9 +399,15 @@ ${red}BLOCKED${reset}
       const containerSandbox = new ContainerSandbox(containerConfig || {});
       const { cmd, args } = containerSandbox.spawnProcess(this.targetCmd, this.targetArgs);
 
+      const childEnv = ProxyServer.buildSafeEnv();
+      if (proxyPort > 0) {
+        childEnv['HTTP_PROXY'] = `http://127.0.0.1:${proxyPort}`;
+        childEnv['HTTPS_PROXY'] = `http://127.0.0.1:${proxyPort}`;
+      }
+
       this.child = spawn(cmd, args, {
         stdio: ['pipe', 'pipe', process.stderr],
-        env: ProxyServer.buildSafeEnv()
+        env: childEnv
       });
 
       this.child.on('error', (err) => {
@@ -451,6 +487,9 @@ ${red}BLOCKED${reset}
   }
 
   public async stop(): Promise<void> {
+    if (this.networkEgressProxy) {
+      try { await this.networkEgressProxy.stop(); } catch {}
+    }
     if (this.dashboard) {
       try { await this.dashboard.stop(); } catch {}
     }

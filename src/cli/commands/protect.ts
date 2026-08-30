@@ -48,8 +48,9 @@ export class ProtectCommand {
         for (const [serverName, serverDetails] of Object.entries<any>(config.mcpServers)) {
           if (serverDetails.command && !serverDetails.args?.includes('mcp-shield')) {
             const originalCmd = serverDetails.command;
-            serverDetails.args = ['-y', 'mcp-shield', 'wrap', '--', originalCmd, ...(serverDetails.args || [])];
-            serverDetails.command = 'npx'; 
+            const shieldScript = process.argv[1];
+            serverDetails.args = [shieldScript, 'wrap', '--', originalCmd, ...(serverDetails.args || [])];
+            serverDetails.command = process.execPath;
             patched = true;
           }
         }

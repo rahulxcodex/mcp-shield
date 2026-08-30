@@ -53,7 +53,7 @@ export class CapabilityInferencer {
     };
   }
 
-  public static calculateTrustLevel(declared: ToolCapabilities, inferred: ToolCapabilities): 'TRUSTED' | 'UNTRUSTED' | 'SUSPICIOUS' {
+  public static calculateTrustLevel(declared: ToolCapabilities, inferred: ToolCapabilities, observed?: ToolCapabilities): 'TRUSTED' | 'UNTRUSTED' | 'SUSPICIOUS' {
     const hasDeclarations = Object.values(declared).some(v => v === true);
     if (!hasDeclarations) return 'UNTRUSTED'; // No attestation provided
     
@@ -61,6 +61,9 @@ export class CapabilityInferencer {
     for (const key of Object.keys(declared) as (keyof ToolCapabilities)[]) {
       if (inferred[key] && !declared[key]) {
         return 'SUSPICIOUS';
+      }
+      if (observed && observed[key] && !declared[key]) {
+        return 'UNTRUSTED'; // Violated trust at runtime
       }
     }
     return 'TRUSTED';

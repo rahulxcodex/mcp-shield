@@ -51,7 +51,8 @@ export const ShieldConfigSchema = z.object({
   audit: z.object({
     enabled: z.boolean(),
     logDir: z.string(),
-    tamperProofHashing: z.boolean(),
+    tamperEvidentHashing: z.boolean(),
+    remoteSinkUrl: z.string().optional(),
   }),
 });
 export type ShieldConfig = z.infer<typeof ShieldConfigSchema>;
@@ -85,7 +86,7 @@ export class PolicyEngine {
         sandbox: { cowEnabled: true, cowStagingDir: ".mcp-shield/cow", autoCommitOnApproval: true },
         egress: { enabled: true, allowMode: "allow", blockedDomains: ["*.ngrok.io", "*.evil.com"], allowPrivateNetworks: true, blockLoopback: false, blockLinkLocal: false, blockMetadataEndpoints: false },
         rules: [{ id: "allow-all-safe", name: "Allow safe commands", priority: 10, riskLevel: "LOW", action: "allow" }, { id: "block-destructive-rm", name: "Block Recursive Root Deletion", priority: 100, targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }],
-        audit: { enabled: true, logDir: ".mcp-shield/logs", tamperProofHashing: true }
+        audit: { enabled: true, logDir: ".mcp-shield/logs", tamperEvidentHashing: true }
       };
     }
   }

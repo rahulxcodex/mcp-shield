@@ -1,6 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import * as http from 'http';
+import * as https from 'https';
+import { URL } from 'url';
 
 export class SessionLogger {
   private logFile: string;
@@ -39,8 +42,8 @@ export class SessionLogger {
   }
 
   private computeDigest(data: string): string {
-    const tamperProof = this.config?.tamperProofHashing !== false; // Default true
-    if (!tamperProof) {
+    const tamperEvident = this.config?.tamperEvidentHashing !== false; // Default true
+    if (!tamperEvident) {
        return 'DISABLED';
     }
     if (this.auditKey) {
@@ -80,6 +83,33 @@ export class SessionLogger {
     const entry = { seq, data: eventObj, hash, previousHash: this.previousHash };
     
     this.previousHash = hash;
-    fs.appendFileSync(this.logFile, JSON.stringify(entry) + '\n');
+    const logString = JSON.stringify(entry);
+    fs.appendFileSync(this.logFile, logString + '\n');
+    
+    if (this.config?.remoteSinkUrl) {
+      this.sendToRemoteSink(logString);
+    }
+  }
+
+  private sendToRemoteSink(payload: string) {
+    try {
+      const parsedUrl = new URL(this.config.remoteSinkUrl);
+      const reqModule = parsedUrl.protocol === 'https:' ? https : http;
+      const req = reqModule.request({
+        method: 'POST',
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload)
+        }
+      });
+      req.on('error', (err) => console.error('[MCP-SHIELD] Remote audit sink error:', err));
+      req.write(payload);
+      req.end();
+    } catch (e) {
+      console.error('[MCP-SHIELD] Failed to parse or send to remoteSinkUrl', e);
+    }
   }
 }
