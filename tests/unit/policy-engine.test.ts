@@ -10,10 +10,11 @@ describe('PolicyEngine', () => {
   
   const mockConfig: ShieldConfig = {
     version: '1.0',
-    profile: 'strict',
-    redaction: { enabled: true, maskStyle: 'token', highEntropyCheck: false, entropyThreshold: 4.5 },
+    profile: 'test',
+    redaction: { enabled: true, maskStyle: 'uuid', highEntropyCheck: false, entropyThreshold: 4.2 },
     sandbox: { cowEnabled: true, cowStagingDir: '/tmp/cow', autoCommitOnApproval: false },
-    audit: { enabled: true, logDir: '/var/log/shield', tamperProofHashing: true },
+    egress: { enabled: true, blockedDomains: ['*.evil.com'] },
+    audit: { enabled: true, logDir: '/tmp/logs', tamperProofHashing: true },
     rules: [
       {
         id: '1',
