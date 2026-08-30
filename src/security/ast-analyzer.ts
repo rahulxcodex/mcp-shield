@@ -33,17 +33,67 @@ export class ASTAnalyzer {
     if (node.type === 'command') {
       const cmdNameNode = node.namedChildren.find((n: Parser.SyntaxNode) => n.type === 'command_name');
       if (cmdNameNode) {
-        const cmdName = path.basename(cmdNameNode.text.trim().toLowerCase());
+        const rawCmdText = cmdNameNode.text.trim();
+        const normalizedCmd = rawCmdText.replace(/^['"]|['"]$/g, '').replace(/\\/g, '');
+        const cmdName = path.basename(normalizedCmd.toLowerCase());
+
+        const isDangerousTarget = (t: string) => {
+          const clean = t.replace(/^['"]|['"]$/g, '');
+          return (
+            clean === '/' ||
+            clean === '/*' ||
+            clean === '*' ||
+            clean === '~' ||
+            clean === '.*' ||
+            clean === '.' ||
+            clean === '..' ||
+            clean === '$HOME' ||
+            clean.startsWith('/etc') ||
+            clean.startsWith('/var') ||
+            clean.startsWith('/usr') ||
+            clean.startsWith('/bin') ||
+            clean.startsWith('/home') ||
+            clean.startsWith('/root') ||
+            clean.startsWith('/opt') ||
+            clean.startsWith('/srv') ||
+            clean.startsWith('../../')
+          );
+        };
+
         if (cmdName === 'rm') {
           const args = node.namedChildren.filter((n: Parser.SyntaxNode) => n.type === 'word' || n.type === 'string');
-          const hasRecursive = args.some((a: Parser.SyntaxNode) => a.text.includes('-r') || a.text.includes('-R') || a.text.includes('--recursive'));
-          const hasDangerousTarget = args.some((a: Parser.SyntaxNode) => {
-            const t = a.text.replace(/["']/g, '');
-            return t === '/' || t === '/*' || t === '~' || t === '.*' || t.startsWith('/etc') || t.startsWith('/var') || t.startsWith('/usr') || t.startsWith('/bin');
+          const hasRecursive = args.some((a: Parser.SyntaxNode) => {
+            const t = a.text.replace(/^['"]|['"]$/g, '');
+            return t === '-r' || t === '-R' || t === '-rf' || t === '-fr' || t.startsWith('-r') || t.startsWith('-R') || t === '--recursive';
           });
+          const hasDangerousTarget = args.some((a: Parser.SyntaxNode) => isDangerousTarget(a.text));
           
           if (hasRecursive && hasDangerousTarget) {
             return { isSafe: false, reason: `Destructive root deletion blocked: "${node.text}"` };
+          }
+        }
+
+        // Check for direct disk formatting or raw disk writing
+        if (cmdName === 'mkfs' || cmdName === 'fdisk') {
+          return { isSafe: false, reason: `Filesystem format command blocked: "${node.text}"` };
+        }
+
+        if (cmdName === 'dd') {
+          const args = node.namedChildren.filter((n: Parser.SyntaxNode) => n.type === 'word' || n.type === 'string');
+          if (args.some((a: Parser.SyntaxNode) => a.text.includes('of=/dev/'))) {
+            return { isSafe: false, reason: `Raw disk write (dd) blocked: "${node.text}"` };
+          }
+        }
+
+        // Direct execution of scripts via shell interpreters (e.g. bash /tmp/x.sh)
+        if (['bash', 'sh', 'zsh', 'python', 'python3', 'perl', 'ruby', 'php'].includes(cmdName)) {
+          const args = node.namedChildren.filter((n: Parser.SyntaxNode) => n.type === 'word' || n.type === 'string');
+          const targetScript = args.find((a: Parser.SyntaxNode) => {
+            const text = a.text.replace(/^['"]|['"]$/g, '');
+            return text.startsWith('/tmp/') || text.startsWith('/var/tmp/') || text.startsWith('/dev/shm/') || text.endsWith('.sh');
+          });
+          if (targetScript) {
+            return { isSafe: false, reason: `Executing untrusted script file via interpreter blocked: "${node.text}"` };
           }
         }
       }

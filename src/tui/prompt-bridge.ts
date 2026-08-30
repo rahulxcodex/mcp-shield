@@ -22,7 +22,7 @@ const PromptApp: React.FC<PromptAppProps> = ({ title, message, riskLevel, diff, 
     return () => clearTimeout(timer);
   }, [onResult]);
 
-  useInput((input, key) => {
+  useInput((input: string, key: any) => {
     if (input === 'y') onResult({ action: 'approve' });
     if (input === 'n') onResult({ action: 'reject' });
   });

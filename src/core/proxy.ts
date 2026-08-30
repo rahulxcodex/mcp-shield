@@ -35,10 +35,16 @@ export class ProxyServer {
 
   private setupFramers() {
     this.inboundFramer.on('message', async (buffer: Buffer) => {
+      let message: any = null;
       try {
         const msgStr = buffer.toString('utf8');
-        const message = JSON.parse(msgStr);
-        
+        message = JSON.parse(msgStr);
+      } catch (err) {
+        this.logAndBroadcast({ type: 'parse_error', reason: 'Failed to parse JSON from inbound stream, dropping payload.' });
+        return;
+      }
+
+      try {
         if (message.method === 'call_tool' && message.params && message.params.name) {
           const toolName = message.params.name;
           const args = message.params.arguments || {};
@@ -134,8 +140,7 @@ export class ProxyServer {
           }
         }
         
-        // Desanitize outbound tool inputs returning from Host to target MCP? 
-        // We might want to restore secrets the host sends back.
+        // Restore tokenized secrets in inbound tool call parameters before sending to downstream server
         if (message.method === 'call_tool') {
            const payloadStr = JSON.stringify(message.params);
            const restoredStr = this.sanitizer.restore(payloadStr);
@@ -147,8 +152,11 @@ export class ProxyServer {
         if (this.child && this.child.stdin) {
           this.child.stdin.write(output);
         }
-      } catch (err) {
-        this.logAndBroadcast({ type: 'parse_error', reason: 'Failed to parse JSON from inbound stream, dropping payload.' });
+      } catch (err: any) {
+        this.logAndBroadcast({ type: 'internal_error', reason: err.message });
+        if (message && message.id) {
+          this.sendErrorToHost(message.id, -32603, `Internal Security Gateway Error: ${err.message}`);
+        }
         return;
       }
     });

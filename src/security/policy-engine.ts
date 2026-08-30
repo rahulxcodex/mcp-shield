@@ -71,7 +71,40 @@ export class PolicyEngine {
       const fileContents = fs.readFileSync(this.configPath, 'utf8');
       this.config = yaml.load(fileContents) as ShieldConfig;
     } else {
-      throw new Error(`Config file not found: ${this.configPath}`);
+      // Fallback to safe default configuration
+      this.config = {
+        version: "1.0",
+        profile: "developer",
+        redaction: {
+          enabled: true,
+          maskStyle: "token",
+          highEntropyCheck: true,
+          entropyThreshold: 4.5
+        },
+        sandbox: {
+          cowEnabled: true,
+          cowStagingDir: ".mcp-shield/cow",
+          autoCommitOnApproval: true
+        },
+        egress: {
+          enabled: true,
+          blockedDomains: ["*.ngrok.io", "*.evil.com"]
+        },
+        rules: [
+          {
+            id: "block-destructive-rm",
+            name: "Block Recursive Root Deletion",
+            targetTools: ["*bash*", "*terminal*", "*exec*"],
+            riskLevel: "CRITICAL",
+            action: "block"
+          }
+        ],
+        audit: {
+          enabled: true,
+          logDir: ".mcp-shield/logs",
+          tamperProofHashing: true
+        }
+      };
     }
   }
 

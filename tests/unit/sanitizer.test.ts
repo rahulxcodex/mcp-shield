@@ -67,9 +67,19 @@ describe('SecretSanitizer', () => {
     expect(restored).toBe(payload);
   });
   
-  it('should sanitize high entropy strings', () => {
-    // Generate a long random looking base64 string
-    const payload = 'Here is a weird token: xY398f12Jkd94hfA80q124Nvk9Lp04xMbc7VzQwE';
+  it('should sanitize Anthropic keys and prioritize over OpenAI', () => {
+    const anthropicKey = 'sk-ant-api03-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678';
+    const payload = `Anthropic: ${anthropicKey}`;
+    const sanitized = sanitizer.sanitize(payload);
+    expect(sanitized).toMatch(/\[\[SHIELD_SECRET_[0-9a-fA-F-]{36}\]\]/);
+    expect(sanitized).not.toContain(anthropicKey);
+    const restored = sanitizer.restore(sanitized);
+    expect(restored).toBe(payload);
+  });
+
+  it('should sanitize high entropy strings with base64url dashes and underscores', () => {
+    // Generate a long random looking base64url string with - and _
+    const payload = 'Here is a JWT secret: xY398f12Jkd94hfA-0q124Nvk9Lp04xMbc7VzQwE_1234567890';
     const sanitized = sanitizer.sanitize(payload);
     expect(sanitized).toMatch(/\[\[SHIELD_SECRET_[0-9a-fA-F-]{36}\]\]/);
   });

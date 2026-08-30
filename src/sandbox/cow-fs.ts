@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import * as Diff from 'diff';
 import { v4 as uuidv4 } from 'uuid';
 
