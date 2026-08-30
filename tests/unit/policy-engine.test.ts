@@ -1,0 +1,87 @@
+import { PolicyEngine, ShieldConfig } from '../../src/security/policy-engine';
+import * as fs from 'fs';
+import * as yaml from 'js-yaml';
+
+jest.mock('fs');
+jest.mock('js-yaml');
+
+describe('PolicyEngine', () => {
+  let engine: PolicyEngine;
+  
+  const mockConfig: ShieldConfig = {
+    version: '1.0',
+    profile: 'strict',
+    redaction: { enabled: true, maskStyle: 'token', highEntropyCheck: false, entropyThreshold: 4.5 },
+    sandbox: { cowEnabled: true, cowStagingDir: '/tmp/cow', autoCommitOnApproval: false },
+    audit: { enabled: true, logDir: '/var/log/shield', tamperProofHashing: true },
+    rules: [
+      {
+        id: '1',
+        name: 'Block dangerous filesystem access',
+        targetTools: ['fs_*', 'read_file', 'write_file'],
+        riskLevel: 'CRITICAL',
+        action: 'block',
+        matchers: {
+          pathMatches: {
+            forbiddenPaths: ['/etc/**', '/var/log/**']
+          }
+        }
+      },
+      {
+        id: '2',
+        name: 'Require approval for shell',
+        targetTools: ['run_command'],
+        riskLevel: 'HIGH',
+        action: 'sandbox'
+      }
+    ]
+  };
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as jest.Mock).mockReturnValue('mock yaml content');
+    (yaml.load as jest.Mock).mockReturnValue(mockConfig);
+    
+    engine = new PolicyEngine('mock.yaml');
+  });
+
+  it('should load config correctly', () => {
+    engine.loadConfig();
+    expect(fs.readFileSync).toHaveBeenCalledWith('mock.yaml', 'utf8');
+    expect(engine.getConfig()).toEqual(mockConfig);
+  });
+
+  it('should throw error if config not found', () => {
+    (fs.existsSync as jest.Mock).mockReturnValue(false);
+    expect(() => engine.loadConfig()).toThrow('Config file not found');
+  });
+
+  it('should evaluate tool call and return matching action', () => {
+    const result = engine.evaluateToolCall('run_command', { cmd: 'ls' });
+    expect(result.action).toBe('sandbox');
+    expect(result.rule?.id).toBe('2');
+  });
+
+  it('should evaluate wildcard tool target and allow safe paths', () => {
+    const result = engine.evaluateToolCall('fs_read', { file: '/tmp/test.txt' });
+    expect(result.action).toBe('allow');
+  });
+
+  it('should block forbidden paths using path matcher', () => {
+    const result = engine.evaluateToolCall('read_file', { path: '/etc/passwd' });
+    expect(result.action).toBe('block');
+    expect(result.rule?.id).toBe('1');
+  });
+  
+  it('should block wildcard forbidden paths', () => {
+    const result = engine.evaluateToolCall('fs_write', { filename: '/var/log/app.log' });
+    expect(result.action).toBe('block');
+    expect(result.rule?.id).toBe('1');
+  });
+
+  it('should default to allow if no rules match', () => {
+    const result = engine.evaluateToolCall('safe_tool', {});
+    expect(result.action).toBe('allow');
+  });
+});

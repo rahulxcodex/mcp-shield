@@ -1,0 +1,183 @@
+import { spawn, ChildProcess } from 'child_process';
+import { JsonRpcStreamFramer } from './stream-framing';
+import { PolicyEngine } from '../security/policy-engine';
+import { ASTAnalyzer } from '../security/ast-analyzer';
+import { SecretSanitizer } from '../security/sanitizer';
+import { PromptBridge } from '../tui/prompt-bridge';
+import { SessionLogger } from '../audit/session-logger';
+import { COWFileSystem } from '../sandbox/cow-fs';
+
+export class ProxyServer {
+  private child: ChildProcess | null = null;
+  private inboundFramer = new JsonRpcStreamFramer();
+  private outboundFramer = new JsonRpcStreamFramer();
+  
+  private policyEngine = new PolicyEngine();
+  private astAnalyzer = new ASTAnalyzer();
+  private sanitizer = new SecretSanitizer();
+  private logger = new SessionLogger();
+  private cowFs = new COWFileSystem();
+
+  constructor(private targetCmd: string, private targetArgs: string[]) {
+    this.setupFramers();
+  }
+
+  private setupFramers() {
+    this.inboundFramer.on('message', async (buffer: Buffer) => {
+      try {
+        const msgStr = buffer.toString('utf8');
+        const message = JSON.parse(msgStr);
+        
+        if (message.method === 'call_tool' && message.params && message.params.name) {
+          const toolName = message.params.name;
+          const args = message.params.arguments || {};
+          
+          this.logger.log({ type: 'tool_call_intercepted', toolName, payload: args });
+
+          // 1. Evaluate Policy
+          const { action, rule } = this.policyEngine.evaluateToolCall(toolName, args);
+
+          // 2. AST Firewall
+          if (toolName.includes('bash') || toolName.includes('execute_command') || toolName.includes('terminal')) {
+             const cmd = args.command || args.cmd || '';
+             const astResult = this.astAnalyzer.analyzeCommand(cmd);
+             if (!astResult.isSafe) {
+                this.logger.log({ type: 'ast_blocked', toolName, reason: astResult.reason });
+                this.sendErrorToHost(message.id, -32000, `AST Firewall Blocked: ${astResult.reason}`);
+                return;
+             }
+          }
+
+          // 3. TUI Approval / Sandbox
+          if (action === 'block') {
+             this.logger.log({ type: 'policy_blocked', toolName, ruleId: rule?.id });
+             this.sendErrorToHost(message.id, -32000, `Policy Engine Blocked: ${rule?.name}`);
+             return;
+          }
+
+          if (action === 'prompt' || action === 'sandbox') {
+             let diffText = undefined;
+             let stagingPath = undefined;
+             let absoluteOriginalPath = undefined;
+
+             if (action === 'sandbox' && (toolName.includes('write_file') || toolName.includes('edit_file'))) {
+                const targetFile = args.path || args.file || args.filename;
+                const content = args.content || args.text;
+                if (targetFile && content) {
+                   const staged = this.cowFs.stageWrite(targetFile, content);
+                   diffText = staged.diff;
+                   stagingPath = staged.stagingPath;
+                   absoluteOriginalPath = staged.absoluteOriginalPath;
+                }
+             }
+
+             const result = await PromptBridge.ask(
+                `Intercepted ${toolName}`,
+                `Tool: ${toolName}\nArgs: ${JSON.stringify(args, null, 2)}`,
+                rule?.riskLevel || 'HIGH',
+                diffText
+             );
+
+             this.logger.log({ type: 'tui_decision', toolName, action: result.action });
+
+             if (result.action === 'reject' || result.action === 'timeout') {
+                if (stagingPath) this.cowFs.discard(stagingPath);
+                this.sendErrorToHost(message.id, -32000, 'User rejected the action or prompt timed out.');
+                return;
+             }
+
+             if (result.action === 'approve' && stagingPath && absoluteOriginalPath) {
+                // Handle COW File writes directly in the proxy
+                this.cowFs.commit(absoluteOriginalPath, stagingPath);
+                this.sendSuccessToHost(message.id, { content: [{ type: 'text', text: 'File written successfully via MCP-Shield Sandbox.' }] });
+                return;
+             }
+          }
+        }
+        
+        // Desanitize outbound tool inputs returning from Host to target MCP? 
+        // We might want to restore secrets the host sends back.
+        if (message.method === 'call_tool') {
+           const payloadStr = JSON.stringify(message.params);
+           const restoredStr = this.sanitizer.restore(payloadStr);
+           message.params = JSON.parse(restoredStr);
+        }
+        
+        // Pass to child stdin
+        const output = JSON.stringify(message) + '\n';
+        if (this.child && this.child.stdin) {
+          this.child.stdin.write(output);
+        }
+      } catch (err) {
+        if (this.child && this.child.stdin) {
+          this.child.stdin.write(buffer);
+          this.child.stdin.write('\n');
+        }
+      }
+    });
+
+    this.outboundFramer.on('message', async (buffer: Buffer) => {
+      try {
+        const msgStr = buffer.toString('utf8');
+        const message = JSON.parse(msgStr);
+        
+        // DLP Sanitization on outputs back to host
+        if (message.result) {
+           const resultStr = JSON.stringify(message.result);
+           const sanitizedStr = this.sanitizer.sanitize(resultStr);
+           message.result = JSON.parse(sanitizedStr);
+        }
+        
+        const output = JSON.stringify(message) + '\n';
+        process.stdout.write(output);
+      } catch (err) {
+        process.stdout.write(buffer);
+        process.stdout.write('\n');
+      }
+    });
+  }
+
+  private sendErrorToHost(id: any, code: number, message: string) {
+     const errorPayload = { jsonrpc: '2.0', id, error: { code, message } };
+     process.stdout.write(JSON.stringify(errorPayload) + '\n');
+  }
+
+  private sendSuccessToHost(id: any, result: any) {
+     const successPayload = { jsonrpc: '2.0', id, result };
+     process.stdout.write(JSON.stringify(successPayload) + '\n');
+  }
+
+  public start() {
+    this.child = spawn(this.targetCmd, this.targetArgs, {
+      stdio: ['pipe', 'pipe', process.stderr],
+      env: process.env
+    });
+
+    this.child.on('error', (err) => {
+       console.error(`[MCP-SHIELD] Failed to spawn target process: ${err.message}`);
+       process.exit(1);
+    });
+
+    process.stdin.on('data', (chunk: Buffer) => {
+      this.inboundFramer.append(chunk);
+    });
+
+    if (this.child.stdout) {
+      this.child.stdout.on('data', (chunk: Buffer) => {
+        this.outboundFramer.append(chunk);
+      });
+    }
+
+    this.child.on('exit', (code) => {
+      process.exit(code ?? 0);
+    });
+
+    process.on('SIGINT', () => {
+      if (this.child) this.child.kill('SIGINT');
+    });
+
+    process.on('SIGTERM', () => {
+      if (this.child) this.child.kill('SIGTERM');
+    });
+  }
+}

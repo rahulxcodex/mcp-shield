@@ -1,0 +1,30 @@
+import { ProxyServer } from './core/proxy';
+import { ProtectCommand } from './cli/commands/protect';
+
+const args = process.argv.slice(2);
+const command = args[0];
+
+if (command === 'protect') {
+  ProtectCommand.run();
+  process.exit(0);
+} else if (command === 'wrap' && args[1] === '--') {
+  const targetCmd = args[2];
+  const targetArgs = args.slice(3);
+  
+  if (!targetCmd) {
+    console.error('Usage: mcp-shield wrap -- <command> [args]');
+    process.exit(1);
+  }
+  
+  // Start the proxy with the downstream MCP server
+  const proxy = new ProxyServer(targetCmd, targetArgs);
+  proxy.start();
+} else {
+  console.log(`
+🛡️  MCP-SHIELD
+Usage:
+  mcp-shield protect              Auto-discover and protect MCP clients.
+  mcp-shield wrap -- <cmd> [args] Wrap an MCP server with the security gateway.
+  `);
+  process.exit(1);
+}

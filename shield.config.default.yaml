@@ -1,0 +1,58 @@
+version: "1.0"
+profile: "developer"
+
+redaction:
+  enabled: true
+  maskStyle: "synthetic"
+  highEntropyCheck: true
+  entropyThreshold: 4.2
+
+sandbox:
+  cowEnabled: true
+  cowStagingDir: ".mcp-shield/cow"
+  autoCommitOnApproval: false
+
+rules:
+  # Block destructive filesystem deletion
+  - id: "block-destructive-rm"
+    name: "Block Recursive Root Deletion"
+    targetTools: ["*bash*", "*terminal*", "*exec*", "*filesystem*"]
+    riskLevel: "CRITICAL"
+    action: "block"
+    matchers:
+      astRules:
+        disallowedCommands: ["rm -rf /", "rm -rf /*", "rm -rf ~", "rm -rf ."]
+
+  # Intercept arbitrary command execution
+  - id: "prompt-arbitrary-exec"
+    name: "Prompt User on Shell Execution"
+    targetTools: ["*bash*", "*shell*", "*terminal*", "*execute_command*"]
+    riskLevel: "HIGH"
+    action: "prompt"
+
+  # Sandbox file writes
+  - id: "sandbox-file-writes"
+    name: "Sandbox and Diff File Writes"
+    targetTools: ["*write_file*", "*edit_file*", "*replace_file*"]
+    riskLevel: "MEDIUM"
+    action: "sandbox"
+
+  # Deny reading sensitive credential files
+  - id: "deny-credentials-read"
+    name: "Deny Access to Credential Files"
+    targetTools: ["*read_file*", "*filesystem*"]
+    riskLevel: "CRITICAL"
+    action: "block"
+    matchers:
+      pathMatches:
+        forbiddenPaths:
+          - "**/.env*"
+          - "**/id_rsa*"
+          - "**/.aws/credentials"
+          - "**/.ssh/*"
+          - "**/secrets.yaml"
+
+audit:
+  enabled: true
+  logDir: "~/.mcp-shield/logs"
+  tamperProofHashing: true

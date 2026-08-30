@@ -1,0 +1,35 @@
+{
+  "name": "mcp-shield",
+  "version": "1.0.0",
+  "description": "> **Tagline:** *The Zero-Trust Security Gateway, AST Firewall & Secret Sanitizer for Model Context Protocol (MCP) and AI Agents.*",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/js-yaml": "^4.0.9",
+    "diff": "^9.0.0",
+    "ink": "^7.1.1",
+    "js-yaml": "^5.4.1",
+    "react": "^19.2.8",
+    "tree-sitter": "^0.25.1",
+    "tree-sitter-bash": "^0.25.1",
+    "uuid": "^14.0.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/uuid": "^10.0.0",
+    "jest": "^30.5.0",
+    "ts-jest": "^29.4.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}
