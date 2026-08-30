@@ -15,18 +15,22 @@
     "@types/diff": "^7.0.2",
     "@types/js-yaml": "^4.0.9",
     "diff": "^9.0.0",
+    "express": "^5.2.1",
     "ink": "^7.1.1",
     "js-yaml": "^5.4.1",
     "react": "^19.2.8",
     "tree-sitter": "^0.25.1",
     "tree-sitter-bash": "^0.25.1",
-    "uuid": "^14.0.2"
+    "uuid": "^14.0.2",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
     "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
     "jest": "^30.5.0",
     "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",

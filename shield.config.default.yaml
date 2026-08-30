@@ -10,7 +10,14 @@ redaction:
 sandbox:
   cowEnabled: true
   cowStagingDir: ".mcp-shield/cow"
-  autoCommitOnApproval: false
+  autoCommitOnApproval: true
+
+egress:
+  enabled: true
+  blockedDomains:
+    - "*.ngrok.io"
+    - "*.evil.com"
+    - "exfiltrate.net"
 
 rules:
   # Block destructive filesystem deletion

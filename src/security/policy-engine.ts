@@ -31,6 +31,10 @@ export interface ShieldConfig {
     cowStagingDir: string;
     autoCommitOnApproval: boolean;
   };
+  egress: {
+    enabled: boolean;
+    blockedDomains: string[];
+  };
   rules: PolicyRule[];
   audit: {
     enabled: boolean;
@@ -76,6 +80,27 @@ export class PolicyEngine {
       this.loadConfig();
     }
     return this.config!;
+  }
+
+  public checkEgress(args: Record<string, any>): { isBlocked: boolean; domain?: string } {
+    if (!this.config) this.loadConfig();
+    if (!this.config!.egress?.enabled || !this.config!.egress.blockedDomains) return { isBlocked: false };
+
+    const argStr = JSON.stringify(args);
+    const urlRegex = /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+    
+    let match;
+    while ((match = urlRegex.exec(argStr)) !== null) {
+      const domain = match[1];
+      const isBlocked = this.config!.egress.blockedDomains.some(blocked => {
+        const regexStr = blocked.replace(/\./g, '\\.').replace(/\*/g, '.*');
+        return new RegExp(`^${regexStr}$`).test(domain);
+      });
+      
+      if (isBlocked) return { isBlocked: true, domain };
+    }
+    
+    return { isBlocked: false };
   }
 
   public evaluateToolCall(toolName: string, args: Record<string, any>): { action: PolicyRule['action']; rule?: PolicyRule } {

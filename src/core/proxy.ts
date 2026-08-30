@@ -7,6 +7,9 @@ import { PromptBridge } from '../tui/prompt-bridge';
 import { SessionLogger } from '../audit/session-logger';
 import { COWFileSystem } from '../sandbox/cow-fs';
 
+import { RateLimiter } from '../security/rate-limiter';
+import { DashboardServer } from '../dashboard/server';
+
 export class ProxyServer {
   private child: ChildProcess | null = null;
   private inboundFramer = new JsonRpcStreamFramer();
@@ -17,9 +20,17 @@ export class ProxyServer {
   private sanitizer = new SecretSanitizer();
   private logger = new SessionLogger();
   private cowFs = new COWFileSystem();
+  private rateLimiter = new RateLimiter(15, 60000); // Max 15 calls per minute per tool
+  private dashboard = new DashboardServer();
 
   constructor(private targetCmd: string, private targetArgs: string[]) {
     this.setupFramers();
+    this.dashboard.start();
+  }
+
+  private logAndBroadcast(event: any) {
+    this.logger.log(event);
+    this.dashboard.broadcast(event);
   }
 
   private setupFramers() {
@@ -32,13 +43,28 @@ export class ProxyServer {
           const toolName = message.params.name;
           const args = message.params.arguments || {};
           
-          this.logger.log({ type: 'tool_call_intercepted', toolName, payload: args });
+          this.logAndBroadcast({ type: 'tool_call_intercepted', toolName, payload: args });
+
+          // -1. Rate Limit Check (Runaway loop prevention)
+          if (!this.rateLimiter.checkLimit(toolName)) {
+             this.logAndBroadcast({ type: 'rate_limit_exceeded', toolName, reason: 'LLM appears to be stuck in a runaway loop.' });
+             this.sendErrorToHost(message.id, -32000, `RATE LIMIT EXCEEDED: Runaway loop detected for tool '${toolName}'. Session paused.`);
+             return; // Drop the request
+          }
 
           // 0. Honey-Token DLP Check
           if (this.sanitizer.checkHoneyTokens(JSON.stringify(args))) {
-             this.logger.log({ type: 'honey_token_triggered', toolName, reason: 'LLM attempted to use a decoy credential.' });
+             this.logAndBroadcast({ type: 'honey_token_triggered', toolName, reason: 'LLM attempted to use a decoy credential.' });
              this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: Honey-token accessed! Session terminated.`);
              process.exit(1);
+          }
+          
+          // 0.5 Egress Network Firewall
+          const egressCheck = this.policyEngine.checkEgress(args);
+          if (egressCheck.isBlocked) {
+             this.logAndBroadcast({ type: 'egress_blocked', toolName, reason: `Blocked domain access: ${egressCheck.domain}` });
+             this.sendErrorToHost(message.id, -32000, `EGRESS FIREWALL BLOCKED: Unauthorized access to ${egressCheck.domain}`);
+             return;
           }
 
           // 1. Evaluate Policy
@@ -49,7 +75,7 @@ export class ProxyServer {
              const cmd = args.command || args.cmd || '';
              const astResult = this.astAnalyzer.analyzeCommand(cmd);
              if (!astResult.isSafe) {
-                this.logger.log({ type: 'ast_blocked', toolName, reason: astResult.reason });
+                this.logAndBroadcast({ type: 'ast_blocked', toolName, reason: astResult.reason });
                 this.sendErrorToHost(message.id, -32000, `AST Firewall Blocked: ${astResult.reason}`);
                 return;
              }
@@ -57,7 +83,7 @@ export class ProxyServer {
 
           // 3. TUI Approval / Sandbox
           if (action === 'block') {
-             this.logger.log({ type: 'policy_blocked', toolName, ruleId: rule?.id });
+             this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: rule?.id });
              this.sendErrorToHost(message.id, -32000, `Policy Engine Blocked: ${rule?.name}`);
              return;
           }
@@ -85,7 +111,7 @@ export class ProxyServer {
                 diffText
              );
 
-             this.logger.log({ type: 'tui_decision', toolName, action: result.action });
+             this.logAndBroadcast({ type: 'tui_decision', toolName, action: result.action });
 
              if (result.action === 'reject' || result.action === 'timeout') {
                 if (stagingPath) this.cowFs.discard(stagingPath);
