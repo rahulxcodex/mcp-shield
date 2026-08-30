@@ -29,10 +29,10 @@ Every tool invocation and JSON-RPC message intercepted by MCP-Shield passes thro
 
 ## 🔍 Key Findings & Architectural Analysis
 
-1. **Zero Human-Perceptible Overhead**: The total end-to-end hot-path interception overhead (including JSON stream framing, DLP scanning, policy matching, rate limiting, and AST parsing) is **under 0.5 ms median (p50)**. For context, typical LLM generation latency is 500ms – 5,000ms; MCP-Shield adds less than **0.05%** overhead to agent tool calls.
+1. **Minimal Latency Impact**: The total end-to-end hot-path interception overhead (including JSON stream framing, DLP scanning, policy matching, rate limiting, and AST parsing) is **under 0.5 ms median (p50)**. For context, typical LLM generation latency is 500ms – 5,000ms; MCP-Shield adds less than **0.05%** overhead to agent tool calls.
 2. **High-Throughput AST Engine**: Tree-sitter-bash parses and analyzes complex shell commands in **< 150 µs** (> 7,000 ops/sec), ensuring no bottleneck even during intense agent automation sequences.
 3. **High-Speed DLP Secret Sanitizer**: High-entropy token scanning processes large payloads at high throughput with low sub-millisecond latency.
-4. **Zero-Overhead In-Memory Guardrails**: Sliding-window rate limiting and YAML policy evaluation execute in **< 10 µs** (> 100,000 ops/sec).
+4. **Negligible-Overhead In-Memory Guardrails**: Sliding-window rate limiting and YAML policy evaluation execute in **< 10 µs** (> 100,000 ops/sec).
 
 ## 🔬 How to Reproduce
 
