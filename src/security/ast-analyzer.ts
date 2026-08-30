@@ -61,6 +61,20 @@ export class ASTAnalyzer {
       return { isSafe: false, reason: 'Fork bomb pattern detected' };
     }
 
+    // 3. De-obfuscate $IFS, ${IFS}, and ANSI C quoted space substitutions
+    const deIfsCommand = command
+      .replace(/\$\{IFS(?::[^}]+)?\}|\$IFS(?:\$9|\$@|\$\*)?/g, ' ')
+      .replace(/\$'[\t\n\s\\]+'|\$'\\x20'|\$'\\40'/gi, ' ');
+    if (deIfsCommand !== command) {
+      try {
+        const deIfsTree = this.parser.parse(deIfsCommand);
+        const deIfsResult = this.walk(deIfsTree.rootNode, 0);
+        if (!deIfsResult.isSafe) {
+          return { isSafe: false, reason: `$IFS evasion detected: ${deIfsResult.reason}` };
+        }
+      } catch {}
+    }
+
     try {
       const tree = this.parser.parse(command);
       return this.walk(tree.rootNode, 0);
@@ -71,11 +85,19 @@ export class ASTAnalyzer {
 
   private normalizeToken(raw: string): string {
     if (!raw) return '';
-    return raw
+    let clean = raw
       .replace(/^['"]|['"]$/g, '')
       .replace(/\\/g, '')      // remove all backslash escapes e.g. \r\m\ -> rm
       .replace(/['"]/g, '')    // remove embedded quotes like r""m -> rm
       .trim();
+
+    // Extract fallback / default from parameter expansions e.g. ${CMD:-rm} -> rm
+    const paramMatch = /^\$\{[^}:-]+:?[-+=?]([^}]+)\}$/.exec(clean);
+    if (paramMatch) {
+      clean = paramMatch[1].replace(/^['"]|['"]$/g, '').trim();
+    }
+
+    return clean;
   }
 
   private isDangerousTarget(rawPath: string): boolean {
@@ -279,6 +301,18 @@ export class ASTAnalyzer {
         // Dynamic execution primitives
         if (cmdName === 'eval' || cmdName === 'exec') {
           return { isSafe: false, reason: `Dynamic evaluation primitive "${cmdName}" is blocked: "${node.text}"` };
+        }
+
+        // Dangerous alias definitions
+        if (cmdName === 'alias') {
+          const hasDangerousAlias = args.some(t => {
+            const val = t.split('=')[1] || '';
+            const cleanVal = val.replace(/^['"]|['"]$/g, '');
+            return this.analyzeCommand(cleanVal).isSafe === false;
+          });
+          if (hasDangerousAlias) {
+            return { isSafe: false, reason: `Dangerous alias definition blocked: "${node.text}"` };
+          }
         }
 
         // Destructive rm check

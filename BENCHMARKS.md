@@ -10,22 +10,22 @@ Every tool invocation and JSON-RPC message intercepted by MCP-Shield passes thro
 - **CPUs**: 8x Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz
 - **Node.js**: v24.19.0
 - **V8 Version**: 13.6.233.17-node.51
-- **Generated At**: 2026-08-30T16:49:23.856Z
+- **Generated At**: 2026-08-30T17:08:17.102Z
 
 ## ⏱️ Latency & Throughput Summary
 
 | Component / Benchmark | Mean Latency | p50 (Median) | p90 | p99 | Ops / sec | Throughput |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **AST: Simple Command ("ls -la /var/log")** | `153.1 µs` | `156.0 µs` | `183.6 µs` | `240.7 µs` | **6,478 ops/s** | N/A |
-| **AST: Pipeline ("cat log | grep err | awk '{print $1}'")** | `397.7 µs` | `326.9 µs` | `553.2 µs` | `1.060 ms` | **2,505 ops/s** | N/A |
-| **AST: Deep Wrapper Evasion ("sudo env nohup nice rm -rf /")** | `123.9 µs` | `91.9 µs` | `218.5 µs` | `304.7 µs` | **8,012 ops/s** | N/A |
-| **Sanitizer: Small Payload (1 KB)** | `10.4 µs` | `10.8 µs` | `11.8 µs` | `24.0 µs` | **90,284 ops/s** | 9.21 MB/s |
-| **Sanitizer: Medium Payload (14 KB)** | `929.6 µs` | `687.9 µs` | `1.537 ms` | `1.896 ms` | **1,074 ops/s** | 12.68 MB/s |
-| **Sanitizer: Large Payload (100 KB)** | `4.286 ms` | `3.373 ms` | `7.226 ms` | `8.222 ms` | **233 ops/s** | 19.12 MB/s |
-| **RateLimiter: Sliding Window Check** | `0.9 µs` | `0.8 µs` | `1.4 µs` | `1.8 µs` | **7,74,929 ops/s** | N/A |
-| **PolicyEngine: Rule Evaluation (Allowed Tool)** | `52.7 µs` | `53.3 µs` | `69.9 µs` | `121.2 µs` | **18,935 ops/s** | N/A |
-| **PolicyEngine: Egress Domain Matcher** | `13.7 µs` | `13.2 µs` | `17.2 µs` | `38.1 µs` | **71,261 ops/s** | N/A |
-| **Proxy Hot-Path: Complete Tool Call Interception** | `215.0 µs` | `239.3 µs` | `322.9 µs` | `448.3 µs` | **4,640 ops/s** | N/A |
+| **AST: Simple Command ("ls -la /var/log")** | `133.7 µs` | `131.3 µs` | `210.9 µs` | `371.8 µs` | **7,381 ops/s** | N/A |
+| **AST: Pipeline ("cat log | grep err | awk '{print $1}'")** | `409.5 µs` | `316.3 µs` | `613.5 µs` | `879.2 µs` | **2,433 ops/s** | N/A |
+| **AST: Deep Wrapper Evasion ("sudo env nohup nice rm -rf /")** | `171.3 µs` | `148.9 µs` | `269.5 µs` | `377.2 µs` | **5,798 ops/s** | N/A |
+| **Sanitizer: Small Payload (1 KB)** | `8.3 µs` | `4.7 µs` | `12.7 µs` | `32.4 µs` | **1,12,808 ops/s** | 11.51 MB/s |
+| **Sanitizer: Medium Payload (14 KB)** | `980.9 µs` | `695.4 µs` | `1.614 ms` | `1.823 ms` | **1,018 ops/s** | 12.02 MB/s |
+| **Sanitizer: Large Payload (100 KB)** | `4.514 ms` | `3.403 ms` | `7.184 ms` | `7.880 ms` | **221 ops/s** | 18.16 MB/s |
+| **RateLimiter: Sliding Window Check** | `0.9 µs` | `0.5 µs` | `0.9 µs` | `1.7 µs` | **7,89,129 ops/s** | N/A |
+| **PolicyEngine: Rule Evaluation (Allowed Tool)** | `60.3 µs` | `56.3 µs` | `79.8 µs` | `158.7 µs` | **16,546 ops/s** | N/A |
+| **PolicyEngine: Egress Domain Matcher** | `13.8 µs` | `13.1 µs` | `16.6 µs` | `37.5 µs` | **70,839 ops/s** | N/A |
+| **Proxy Hot-Path: Complete Tool Call Interception** | `239.2 µs` | `249.2 µs` | `338.6 µs` | `506.7 µs` | **4,170 ops/s** | N/A |
 
 ## 🔍 Key Findings & Architectural Analysis
 

@@ -3,6 +3,7 @@ import { SecretSanitizer } from '../../src/security/sanitizer';
 import { PolicyEngine } from '../../src/security/policy-engine';
 import { RateLimiter } from '../../src/security/rate-limiter';
 import { COWFileSystem } from '../../src/sandbox/cow-fs';
+import { ContainerSandbox } from '../../src/sandbox/container-sandbox';
 
 /**
  * ============================================================================
@@ -92,6 +93,30 @@ describe('Red-Team Validation: Security Bypass Challenges', () => {
       ];
 
       for (const cmd of attacks) {
+        expect(astAnalyzer.analyzeCommand(cmd).isSafe).toBe(false);
+      }
+    });
+
+    it('RT-0106: Blocks $IFS delimiter substitutions and parameter expansion evasions', () => {
+      const ifsAttacks = [
+        'rm$IFS-rf$IFS/',
+        'sudo$IFS\\rm$IFS-rf$IFS/etc',
+        '${CMD:-rm} -rf /',
+        '${u:+rm} -rf /var'
+      ];
+
+      for (const cmd of ifsAttacks) {
+        expect(astAnalyzer.analyzeCommand(cmd).isSafe).toBe(false);
+      }
+    });
+
+    it('RT-0107: Blocks dynamic alias definitions encapsulating destructive primitives', () => {
+      const aliasAttacks = [
+        'alias del="rm -rf /"; del',
+        'alias wipe=\'shred -u /etc/shadow\''
+      ];
+
+      for (const cmd of aliasAttacks) {
         expect(astAnalyzer.analyzeCommand(cmd).isSafe).toBe(false);
       }
     });
@@ -188,6 +213,24 @@ describe('Red-Team Validation: Security Bypass Challenges', () => {
 
       // Discard staged write
       cowFs.discard(staged.stagingPath);
+    });
+
+    it('RT-0502: Generates isolated container runtime arguments with network cutoff and dropped capabilities', () => {
+      const sandbox = new ContainerSandbox({
+        enabled: true,
+        network: 'none',
+        readOnlyRoot: true,
+        dropCapabilities: ['ALL'],
+        noNewPrivileges: true,
+        memoryLimit: '512m'
+      });
+
+      const args = sandbox.buildDockerArgs('npx', ['mcp-server']);
+      expect(args).toContain('--network=none');
+      expect(args).toContain('--read-only');
+      expect(args).toContain('--cap-drop=ALL');
+      expect(args).toContain('--security-opt=no-new-privileges');
+      expect(args).toContain('--memory=512m');
     });
   });
 });

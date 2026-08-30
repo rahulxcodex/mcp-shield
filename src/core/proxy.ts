@@ -9,6 +9,7 @@ import { COWFileSystem } from '../sandbox/cow-fs';
 
 import { RateLimiter } from '../security/rate-limiter';
 import { DashboardServer } from '../dashboard/server';
+import { ContainerSandbox } from '../sandbox/container-sandbox';
 
 export class ProxyServer {
   private child: ChildProcess | null = null;
@@ -202,7 +203,12 @@ export class ProxyServer {
   }
 
   public start() {
-    this.child = spawn(this.targetCmd, this.targetArgs, {
+    const config = this.policyEngine.getConfig();
+    const containerConfig = (config.sandbox as any)?.container;
+    const containerSandbox = new ContainerSandbox(containerConfig || {});
+    const { cmd, args } = containerSandbox.spawnProcess(this.targetCmd, this.targetArgs);
+
+    this.child = spawn(cmd, args, {
       stdio: ['pipe', 'pipe', process.stderr],
       env: process.env
     });

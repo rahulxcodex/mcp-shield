@@ -11,6 +11,15 @@ sandbox:
   cowEnabled: true
   cowStagingDir: ".mcp-shield/cow"
   autoCommitOnApproval: true
+  container:
+    enabled: false
+    image: "node:20-alpine"
+    network: "none"
+    readOnlyRoot: true
+    memoryLimit: "512m"
+    cpuQuota: "1.0"
+    dropCapabilities: ["ALL"]
+    noNewPrivileges: true
 
 egress:
   enabled: true

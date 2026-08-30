@@ -124,9 +124,9 @@ export class PolicyEngine {
     if (!config.egress?.enabled || !config.egress.blockedDomains) return { isBlocked: false };
 
     const argStr = JSON.stringify(args);
-    // Naive regex extractor for domains and hostnames
-    const urlRegex = /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
     
+    // 1. Check for standard domain names and hostnames
+    const urlRegex = /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
     let match;
     while ((match = urlRegex.exec(argStr)) !== null) {
       const domain = match[1].toLowerCase();
@@ -143,6 +143,25 @@ export class PolicyEngine {
       });
       
       if (isBlocked) return { isBlocked: true, domain };
+    }
+
+    // 2. Check for raw IP literals, Hex-encoded IPs, and Dword IPs targeted at egress exfiltration
+    const ipPatterns = [
+      /(?:https?:\/\/)?((?:\d{1,3}\.){3}\d{1,3})(?::\d+)?/g,
+      /(?:https?:\/\/)?(0x[0-9a-fA-F]{8})/g,
+      /(?:https?:\/\/)?(\[(?:[0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}\])(?::\d+)?/g
+    ];
+
+    for (const ipRegex of ipPatterns) {
+      let ipMatch;
+      while ((ipMatch = ipRegex.exec(argStr)) !== null) {
+        const targetIp = ipMatch[1];
+        // If blacklisted specifically or if blocked domain matches
+        const isBlocked = config.egress.blockedDomains.some(blocked => {
+          return blocked === targetIp || blocked === '*' || blocked === '0.0.0.0/0';
+        });
+        if (isBlocked) return { isBlocked: true, domain: targetIp };
+      }
     }
     
     return { isBlocked: false };
