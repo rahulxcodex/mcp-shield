@@ -1,0 +1,6 @@
+Property failed after 2 tests
+{ seed: 1414665463, path: "1:0:0:0:0:1", endOnFailure: true }
+Counterexample: ["chmod -rf /"]
+Shrunk 5 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
