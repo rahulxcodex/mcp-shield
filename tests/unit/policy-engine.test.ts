@@ -1,12 +1,15 @@
 import { PolicyEngine, ShieldConfig } from '../../src/security/policy-engine';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
+import * as path from 'path';
+import * as os from 'os';
 
-jest.mock('fs');
-jest.mock('js-yaml');
+const actualFs = jest.requireActual('fs');
+const actualYaml = jest.requireActual('js-yaml');
 
 describe('PolicyEngine', () => {
   let engine: PolicyEngine;
+  let tempConfigFile: string;
   
   const mockConfig: ShieldConfig = {
     version: '1.0',
@@ -38,24 +41,34 @@ describe('PolicyEngine', () => {
     ]
   };
 
+  beforeAll(() => {
+    tempConfigFile = path.join(os.tmpdir(), `policy-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yaml`);
+    fs.writeFileSync(tempConfigFile, yaml.dump(mockConfig), 'utf8');
+  });
+
+  afterAll(() => {
+    if (fs.existsSync(tempConfigFile)) {
+      try { fs.unlinkSync(tempConfigFile); } catch {}
+    }
+  });
+
   beforeEach(() => {
-    jest.resetAllMocks();
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (fs.readFileSync as jest.Mock).mockReturnValue('mock yaml content');
-    (yaml.load as jest.Mock).mockReturnValue(mockConfig);
-    
-    engine = new PolicyEngine('mock.yaml');
+    engine = new PolicyEngine(tempConfigFile);
+  });
+
+  afterEach(() => {
+    engine.close();
   });
 
   it('should load config correctly', () => {
     engine.loadConfig();
-    expect(fs.readFileSync).toHaveBeenCalledWith('mock.yaml', 'utf8');
-    expect(engine.getConfig()).toEqual(mockConfig);
+    expect(engine.getConfig().profile).toBe('test');
+    expect(engine.getConfig().rules.length).toBe(2);
   });
 
   it('should throw error if config not found', () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
-    expect(() => engine.loadConfig()).toThrow('Config file not found');
+    const nonExistentEngine = new PolicyEngine('/non/existent/path/shield.yaml');
+    expect(() => nonExistentEngine.loadConfig()).toThrow('Config file not found');
   });
 
   it('should evaluate tool call and return matching action', () => {
@@ -96,6 +109,14 @@ describe('PolicyEngine', () => {
     expect(result.action).toBe('block');
   });
 
+  it('should block Windows backslash and drive-prefixed paths matching forbidden rules', () => {
+    const res1 = engine.evaluateToolCall('read_file', { path: 'C:\\etc\\passwd' });
+    expect(res1.action).toBe('block');
+
+    const res2 = engine.evaluateToolCall('read_file', { path: 'C:/var/log/system.log' });
+    expect(res2.action).toBe('block');
+  });
+
   it('should allow legitimate paths that merely contain etc as substring', () => {
     const result = engine.evaluateToolCall('read_file', { path: '/home/dev/etc-configs/notes.txt' });
     expect(result.action).toBe('allow');
@@ -106,7 +127,7 @@ describe('PolicyEngine', () => {
   });
 
   it('should default to allow if no rules match', () => {
-    const result = engine.evaluateToolCall('safe_tool', {});
+    const result = engine.evaluateToolCall('unknown_tool', { foo: 'bar' });
     expect(result.action).toBe('allow');
   });
 });

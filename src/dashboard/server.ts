@@ -7,8 +7,11 @@ export class DashboardServer {
   private server = http.createServer(this.app);
   private wss = new WebSocketServer({ server: this.server });
   private clients = new Set<WebSocket>();
+  private actualPort: number = 0;
 
   constructor(private port: number = process.env.MCP_SHIELD_DASHBOARD_PORT ? parseInt(process.env.MCP_SHIELD_DASHBOARD_PORT, 10) : 3333) {
+    this.actualPort = this.port;
+
     this.app.get('/', (req, res) => {
       res.send(`
         <html>
@@ -17,7 +20,9 @@ export class DashboardServer {
           <h1>🛡️ MCP-Shield Live Audit</h1>
           <div id="logs" style="background: #000; padding: 10px; border-radius: 5px; height: 500px; overflow-y: auto; font-family: monospace;"></div>
           <script>
-            const ws = new WebSocket('ws://localhost:${this.port}');
+            const host = window.location.host;
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const ws = new WebSocket(wsProtocol + host);
             const logs = document.getElementById('logs');
             ws.onmessage = (event) => {
               const data = JSON.parse(event.data);
@@ -56,7 +61,12 @@ export class DashboardServer {
     // Enforce Origin Check against Cross-Site WebSocket Hijacking (CSWSH)
     this.wss.on('connection', (ws, req) => {
       const origin = req.headers.origin;
-      const allowedOrigins = [`http://127.0.0.1:${this.port}`, `http://localhost:${this.port}`];
+      const boundPort = this.getPort();
+      const allowedOrigins = [
+        `http://127.0.0.1:${boundPort}`,
+        `http://localhost:${boundPort}`,
+        `http://[::1]:${boundPort}`
+      ];
 
       if (origin && !allowedOrigins.includes(origin)) {
         ws.close(4003, 'Forbidden: Cross-Origin WebSocket Connection Rejected');
@@ -68,10 +78,30 @@ export class DashboardServer {
     });
   }
 
+  public getPort(): number {
+    return this.actualPort || this.port;
+  }
+
   public start() {
-    this.server.listen(this.port, '127.0.0.1', () => {
-      console.error(`[MCP-SHIELD] Real-time Dashboard running at http://127.0.0.1:${this.port}`);
+    this.server.on('error', (err: any) => {
+      console.error(`[MCP-SHIELD] Dashboard server error: ${err.message}`);
     });
+
+    this.wss.on('error', (err: any) => {
+      console.error(`[MCP-SHIELD] WebSocket server error: ${err.message}`);
+    });
+
+    try {
+      this.server.listen(this.port, '127.0.0.1', () => {
+        const addr = this.server.address();
+        if (addr && typeof addr === 'object') {
+          this.actualPort = addr.port;
+        }
+        console.error(`[MCP-SHIELD] Real-time Dashboard running at http://127.0.0.1:${this.getPort()}`);
+      });
+    } catch (e: any) {
+      console.error(`[MCP-SHIELD] Dashboard failed to listen: ${e.message}`);
+    }
   }
 
   public broadcast(event: any) {
@@ -90,6 +120,11 @@ export class DashboardServer {
     }
     this.clients.clear();
     try { this.wss.close(); } catch {}
-    try { this.server.close(); } catch {}
+    try {
+      if (typeof (this.server as any).closeAllConnections === 'function') {
+        (this.server as any).closeAllConnections();
+      }
+      this.server.close();
+    } catch {}
   }
 }

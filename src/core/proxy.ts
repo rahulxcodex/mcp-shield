@@ -216,19 +216,69 @@ export class ProxyServer {
      } catch {}
   }
 
-  private buildSafeEnv(): NodeJS.ProcessEnv {
-     const safeEnvVars = [
-       'PATH', 'PATHEXT', 'HOME', 'USER', 'USERNAME', 'USERPROFILE',
-       'TMP', 'TEMP', 'TMPDIR', 'LANG', 'LC_ALL', 'SHELL', 'TERM',
+  public static buildSafeEnv(sourceEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+     // Explicit Allowlist for POSIX / Linux / Ubuntu and Windows
+     const safeEnvAllowlist = [
+       // 1. Path & Shell Execution
+       'PATH', 'PATHEXT', 'SHELL', 'PWD',
+       
+       // 2. User Identity & Directories
+       'HOME', 'USER', 'LOGNAME', 'USERNAME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH',
+       
+       // 3. Temporary Storage
+       'TMP', 'TEMP', 'TMPDIR',
+       
+       // 4. Locales, Character Encodings, Timezone
+       'LANG', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES', 'TZ',
+       
+       // 5. Node.js Runtime & Module Resolution
+       'NODE_PATH', 'NODE_EXTRA_CA_CERTS',
+       
+       // 6. TLS / SSL CA Certificate Trust Stores
+       'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CURL_CA_BUNDLE', 'REQUESTS_CA_BUNDLE',
+       
+       // 7. XDG Base Directory Standard (Linux/Ubuntu)
+       'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_RUNTIME_DIR',
+       'XDG_DATA_DIRS', 'XDG_CONFIG_DIRS',
+       
+       // 8. Terminal, TUI & Output Capabilities
+       'TERM', 'COLORTERM', 'FORCE_COLOR', 'NO_COLOR', 'CI',
+       
+       // 9. Windows Operating System Essentials
        'SYSTEMROOT', 'WINDIR', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
        'PROGRAMFILES', 'PROGRAMFILES(X86)', 'COMSPEC', 'PSMODULEPATH'
      ];
-     const safeEnv: NodeJS.ProcessEnv = {};
-     for (const key of safeEnvVars) {
-       if (process.env[key] !== undefined) {
-         safeEnv[key] = process.env[key];
+
+     // Dangerous runtime injection vectors that MUST NEVER be inherited
+     const blockedInjectionPattern = /^(LD_|DYLD_|NODE_OPTIONS|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT|PROMPT_COMMAND)/i;
+     
+     // Sensitive credential patterns to reject even if somehow requested
+     const sensitiveKeyPattern = /(KEY|SECRET|TOKEN|PASSWORD|AUTH|CREDENTIAL|PRIVATE)/i;
+
+     const safeEnv: NodeJS.ProcessEnv = {
+       // Safe execution defaults for child runtimes to prevent stdio deadlocks
+       PYTHONUNBUFFERED: '1',
+       PYTHONIOENCODING: 'utf-8'
+     };
+
+     const sourceKeys = Object.keys(sourceEnv);
+
+     for (const allowedKey of safeEnvAllowlist) {
+       // Skip if it matches injection vectors or sensitive patterns
+       if (blockedInjectionPattern.test(allowedKey) || sensitiveKeyPattern.test(allowedKey)) {
+         continue;
+       }
+
+       // Case-insensitive matching for cross-platform resilience
+       const matchedKey = sourceKeys.find(k => k.toUpperCase() === allowedKey.toUpperCase());
+       if (matchedKey && sourceEnv[matchedKey] !== undefined) {
+         const val = sourceEnv[matchedKey];
+         if (val !== undefined) {
+           safeEnv[allowedKey] = val;
+         }
        }
      }
+
      return safeEnv;
   }
 
@@ -249,7 +299,7 @@ export class ProxyServer {
 
     this.child = spawn(cmd, args, {
       stdio: ['pipe', 'pipe', process.stderr],
-      env: this.buildSafeEnv()
+      env: ProxyServer.buildSafeEnv()
     });
 
     this.child.on('error', (err) => {
@@ -268,15 +318,31 @@ export class ProxyServer {
       this.inboundFramer.append(chunk);
     });
 
+    process.stdin.on('end', () => {
+      if (this.child && this.child.stdin && !this.child.stdin.destroyed && this.child.stdin.writable) {
+        try {
+          this.child.stdin.end();
+        } catch {}
+      }
+    });
+
     if (this.child.stdout) {
       this.child.stdout.on('data', (chunk: Buffer) => {
         this.outboundFramer.append(chunk);
       });
     }
 
-    this.child.on('exit', (code) => {
+    this.child.on('exit', (code, signal) => {
       this.stop();
-      process.exit(code ?? 0);
+      if (code !== null) {
+        process.exit(code);
+      } else if (signal === 'SIGINT') {
+        process.exit(130);
+      } else if (signal === 'SIGTERM') {
+        process.exit(143);
+      } else {
+        process.exit(1);
+      }
     });
 
     const handleShutdown = (signal: string) => {
@@ -293,12 +359,12 @@ export class ProxyServer {
             }
           } catch {}
           this.stop();
-          process.exit(1);
+          process.exit(signal === 'SIGINT' ? 130 : 143);
         }, 3000);
         killTimer.unref();
       } else {
         this.stop();
-        process.exit(0);
+        process.exit(signal === 'SIGINT' ? 130 : 143);
       }
     };
 

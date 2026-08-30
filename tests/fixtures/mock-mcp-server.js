@@ -1,10 +1,20 @@
 #!/usr/bin/env node
 const readline = require('readline');
 
+// Prevent unhandled EPIPE when parent terminates
+process.stdout.on('error', (err) => {
+  if (err.code === 'EPIPE') {
+    process.exit(0);
+  }
+});
+
 const rl = readline.createInterface({
   input: process.stdin,
-  output: process.stdout,
   terminal: false
+});
+
+rl.on('close', () => {
+  process.exit(0);
 });
 
 rl.on('line', (line) => {

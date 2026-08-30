@@ -3,7 +3,7 @@ import { ASTAnalyzer } from '../../src/security/ast-analyzer';
 describe('ASTAnalyzer', () => {
   let analyzer: ASTAnalyzer;
 
-  beforeEach(() => {
+  beforeAll(() => {
     analyzer = new ASTAnalyzer();
   });
 

@@ -64,6 +64,9 @@ export class PolicyEngine {
            }
         }
       });
+      if (this.watcher && typeof (this.watcher as any).unref === 'function') {
+        (this.watcher as any).unref();
+      }
     }
   }
 
@@ -176,6 +179,8 @@ export class PolicyEngine {
 
   private normalizePathForMatching(rawPath: string): string {
     let clean = rawPath.trim().replace(/\\/g, '/');
+    // Strip Windows drive prefix e.g. C:/etc/passwd -> /etc/passwd
+    clean = clean.replace(/^[a-zA-Z]:\/?/, '/');
     if (!clean.startsWith('/')) {
       clean = '/' + clean;
     }

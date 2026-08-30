@@ -7,6 +7,23 @@ export interface ASTAnalysisResult {
   reason?: string;
 }
 
+// Ensure tree-sitter Tree instanceof checks succeed across Jest VM context boundaries
+try {
+  const TreeClass = (Parser as any).Tree;
+  if (TreeClass) {
+    Object.defineProperty(TreeClass, Symbol.hasInstance, {
+      value: (inst: any) => {
+        if (!inst || typeof inst !== 'object') return false;
+        if (inst.constructor?.prototype === inst) return false;
+        return inst.constructor?.name === 'Tree' || typeof inst.edit === 'function';
+      },
+      configurable: true
+    });
+  }
+  // Reset language node classes once per VM realm
+  delete (Bash as any).nodeSubclasses;
+} catch {}
+
 export class ASTAnalyzer {
   private parser: Parser;
   private readonly MAX_RECURSION_DEPTH = 50;
@@ -45,6 +62,10 @@ export class ASTAnalyzer {
   public analyzeCommand(command: string): ASTAnalysisResult {
     if (!command || !command.trim()) return { isSafe: true };
 
+    try {
+      this.parser.reset();
+    } catch {}
+
     // 1. Prevent synchronous tree-sitter parsing DoS on oversized commands
     if (command.length > 64 * 1024) {
       return { isSafe: false, reason: 'Command size exceeds 64KB safety limit (DoS prevention)' };
@@ -69,19 +90,39 @@ export class ASTAnalyzer {
     if (deIfsCommand !== command) {
       try {
         const deIfsTree = this.parser.parse(deIfsCommand);
-        const deIfsResult = this.walk(deIfsTree.rootNode, 0);
-        if (!deIfsResult.isSafe) {
-          return { isSafe: false, reason: `$IFS evasion detected: ${deIfsResult.reason}` };
+        if (deIfsTree?.rootNode) {
+          const deIfsResult = this.walk(deIfsTree.rootNode, 0);
+          if (!deIfsResult.isSafe) {
+            return { isSafe: false, reason: `$IFS evasion detected: ${deIfsResult.reason}` };
+          }
         }
       } catch {}
     }
 
     try {
-      const tree = this.parser.parse(command);
-      return this.walk(tree.rootNode, 0);
+      let tree = this.parser.parse(command);
+      let root = this.getRoot(tree);
+      if (!root) {
+        this.parser = new Parser();
+        this.parser.setLanguage(Bash);
+        tree = this.parser.parse(command);
+        root = this.getRoot(tree);
+      }
+      if (root) {
+        return this.walk(root, 0);
+      }
+      return { isSafe: false, reason: 'AST Parsing Failure: Unable to obtain syntax tree root node' };
     } catch (err: any) {
       return { isSafe: false, reason: `AST Parsing Failure: ${err.message}` };
     }
+  }
+
+  private getRoot(tree: any): Parser.SyntaxNode | null {
+    if (!tree) return null;
+    try {
+      if (tree.rootNode) return tree.rootNode;
+    } catch {}
+    return null;
   }
 
   private normalizeToken(raw: string): string {
@@ -450,12 +491,12 @@ export class ASTAnalyzer {
     }
 
     // Recurse down the tree
-    if (Array.isArray(node.namedChildren)) {
-      for (const child of node.namedChildren) {
-        if (child && typeof child.type === 'string') {
-          const result = this.walk(child, depth + 1);
-          if (!result.isSafe) return result;
-        }
+    const childCount = typeof node.childCount === 'number' ? node.childCount : (Array.isArray(node.namedChildren) ? node.namedChildren.length : 0);
+    for (let i = 0; i < childCount; i++) {
+      const child = typeof node.child === 'function' ? node.child(i) : (Array.isArray(node.namedChildren) ? node.namedChildren[i] : null);
+      if (child && typeof child.type === 'string') {
+        const result = this.walk(child, depth + 1);
+        if (!result.isSafe) return result;
       }
     }
 

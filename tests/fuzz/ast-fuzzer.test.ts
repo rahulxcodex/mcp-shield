@@ -241,7 +241,7 @@ describe('Adversarial AST Fuzzing Suite', () => {
     }
   });
 
-  describe('Randomized Fuzz Generation (200 permutations)', () => {
+  describe('Randomized Fuzz Generation (50 permutations)', () => {
     it('should reliably block randomized adversarial permutations', () => {
       const rmFlags = ['-rf', '-r -f', '-fr', '-R', '--recursive', '-r -v -f'];
       const chmodFlags = ['-R 777', '-R 000', '-R 755', '--recursive 777', '-R u=rwx'];

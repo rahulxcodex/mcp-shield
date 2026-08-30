@@ -145,4 +145,34 @@ describe('JsonRpcStreamFramer Integration & Resilience', () => {
 
     expect(totalEmitted).toBe(totalBatches * messagesPerBatch);
   });
+
+  it('should handle Windows CRLF (\\r\\n) delimited frames', (done) => {
+    const payload = JSON.stringify({ jsonrpc: '2.0', id: 50, method: 'tools/list' });
+    
+    framer.on('message', (buf: Buffer) => {
+      const parsed = JSON.parse(buf.toString('utf8'));
+      expect(parsed).toEqual({ jsonrpc: '2.0', id: 50, method: 'tools/list' });
+      done();
+    });
+
+    framer.append(Buffer.from(payload + '\r\n', 'utf8'));
+  });
+
+  it('should handle split CRLF across chunk boundaries (\\r in chunk 1, \\n in chunk 2)', (done) => {
+    const payload = JSON.stringify({ jsonrpc: '2.0', id: 51, text: 'split-crlf' });
+    const fullBuffer = Buffer.from(payload + '\r\n', 'utf8');
+
+    // Split between \r (byte before last) and \n (last byte)
+    const chunk1 = fullBuffer.subarray(0, fullBuffer.length - 1);
+    const chunk2 = fullBuffer.subarray(fullBuffer.length - 1);
+
+    framer.on('message', (buf: Buffer) => {
+      const parsed = JSON.parse(buf.toString('utf8'));
+      expect(parsed.text).toBe('split-crlf');
+      done();
+    });
+
+    framer.append(chunk1);
+    framer.append(chunk2);
+  });
 });
