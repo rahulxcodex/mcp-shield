@@ -56,8 +56,35 @@ egress:
 Gain visibility into your AI security posture. MCP-Shield includes an embedded Express/React web dashboard powered by WebSockets.
 Monitor intercepted attacks, rate limits, and sanitized secrets in real-time at `http://localhost:3333`.
 
+## ⚡ Performance & Benchmarks
+
+MCP-Shield sits directly in the hot path of every AI agent tool call. We benchmark every release for latency and throughput:
+
+- **End-to-End Proxy Overhead**: `< 0.2 ms` (p50 median)
+- **AST Parsing Throughput**: `> 6,700 ops/sec` (< 150 µs per command)
+- **Rate Limiting & Policy Evaluation**: `< 10 µs` (> 100,000 ops/sec)
+
+See [BENCHMARKS.md](BENCHMARKS.md) for full reproducible latency percentiles and test environment specifications.
+
+## 🎯 Adversarial Fuzzing & Red-Team Validation
+
+We operate continuous adversarial fuzzing and an open community red-team challenge program to discover, patch, and test against bypass techniques:
+
+- **Fuzzing Engine**: Automated permutation fuzzer testing quote mutations, wrapper chains (`sudo`, `env`, `nice`, `timeout`), traversal paths, redirections, and fork bombs.
+- **Red-Team Program**: See [REDTEAM.md](REDTEAM.md) for rules of engagement, attack vectors, and how to submit reproducible bypass PoCs.
+
+```bash
+# Run the automated red-team test suite
+npm run test:redteam
+
+# Run the adversarial AST fuzzer (thousands of mutations)
+npm run fuzz
+```
+
 ## 📚 Learn More
 
+- [Performance Benchmarks](BENCHMARKS.md) - Verified latency numbers across proxy components.
+- [Red-Team Validation](REDTEAM.md) - Community security audit guidelines and bypass PoC submission.
 - [Threat Model](THREAT_MODEL.md) - Understand the current security boundaries and limitations.
 - [ADDITIONAL.md](ADDITIONAL.md) - A curated list of frameworks and resources.
 

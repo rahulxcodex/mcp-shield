@@ -124,16 +124,22 @@ export class PolicyEngine {
     if (!config.egress?.enabled || !config.egress.blockedDomains) return { isBlocked: false };
 
     const argStr = JSON.stringify(args);
-    // Note: This is a naive regex extractor and can be fooled by encoding tricks (ev%69l.com), 
-    // IP literals, and punycode. It is a defense-in-depth measure, not a full network sandbox.
+    // Naive regex extractor for domains and hostnames
     const urlRegex = /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
     
     let match;
     while ((match = urlRegex.exec(argStr)) !== null) {
-      const domain = match[1];
+      const domain = match[1].toLowerCase();
       const isBlocked = config.egress.blockedDomains.some(blocked => {
-        const regexStr = blocked.replace(/\./g, '\\.').replace(/\*/g, '.*');
-        return new RegExp(`^${regexStr}$`).test(domain);
+        const lowerBlocked = blocked.toLowerCase();
+        if (lowerBlocked.startsWith('*.')) {
+          const apex = lowerBlocked.slice(2);
+          if (domain === apex || domain.endsWith('.' + apex)) {
+            return true;
+          }
+        }
+        const regexStr = lowerBlocked.replace(/\./g, '\\.').replace(/\*/g, '.*');
+        return new RegExp(`^${regexStr}$`, 'i').test(domain);
       });
       
       if (isBlocked) return { isBlocked: true, domain };

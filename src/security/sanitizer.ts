@@ -36,8 +36,10 @@ export class SecretSanitizer {
   private charFrequencies = new Uint32Array(256);
 
   public checkHoneyTokens(payload: string): boolean {
-    for (const token of HONEY_TOKENS) {
-      if (payload.includes(token)) return true;
+    const envTokens = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MCP_SHIELD_HONEY_TOKENS.split(',') : [];
+    const allTokens = [...HONEY_TOKENS, ...envTokens];
+    for (const token of allTokens) {
+      if (token && payload.includes(token.trim())) return true;
     }
     return false;
   }

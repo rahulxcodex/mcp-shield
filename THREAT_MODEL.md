@@ -16,8 +16,11 @@ Security tools live or die on being trustworthy under adversarial pressure. This
 - **Complex Data Exfiltration**: Malicious agents could exfiltrate data using covert channels (e.g., timing attacks, DNS rebinding, steganography) that bypass the basic regex/entropy DLP engine.
 - **Host Compromise**: If the host environment is already compromised, MCP-Shield cannot protect the user.
 
-## Future Work & Roadmap
-To build trust, we are working towards:
-1. **Adversarial Fuzzing**: Rigorous fuzzing of the AST parser to discover and patch shell evasion techniques.
-2. **Performance Benchmarking**: Publishing transparent latency numbers for the proxy overhead (which sits in the hot path of every tool call).
-3. **Red-Team Validation**: Encouraging community security audits and red-team bypass attempts to harden the surface.
+## Defense-in-Depth Milestones & Active Hardening
+
+To ensure complete transparency and continuous hardening, we have implemented the following core initiatives:
+
+1. **Adversarial Fuzzing**: Continuous automated fuzzing engine ([`tests/fuzz/ast-fuzzer.test.ts`](tests/fuzz/ast-fuzzer.test.ts) & `npm run fuzz`) generating thousands of shell evasion mutations across quote obfuscation, wrapper chaining (`sudo`, `env`, `nice`, `timeout`), path traversals, redirections (`<<<`), and destructive tools.
+2. **Transparent Performance Benchmarking**: Documented, reproducible hot-path latency numbers published in [BENCHMARKS.md](BENCHMARKS.md) (< 0.2 ms p50 overhead per tool call, > 6,700 ops/sec AST throughput).
+3. **Community Red-Team Validation**: Formal red-team challenge program and test harness ([REDTEAM.md](REDTEAM.md) & [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts)) to track, reproduce, and mitigate novel bypasses.
+

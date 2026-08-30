@@ -7,7 +7,10 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "fuzz": "ts-node scripts/fuzz.ts",
+    "bench": "ts-node benchmarks/proxy-latency.bench.ts",
+    "test:redteam": "jest tests/redteam"
   },
   "keywords": [],
   "type": "commonjs",
