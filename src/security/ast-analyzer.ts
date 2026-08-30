@@ -35,8 +35,10 @@ export class ASTAnalyzer {
           const cmdNameNode = lastCmd.namedChildren.find((n: Parser.SyntaxNode) => n.type === 'command_name');
           if (cmdNameNode) {
             const interpreter = path.basename(cmdNameNode.text.trim());
-            if (['sh', 'bash', 'zsh', 'python', 'node', 'ruby'].includes(interpreter)) {
-              return { isSafe: false, reason: `Piping to interpreter '${interpreter}' is blocked.` };
+            // Allowlist approach: only allow piping to known safe data-processing commands
+            const allowedPipeTargets = ['grep', 'awk', 'sed', 'sort', 'uniq', 'wc', 'cat', 'head', 'tail', 'less', 'more', 'jq', 'xargs', 'find'];
+            if (!allowedPipeTargets.includes(interpreter)) {
+              return { isSafe: false, reason: `Piping to non-allowlisted command '${interpreter}' is blocked.` };
             }
           }
         }

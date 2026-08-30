@@ -71,7 +71,8 @@ export class ProxyServer {
           const { action, rule } = this.policyEngine.evaluateToolCall(toolName, args);
 
           // 2. AST Firewall
-          if (toolName.includes('bash') || toolName.includes('execute_command') || toolName.includes('terminal')) {
+          const isShellTool = /bash|shell|terminal|exec|run|do_cmd|cmd/i.test(toolName);
+          if (isShellTool && (args.command || args.cmd)) {
              const cmd = args.command || args.cmd || '';
              const astResult = this.astAnalyzer.analyzeCommand(cmd);
              if (!astResult.isSafe) {
@@ -142,10 +143,8 @@ export class ProxyServer {
           this.child.stdin.write(output);
         }
       } catch (err) {
-        if (this.child && this.child.stdin) {
-          this.child.stdin.write(buffer);
-          this.child.stdin.write('\n');
-        }
+        this.logAndBroadcast({ type: 'parse_error', reason: 'Failed to parse JSON from inbound stream, dropping payload.' });
+        return;
       }
     });
 
@@ -164,8 +163,8 @@ export class ProxyServer {
         const output = JSON.stringify(message) + '\n';
         process.stdout.write(output);
       } catch (err) {
-        process.stdout.write(buffer);
-        process.stdout.write('\n');
+        this.logAndBroadcast({ type: 'parse_error', reason: 'Failed to parse JSON from outbound stream, dropping payload.' });
+        return;
       }
     });
   }

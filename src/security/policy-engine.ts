@@ -87,6 +87,8 @@ export class PolicyEngine {
     if (!this.config!.egress?.enabled || !this.config!.egress.blockedDomains) return { isBlocked: false };
 
     const argStr = JSON.stringify(args);
+    // Note: This is a naive regex extractor and can be fooled by encoding tricks (ev%69l.com), 
+    // IP literals, and punycode. It is a defense-in-depth measure, not a full network sandbox.
     const urlRegex = /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
     
     let match;

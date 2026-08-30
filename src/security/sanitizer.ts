@@ -2,23 +2,25 @@ import * as crypto from 'crypto';
 
 export const SECRET_PATTERNS = [
   { name: 'AWS_ACCESS_KEY', regex: /(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}/g },
-  { name: 'GITHUB_PAT', regex: /ghp_[a-zA-Z0-9]{36}/g },
-  { name: 'OPENAI_KEY', regex: /sk-(?:proj-)?[a-zA-Z0-9]{20,}/g },
+  { name: 'GITHUB_PAT', regex: /ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82}/g },
+  { name: 'OPENAI_KEY', regex: /sk-(?:proj-|ant-)?[a-zA-Z0-9]{20,}/g },
+  { name: 'SLACK_TOKEN', regex: /xox[baprs]-[a-zA-Z0-9]{10,}/g },
+  { name: 'ANTHROPIC_KEY', regex: /sk-ant-api03-[a-zA-Z0-9\-_]{90,}/g },
   { name: 'SSH_PRIVATE_KEY', regex: /-----BEGIN [A-Z]+ PRIVATE KEY-----[a-zA-Z0-9+/\s=]+-----END [A-Z]+ PRIVATE KEY-----/g }
 ];
 
-export const HONEY_TOKENS = [
-  'AKIA_HONEY_TOKEN_DO_NOT_USE_123',
-  'ghp_honey_token_do_not_use_12345678901'
-];
+// Load honey tokens from environment, as hardcoding them in an OSS repo defeats their purpose
+export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MCP_SHIELD_HONEY_TOKENS.split(',') : [];
 
 // Combine all patterns into a single Regex. Capture groups map to patterns.
 // Group 1: AWS
 // Group 2: GitHub
 // Group 3: OpenAI
-// Group 4: SSH
-// Group 5: High Entropy fallback
-const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(ghp_[a-zA-Z0-9]{36})|(sk-(?:proj-)?[a-zA-Z0-9]{20,})|(-----BEGIN [A-Z]+ PRIVATE KEY-----[a-zA-Z0-9+/\s=]+-----END [A-Z]+ PRIVATE KEY-----)|([a-zA-Z0-9+/=]{20,})/g;
+// Group 4: Slack
+// Group 5: Anthropic
+// Group 6: SSH
+// Group 7: High Entropy fallback (increased length to 40 to reduce false positives)
+const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82})|(sk-(?:proj-|ant-)?[a-zA-Z0-9]{20,})|(xox[baprs]-[a-zA-Z0-9]{10,})|(sk-ant-api03-[a-zA-Z0-9\-_]{90,})|(-----BEGIN [A-Z]+ PRIVATE KEY-----[a-zA-Z0-9+/\s=]+-----END [A-Z]+ PRIVATE KEY-----)|([a-zA-Z0-9+/=]{40,})/g;
 
 export class SecretSanitizer {
   private secretToToken = new Map<string, string>();
@@ -91,19 +93,19 @@ export class SecretSanitizer {
 
   public sanitize(payload: string): string {
     // Single-pass Lexer for all patterns and entropy! Time complexity reduced from O(K*N) to O(N)
-    return payload.replace(COMPOUND_REGEX, (match, aws, github, openai, ssh, highEntropy) => {
-      // If it matched a known pattern (groups 1-4), register immediately
-      if (aws || github || openai || ssh) {
+    return payload.replace(COMPOUND_REGEX, (match, aws, github, openai, slack, anthropic, ssh, highEntropy) => {
+      // If it matched a known pattern (groups 1-6), register immediately
+      if (aws || github || openai || slack || anthropic || ssh) {
         return this.registerSecret(match);
       }
       
-      // If it matched the high entropy fallback (group 5)
+      // If it matched the high entropy fallback (group 7)
       if (highEntropy) {
         // Skip already tokenized sections (avoids recursive matching edge cases)
         if (match.startsWith('[[SHIELD_SECRET_')) return match;
         
         const entropy = this.calculateEntropy(match);
-        if (entropy > 4.2) {
+        if (entropy > 4.5) {
           return this.registerSecret(match);
         }
       }

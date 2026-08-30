@@ -22,11 +22,13 @@ export class COWFileSystem {
 
   public stageWrite(originalPath: string, newContent: string): { diff: string, stagingPath: string } {
     const absoluteOriginalPath = path.resolve(process.cwd(), originalPath);
-    // Remove drive letter for Windows paths when computing relative for staging
-    const relativePath = path.isAbsolute(originalPath) ? 
-        originalPath.replace(/^[a-zA-Z]:\\/, '').replace(/\\/g, '/') : originalPath;
     
-    const stagingPath = path.join(this.cowBaseDir, this.sessionId, relativePath);
+    // Use a hash of the absolute path to completely prevent directory traversal (`../`) 
+    // escapes out of the staging directory.
+    const safeHash = require('crypto').createHash('md5').update(absoluteOriginalPath).digest('hex');
+    const safeFilename = `${safeHash}_${path.basename(absoluteOriginalPath)}`;
+    
+    const stagingPath = path.join(this.cowBaseDir, this.sessionId, safeFilename);
     
     fs.mkdirSync(path.dirname(stagingPath), { recursive: true });
     fs.writeFileSync(stagingPath, newContent, 'utf8');
