@@ -351,14 +351,7 @@ ${red}BLOCKED${reset}
      return safeEnv;
   }
 
-  public async stop(): Promise<void> {
-    if (this.dashboard) {
-      try { await this.dashboard.stop(); } catch {}
-    }
-    if (this.session && this.session.policyEngine) {
-      try { this.session.policyEngine.close(); } catch {}
-    }
-  }
+  // stop method removed from here and implemented at the end of the class
 
   public async start(): Promise<number> {
     this.setupFramers();
@@ -453,6 +446,19 @@ ${red}BLOCKED${reset}
       process.on('SIGTERM', () => handleShutdown('SIGTERM'));
       
       this.session.transitionState('READY');
+      this.session.logger.startSession(this.session.policyEngine.getConfig(), Array.from(this.session.toolRegistry.keys()));
     });
+  }
+
+  public async stop(): Promise<void> {
+    if (this.dashboard) {
+      try { await this.dashboard.stop(); } catch {}
+    }
+    if (this.session && this.session.policyEngine) {
+      try { this.session.policyEngine.close(); } catch {}
+    }
+    if (this.session && this.session.logger) {
+      this.session.logger.endSession();
+    }
   }
 }

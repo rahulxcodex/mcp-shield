@@ -49,6 +49,25 @@ export class SessionLogger {
     return crypto.createHash('sha256').update(data).digest('hex');
   }
 
+  public startSession(configSnapshot: any, registeredTools: string[]) {
+    this.log({
+      type: 'SESSION_START',
+      payload: {
+        config: configSnapshot,
+        tools: registeredTools,
+        environment: {
+          nodeVersion: process.version,
+          platform: process.platform,
+          arch: process.arch
+        }
+      }
+    });
+  }
+
+  public endSession() {
+    this.log({ type: 'SESSION_END' });
+  }
+
   public log(event: { type: string; toolName?: string; action?: string; ruleId?: string; payload?: any; reason?: string }) {
     if (this.config?.enabled === false) return; // Skip if disabled
 

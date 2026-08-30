@@ -1,6 +1,7 @@
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import * as http from 'http';
+import * as crypto from 'crypto';
 
 export class DashboardServer {
   private app = express();
@@ -8,9 +9,19 @@ export class DashboardServer {
   private wss = new WebSocketServer({ server: this.server });
   private clients = new Set<WebSocket>();
   private actualPort: number = 0;
+  private authToken: string;
 
   constructor(private port: number = process.env.MCP_SHIELD_DASHBOARD_PORT ? parseInt(process.env.MCP_SHIELD_DASHBOARD_PORT, 10) : 3333) {
     this.actualPort = this.port;
+    this.authToken = process.env.MCP_SHIELD_DASHBOARD_TOKEN || crypto.randomBytes(16).toString('hex');
+
+    this.app.use((req, res, next) => {
+      if (req.query.token !== this.authToken) {
+        res.status(401).send('Unauthorized: Invalid or missing token parameter.');
+        return;
+      }
+      next();
+    });
 
     this.app.get('/', (req, res) => {
       res.send(`
@@ -22,7 +33,8 @@ export class DashboardServer {
           <script>
             const host = window.location.host;
             const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-            const ws = new WebSocket(wsProtocol + host);
+            const token = new URLSearchParams(window.location.search).get('token');
+            const ws = new WebSocket(wsProtocol + host + '/?token=' + token);
             const logs = document.getElementById('logs');
             ws.onmessage = (event) => {
               const data = JSON.parse(event.data);
@@ -58,8 +70,14 @@ export class DashboardServer {
       `);
     });
 
-    // Enforce Origin Check against Cross-Site WebSocket Hijacking (CSWSH)
+    // Enforce Origin Check against Cross-Site WebSocket Hijacking (CSWSH) and Token Auth
     this.wss.on('connection', (ws, req) => {
+      const url = new URL(req.url || '/', \`http://\${req.headers.host || 'localhost'}\`);
+      if (url.searchParams.get('token') !== this.authToken) {
+        ws.close(4001, 'Unauthorized: Invalid token');
+        return;
+      }
+
       const origin = req.headers.origin;
       const boundPort = this.getPort();
       const allowedOrigins = [
@@ -97,7 +115,7 @@ export class DashboardServer {
         if (addr && typeof addr === 'object') {
           this.actualPort = addr.port;
         }
-        console.error(`[MCP-SHIELD] Real-time Dashboard running at http://127.0.0.1:${this.getPort()}`);
+        console.error(`[MCP-SHIELD] Real-time Dashboard running at http://127.0.0.1:${this.getPort()}/?token=${this.authToken}`);
       });
     } catch (e: any) {
       console.error(`[MCP-SHIELD] Dashboard failed to listen: ${e.message}`);

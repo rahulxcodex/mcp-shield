@@ -93,7 +93,13 @@ export class ContainerSandbox {
       dockerArgs.push('--user', this.options.user);
     }
 
-    // 8. Environment variables
+    // 8. Additional hardcore isolation invariants
+    dockerArgs.push('--ipc=none');
+    dockerArgs.push('--ulimit', 'nofile=512:512');
+    dockerArgs.push('--ulimit', 'nproc=128:128');
+    dockerArgs.push('--log-driver=none');
+    
+    // 9. Environment variables
     for (const [k, v] of Object.entries(this.options.env)) {
       dockerArgs.push('-e', `${k}=${v}`);
     }
