@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 
 export const SECRET_PATTERNS = [
   { name: 'AWS_ACCESS_KEY', regex: /(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}/g },
-  { name: 'ANTHROPIC_KEY', regex: /sk-ant-api03-[a-zA-Z0-9\-_]{90,}/g },
+  { name: 'ANTHROPIC_KEY', regex: /sk-ant-api03-[a-zA-Z0-9\-_]{20,}/g },
   { name: 'OPENAI_KEY', regex: /sk-(?:proj-)?[a-zA-Z0-9]{20,}/g },
   { name: 'SLACK_TOKEN', regex: /xox[baprs]-[a-zA-Z0-9]{10,}/g },
   { name: 'GITHUB_PAT', regex: /ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82}/g },
@@ -20,7 +20,7 @@ export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MC
 // Group 5: GitHub
 // Group 6: SSH
 // Group 7: High Entropy fallback (includes base64url characters - and _)
-const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{90,})|(sk-(?:proj-)?[a-zA-Z0-9]{20,})|(xox[baprs]-[a-zA-Z0-9]{10,})|(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82})|(-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----)|([a-zA-Z0-9+\/=\-_]{40,})/g;
+const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9]{20,})|(xox[baprs]-[a-zA-Z0-9]{10,})|(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82})|(-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----)|([a-zA-Z0-9+\/=\-_]{40,})/g;
 
 export class SecretSanitizer {
   private secretToToken = new Map<string, string>();

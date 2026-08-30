@@ -74,7 +74,7 @@ export class ASTAnalyzer {
         }
 
         // Check for direct disk formatting or raw disk writing
-        if (cmdName === 'mkfs' || cmdName === 'fdisk') {
+        if (cmdName === 'mkfs' || cmdName.startsWith('mkfs') || cmdName === 'fdisk') {
           return { isSafe: false, reason: `Filesystem format command blocked: "${node.text}"` };
         }
 

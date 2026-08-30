@@ -2,11 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as Diff from 'diff';
-import { v4 as uuidv4 } from 'uuid';
 
 export class COWFileSystem {
   private cowBaseDir: string;
-  private sessionId = uuidv4();
+  private sessionId = crypto.randomUUID();
   private rootDir: string;
 
   constructor() {

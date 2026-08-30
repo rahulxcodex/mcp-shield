@@ -71,53 +71,56 @@ export class PolicyEngine {
       const fileContents = fs.readFileSync(this.configPath, 'utf8');
       this.config = yaml.load(fileContents) as ShieldConfig;
     } else {
-      // Fallback to safe default configuration
-      this.config = {
-        version: "1.0",
-        profile: "developer",
-        redaction: {
-          enabled: true,
-          maskStyle: "token",
-          highEntropyCheck: true,
-          entropyThreshold: 4.5
-        },
-        sandbox: {
-          cowEnabled: true,
-          cowStagingDir: ".mcp-shield/cow",
-          autoCommitOnApproval: true
-        },
-        egress: {
-          enabled: true,
-          blockedDomains: ["*.ngrok.io", "*.evil.com"]
-        },
-        rules: [
-          {
-            id: "block-destructive-rm",
-            name: "Block Recursive Root Deletion",
-            targetTools: ["*bash*", "*terminal*", "*exec*"],
-            riskLevel: "CRITICAL",
-            action: "block"
-          }
-        ],
-        audit: {
-          enabled: true,
-          logDir: ".mcp-shield/logs",
-          tamperProofHashing: true
-        }
-      };
+      throw new Error(`Config file not found: ${this.configPath}`);
     }
   }
 
   public getConfig(): ShieldConfig {
     if (!this.config) {
-      this.loadConfig();
+      try {
+        this.loadConfig();
+      } catch {
+        this.config = {
+          version: "1.0",
+          profile: "developer",
+          redaction: {
+            enabled: true,
+            maskStyle: "token",
+            highEntropyCheck: true,
+            entropyThreshold: 4.5
+          },
+          sandbox: {
+            cowEnabled: true,
+            cowStagingDir: ".mcp-shield/cow",
+            autoCommitOnApproval: true
+          },
+          egress: {
+            enabled: true,
+            blockedDomains: ["*.ngrok.io", "*.evil.com"]
+          },
+          rules: [
+            {
+              id: "block-destructive-rm",
+              name: "Block Recursive Root Deletion",
+              targetTools: ["*bash*", "*terminal*", "*exec*"],
+              riskLevel: "CRITICAL",
+              action: "block"
+            }
+          ],
+          audit: {
+            enabled: true,
+            logDir: ".mcp-shield/logs",
+            tamperProofHashing: true
+          }
+        };
+      }
     }
     return this.config!;
   }
 
   public checkEgress(args: Record<string, any>): { isBlocked: boolean; domain?: string } {
-    if (!this.config) this.loadConfig();
-    if (!this.config!.egress?.enabled || !this.config!.egress.blockedDomains) return { isBlocked: false };
+    const config = this.getConfig();
+    if (!config.egress?.enabled || !config.egress.blockedDomains) return { isBlocked: false };
 
     const argStr = JSON.stringify(args);
     // Note: This is a naive regex extractor and can be fooled by encoding tricks (ev%69l.com), 
@@ -127,7 +130,7 @@ export class PolicyEngine {
     let match;
     while ((match = urlRegex.exec(argStr)) !== null) {
       const domain = match[1];
-      const isBlocked = this.config!.egress.blockedDomains.some(blocked => {
+      const isBlocked = config.egress.blockedDomains.some(blocked => {
         const regexStr = blocked.replace(/\./g, '\\.').replace(/\*/g, '.*');
         return new RegExp(`^${regexStr}$`).test(domain);
       });
@@ -139,9 +142,9 @@ export class PolicyEngine {
   }
 
   public evaluateToolCall(toolName: string, args: Record<string, any>): { action: PolicyRule['action']; rule?: PolicyRule } {
-    if (!this.config) this.loadConfig();
+    const config = this.getConfig();
 
-    for (const rule of this.config!.rules) {
+    for (const rule of config.rules) {
       const isTarget = rule.targetTools.some(t => {
         if (t.includes('*')) {
           const regex = new RegExp('^' + t.replace(/\*/g, '.*') + '$');
