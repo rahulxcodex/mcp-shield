@@ -157,12 +157,41 @@ export class ProxyServer implements Lifecycle {
 
         const action = securityResult.decision;
 
+        const printMarketingBlock = (toolName: string, args: any, risk: string, reason: string) => {
+           const red = '\\x1b[31m';
+           const bold = '\\x1b[1m';
+           const yellow = '\\x1b[33m';
+           const reset = '\\x1b[0m';
+           
+           const cmdStr = (args.command || args.cmd || JSON.stringify(args)).substring(0, 150);
+           
+           const msg = `
+${red}${bold}⚠ MCP-SHIELD BLOCKED${reset}
+
+${bold}Tool:${reset} ${toolName}
+
+${bold}Command:${reset}
+${cmdStr}
+
+${bold}Risk:${reset} ${red}${bold}${risk}${reset}
+
+${bold}Reason:${reset}
+${reason}
+
+${bold}Action:${reset}
+${red}BLOCKED${reset}
+`;
+           process.stderr.write(msg + '\\n');
+        };
+
         if (action === 'quarantine') {
+           printMarketingBlock(toolName, args, 'CRITICAL', securityResult.reasonCode);
            this.logAndBroadcast({ type: 'quarantine', toolName, reason: securityResult.reasonCode });
            this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: ${securityResult.reasonCode}`);
            if (this.child) { this.child.kill('SIGKILL'); }
            return;
         } else if (action === 'block') {
+           printMarketingBlock(toolName, args, 'HIGH', securityResult.reasonCode);
            this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: securityResult.ruleId, reason: securityResult.reasonCode });
            this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: ${securityResult.reasonCode}`);
            return;
