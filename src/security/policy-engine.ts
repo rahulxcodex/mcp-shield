@@ -241,11 +241,12 @@ export class PolicyEngine {
           }
           return t.toLowerCase() === context.toolName.toLowerCase();
         });
-      }
-
-      // Check capabilities
-      if (!isTarget && rule.targetCapabilities && context.capabilities) {
+      } else if (rule.targetCapabilities && context.capabilities) {
+        // Check capabilities if targetTools is omitted
         isTarget = rule.targetCapabilities.some(c => context.capabilities?.includes(c));
+      } else if (!rule.targetTools && !rule.targetCapabilities) {
+        // Catch-all rule if both matchers are omitted
+        isTarget = true;
       }
 
       if (isTarget) {

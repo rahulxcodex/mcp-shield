@@ -126,7 +126,7 @@ export class ProxyServer implements Lifecycle {
         // 0.5 Egress Network Firewall
         const egressCheck = this.session.policyEngine.checkEgress(args);
         if (egressCheck.isBlocked) {
-           evidence.push({ detector: 'egress-firewall', finding: `EGRESS_BLOCKED: Unauthorized access to ${egressCheck.domain}`, risk: 'HIGH' });
+           evidence.push({ detector: 'egress-firewall', finding: `EGRESS_BLOCKED: Unauthorized access to ${egressCheck.domain}`, risk: 'CRITICAL' });
         }
 
         // 2. AST Firewall

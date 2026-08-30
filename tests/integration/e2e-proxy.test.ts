@@ -145,8 +145,8 @@ describe('End-to-End MCP-Shield Proxy Integration Test Suite', () => {
     expect(response.id).toBe(4);
     expect(response.error).toBeDefined();
     expect(response.error.code).toBe(-32000);
-    expect(response.error.message.toUpperCase()).toContain('AST FIREWALL BLOCKED');
-    expect(response.error.message).toContain('Destructive root deletion blocked');
+    expect(response.error.message.toUpperCase()).toContain('SECURITY POLICY BLOCKED');
+    expect(response.error.message.toUpperCase()).toContain('DESTRUCTIVE ROOT DELETION BLOCKED');
   });
 
   it('E2E-04: Blocks egress exfiltration to blacklisted domains', async () => {
@@ -165,7 +165,7 @@ describe('End-to-End MCP-Shield Proxy Integration Test Suite', () => {
     expect(response.id).toBe(5);
     expect(response.error).toBeDefined();
     expect(response.error.code).toBe(-32000);
-    expect(response.error.message).toContain('EGRESS FIREWALL BLOCKED');
+    expect(response.error.message).toContain('SECURITY POLICY BLOCKED: EGRESS_BLOCKED');
     expect(response.error.message).toContain('evil.com');
   });
 
@@ -215,7 +215,7 @@ describe('End-to-End MCP-Shield Proxy Integration Test Suite', () => {
     expect(blockedRes.id).toBe(116);
     expect(blockedRes.error).toBeDefined();
     expect(blockedRes.error.code).toBe(-32000);
-    expect(blockedRes.error.message).toContain('RATE LIMIT EXCEEDED');
+    expect(blockedRes.error.message).toContain('SECURITY POLICY BLOCKED: RATE_LIMIT_EXCEEDED');
   });
 
   it('E2E-07: Recovers from malformed JSON in stream without corrupting subsequent valid requests', async () => {

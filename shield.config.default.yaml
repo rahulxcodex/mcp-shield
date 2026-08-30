@@ -68,6 +68,13 @@ rules:
           - "**/.ssh/*"
           - "**/secrets.yaml"
 
+  # Allow all other tools not explicitly caught by higher-priority rules
+  - id: "allow-all-safe"
+    name: "Allow Safe Commands"
+    priority: 10
+    riskLevel: "LOW"
+    action: "allow"
+
 audit:
   enabled: true
   logDir: "~/.mcp-shield/logs"
