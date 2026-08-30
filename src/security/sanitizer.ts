@@ -23,6 +23,11 @@ const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-z
 
 export class SecretSanitizer {
   private vault = new SecretVault();
+  private config?: any;
+
+  constructor(config?: any) {
+    this.config = config;
+  }
 
   // Pre-allocated array for entropy calculation (0 allocations per check)
   private charFrequencies = new Uint32Array(256);
@@ -79,7 +84,8 @@ export class SecretSanitizer {
         if (match.startsWith('[[SHIELD_SECRET_')) return match;
         
         const entropy = this.calculateEntropy(match);
-        if (entropy > 4.2) {
+        const threshold = this.config?.entropyThreshold || 4.2;
+        if (entropy > threshold) {
           return this.registerSecret(match);
         }
       }

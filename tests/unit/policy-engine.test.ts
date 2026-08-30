@@ -51,19 +51,9 @@ describe('PolicyEngine', () => {
     ]
   };
 
-  beforeAll(() => {
-    tempConfigFile = path.join(os.tmpdir(), `policy-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yaml`);
-    fs.writeFileSync(tempConfigFile, yaml.dump(mockConfig), 'utf8');
-  });
-
-  afterAll(() => {
-    if (fs.existsSync(tempConfigFile)) {
-      try { fs.unlinkSync(tempConfigFile); } catch {}
-    }
-  });
-
   beforeEach(() => {
-    engine = new PolicyEngine(tempConfigFile);
+    engine = new PolicyEngine(mockConfig);
+    engine.start();
   });
 
   afterEach(() => {
@@ -71,14 +61,8 @@ describe('PolicyEngine', () => {
   });
 
   it('should load config correctly', () => {
-    engine.loadConfig();
     expect(engine.getConfig().profile).toBe('test');
     expect(engine.getConfig().rules.length).toBe(3);
-  });
-
-  it('should throw error if config not found', () => {
-    const nonExistentEngine = new PolicyEngine('/non/existent/path/shield.yaml');
-    expect(() => nonExistentEngine.loadConfig()).toThrow('Config file not found');
   });
 
   it('should evaluate tool call and return matching action', () => {

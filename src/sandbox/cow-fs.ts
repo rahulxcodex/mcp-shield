@@ -4,23 +4,23 @@ import * as crypto from 'crypto';
 import * as Diff from 'diff';
 
 export class COWFileSystem {
-  private cowBaseDir: string;
+  private stagingRoot: string;
   private sessionId = crypto.randomUUID();
   private rootDir: string;
 
-  constructor() {
+  constructor(private config?: any) {
     this.rootDir = fs.realpathSync(process.cwd());
-    this.cowBaseDir = path.join(this.rootDir, '.mcp-shield', 'cow');
+    this.stagingRoot = this.config?.cowStagingDir || path.join(this.rootDir, '.mcp-shield', 'cow');
     this.ensureSessionDir();
   }
 
   private ensureSessionDir() {
-    const sessionDir = path.join(this.cowBaseDir, this.sessionId);
+    const sessionDir = path.join(this.stagingRoot, this.sessionId);
     fs.mkdirSync(sessionDir, { recursive: true });
   }
 
   public getSessionDir(): string {
-    return path.join(this.cowBaseDir, this.sessionId);
+    return path.join(this.stagingRoot, this.sessionId);
   }
 
   public stageWrite(originalPath: string, newContent: string): { diff: string; stagingPath: string; absoluteOriginalPath: string } {
@@ -39,7 +39,7 @@ export class COWFileSystem {
     }
 
     const safeHash = crypto.createHash('sha256').update(resolvedPath).digest('hex');
-    const stagingPath = path.join(this.cowBaseDir, this.sessionId, `${safeHash}.staged`);
+    const stagingPath = path.join(this.stagingRoot, this.sessionId, `${safeHash}.staged`);
 
     fs.mkdirSync(path.dirname(stagingPath), { recursive: true });
     fs.writeFileSync(stagingPath, newContent, { encoding: 'utf8', mode: 0o600 });

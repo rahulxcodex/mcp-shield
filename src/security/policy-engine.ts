@@ -65,65 +65,32 @@ export interface EvaluationContext {
 }
 
 export class PolicyEngine {
-  private config: ShieldConfig | null = null;
-  private watcher: fs.FSWatcher | null = null;
+  private config: ShieldConfig;
 
-  constructor(private configPath: string = 'shield.config.default.yaml') {
-    this.setupWatcher();
-  }
-
-  private setupWatcher() {
-    if (fs.existsSync(this.configPath)) {
-      this.watcher = fs.watch(this.configPath, (eventType) => {
-        if (eventType === 'change') {
-           try {
-              this.loadConfig();
-              console.error(`[MCP-SHIELD] Policy config hot-reloaded.`);
-           } catch(e) {
-              // ignore parse errors on hot reload
-           }
-        }
-      });
-      if (this.watcher && typeof (this.watcher as any).unref === 'function') {
-        (this.watcher as any).unref();
-      }
-    }
-  }
-
-  public loadConfig(): void {
-    if (fs.existsSync(this.configPath)) {
-      const fileContents = fs.readFileSync(this.configPath, 'utf8');
-      const parsedYaml = yaml.load(fileContents);
-      this.config = ShieldConfigSchema.parse(parsedYaml);
+  constructor(config?: ShieldConfig) {
+    if (config) {
+      this.config = config;
     } else {
-      throw new Error(`Config file not found: ${this.configPath}`);
+      // Fallback for tests only
+      this.config = {
+        version: "1.0",
+        profile: "developer",
+        redaction: { enabled: true, maskStyle: "token", highEntropyCheck: true, entropyThreshold: 4.5 },
+        sandbox: { cowEnabled: true, cowStagingDir: ".mcp-shield/cow", autoCommitOnApproval: true },
+        egress: { enabled: true, blockedDomains: ["*.ngrok.io", "*.evil.com"] },
+        rules: [{ id: "allow-all-safe", name: "Allow safe commands", priority: 10, riskLevel: "LOW", action: "allow" }, { id: "block-destructive-rm", name: "Block Recursive Root Deletion", priority: 100, targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }],
+        audit: { enabled: true, logDir: ".mcp-shield/logs", tamperProofHashing: true }
+      };
     }
+  }
+
+  public start(): void {
+    // start() can stay empty if we don't watch files here anymore, 
+    // or we can remove it. For now, just keep it a no-op to satisfy the interface.
   }
 
   public getConfig(): ShieldConfig {
-    if (!this.config) {
-      try {
-        this.loadConfig();
-      } catch (err) {
-        // Fallback config for development/testing if no config file exists
-        // but it must pass validation
-        if (err instanceof Error && err.message.includes('Config file not found')) {
-          const defaultConfig = {
-            version: "1.0",
-            profile: "developer",
-            redaction: { enabled: true, maskStyle: "token", highEntropyCheck: true, entropyThreshold: 4.5 },
-            sandbox: { cowEnabled: true, cowStagingDir: ".mcp-shield/cow", autoCommitOnApproval: true },
-            egress: { enabled: true, blockedDomains: ["*.ngrok.io", "*.evil.com"] },
-          rules: [{ id: "allow-all-safe", name: "Allow safe commands", priority: 10, action: "allow" }, { id: "block-destructive-rm", name: "Block Recursive Root Deletion", priority: 100, targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }],
-            audit: { enabled: true, logDir: ".mcp-shield/logs", tamperProofHashing: true }
-          };
-          this.config = ShieldConfigSchema.parse(defaultConfig);
-        } else {
-          throw err;
-        }
-      }
-    }
-    return this.config!;
+    return this.config;
   }
 
   public checkEgress(args: Record<string, any>): { isBlocked: boolean; domain?: string } {
@@ -175,10 +142,7 @@ export class PolicyEngine {
   }
 
   public close(): void {
-    if (this.watcher) {
-      this.watcher.close();
-      this.watcher = null;
-    }
+    // No-op since we removed watcher
   }
 
   private normalizePathForMatching(rawPath: string): string {

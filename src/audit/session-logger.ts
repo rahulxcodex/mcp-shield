@@ -8,11 +8,14 @@ export class SessionLogger {
   private sequenceNumber: number = 0;
   private auditKey: string | null = process.env.MCP_SHIELD_AUDIT_KEY || null;
 
-  constructor(customLogFile?: string) {
+  private config?: any;
+
+  constructor(customLogFile?: string, config?: any) {
+    this.config = config;
     if (customLogFile) {
       this.logFile = customLogFile;
     } else {
-      const logDir = path.join(process.cwd(), '.mcp-shield', 'logs');
+      const logDir = this.config?.logDir || path.join(process.cwd(), '.mcp-shield', 'logs');
       fs.mkdirSync(logDir, { recursive: true });
       this.logFile = path.join(logDir, `session-${Date.now()}.jsonl`);
     }
@@ -36,6 +39,10 @@ export class SessionLogger {
   }
 
   private computeDigest(data: string): string {
+    const tamperProof = this.config?.tamperProofHashing !== false; // Default true
+    if (!tamperProof) {
+       return 'DISABLED';
+    }
     if (this.auditKey) {
       return crypto.createHmac('sha256', this.auditKey).update(data).digest('hex');
     }
@@ -43,6 +50,8 @@ export class SessionLogger {
   }
 
   public log(event: { type: string; toolName?: string; action?: string; ruleId?: string; payload?: any; reason?: string }) {
+    if (this.config?.enabled === false) return; // Skip if disabled
+
     const seq = this.sequenceNumber++;
     const eventObj = { seq, timestamp: new Date().toISOString(), ...event };
     const canonicalData = this.canonicalStringify(eventObj);

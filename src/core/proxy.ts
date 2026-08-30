@@ -8,6 +8,7 @@ import { ContainerSandbox } from '../sandbox/container-sandbox';
 import { SecuritySession } from './session';
 import { RequestDispatcher } from './dispatcher';
 import { EvaluationContext, Evidence } from '../security/policy-engine';
+import { ConfigLoader } from '../security/config';
 
 export interface Lifecycle {
   start(): Promise<number>;
@@ -30,9 +31,12 @@ export class ProxyServer implements Lifecycle {
     private targetArgs: string[],
     private options: { enableDashboard?: boolean } = {}
   ) {
-    this.session = new SecuritySession(targetCmd, targetArgs);
-    this.dispatcher = new RequestDispatcher(this.handleInboundMessage.bind(this));
-    this.setupFramers();
+    const config = ConfigLoader.load();
+    this.session = new SecuritySession(config, targetCmd, targetArgs);
+    this.dispatcher = new RequestDispatcher(
+      this.handleInboundMessage.bind(this),
+      this.sendErrorToHost.bind(this)
+    );
   }
 
   private logAndBroadcast(event: any) {
@@ -101,6 +105,22 @@ export class ProxyServer implements Lifecycle {
 
   private async handleInboundMessage(message: any) {
     try {
+      const state = this.session.getState();
+      
+      // Basic state machine enforcement
+      if (state !== 'READY' && state !== 'DEGRADED') {
+        if (message.method === 'initialize' && state === 'INITIALIZING') {
+           // allow initialization to proceed through to the server
+        } else if (message.method === 'notifications/initialized' || message.method === 'ping') {
+           // allow post-init and pings
+        } else {
+           if (message.id) {
+             this.sendErrorToHost(message.id, -32002, `Server is not ready. Current state: ${state}`);
+           }
+           return;
+        }
+      }
+
       if (message.method === 'call_tool' && message.params && message.params.name) {
         const toolName = message.params.name;
         const args = message.params.arguments || {};
@@ -327,7 +347,10 @@ ${red}BLOCKED${reset}
     }
   }
 
-  public start(): Promise<number> {
+  public async start(): Promise<number> {
+    this.setupFramers();
+    await this.session.start();
+
     return new Promise((resolve, reject) => {
       this.session.transitionState('INITIALIZING');
       if (this.options.enableDashboard || process.env.MCP_SHIELD_ENABLE_DASHBOARD === 'true') {

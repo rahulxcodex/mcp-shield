@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { RegisteredTool, CapabilityInferencer, ToolCapabilities } from '../security/capabilities';
-import { PolicyEngine } from '../security/policy-engine';
+import { PolicyEngine, ShieldConfig } from '../security/policy-engine';
 import { SecretSanitizer } from '../security/sanitizer';
 import { RateLimiter } from '../security/rate-limiter';
 import { SessionLogger } from '../audit/session-logger';
@@ -15,13 +15,26 @@ export class SecuritySession {
   public serverIdentity: string = 'unknown';
   public readonly toolRegistry = new Map<string, RegisteredTool>();
   
-  public readonly policyEngine = new PolicyEngine();
-  public readonly sanitizer = new SecretSanitizer();
-  public readonly rateLimiter = new RateLimiter(15, 60000); // Max 15 calls per minute per tool
-  public readonly logger = new SessionLogger();
+  public readonly policyEngine: PolicyEngine;
+  public readonly sanitizer: SecretSanitizer;
+  public readonly rateLimiter: RateLimiter;
+  public readonly logger: SessionLogger;
 
-  constructor(targetCmd: string, targetArgs: string[]) {
+  constructor(
+    public config: ShieldConfig,
+    targetCmd: string, 
+    targetArgs: string[]
+  ) {
+    this.policyEngine = new PolicyEngine(config);
+    this.sanitizer = new SecretSanitizer(config.redaction);
+    this.rateLimiter = new RateLimiter(15, 60000); // We can make this configurable later
+    this.logger = new SessionLogger(); // We should pass config.audit later
+
     this.calculateServerIdentity(targetCmd, targetArgs);
+  }
+
+  public async start(): Promise<void> {
+    this.policyEngine.start();
   }
 
   private calculateServerIdentity(cmd: string, args: string[]) {

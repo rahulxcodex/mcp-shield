@@ -26,13 +26,15 @@ describe('Red-Team Validation: Security Bypass Challenges', () => {
   let rateLimiter: RateLimiter;
   let cowFs: COWFileSystem;
 
+
   beforeAll(() => {
     astAnalyzer = new ASTAnalyzer();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     sanitizer = new SecretSanitizer();
     policyEngine = new PolicyEngine();
+    policyEngine.start();
     rateLimiter = new RateLimiter(5, 60000);
     cowFs = new COWFileSystem();
   });
