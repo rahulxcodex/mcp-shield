@@ -51,6 +51,7 @@ export class ProxyServer {
         message = JSON.parse(msgStr);
       } catch (err) {
         this.logAndBroadcast({ type: 'parse_error', reason: 'Failed to parse JSON from inbound stream, dropping payload.' });
+        this.sendErrorToHost(null, -32700, 'Parse error: Invalid JSON received');
         return;
       }
 
@@ -77,6 +78,7 @@ export class ProxyServer {
           if (this.sanitizer.checkHoneyTokens(JSON.stringify(args))) {
              this.logAndBroadcast({ type: 'honey_token_triggered', toolName, reason: 'LLM attempted to use a decoy credential.' });
              this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: Honey-token accessed! Session terminated.`);
+             this.stop();
              process.exit(1);
           }
           
@@ -98,53 +100,48 @@ export class ProxyServer {
              const astResult = this.astAnalyzer.analyzeCommand(cmd);
              if (!astResult.isSafe) {
                 this.logAndBroadcast({ type: 'ast_blocked', toolName, reason: astResult.reason });
-                this.sendErrorToHost(message.id, -32000, `AST Firewall Blocked: ${astResult.reason}`);
+                this.sendErrorToHost(message.id, -32000, `AST FIREWALL BLOCKED: ${astResult.reason}`);
                 return;
              }
           }
 
-          // 3. TUI Approval / Sandbox
+          // Apply Rule Action
           if (action === 'block') {
-             this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: rule?.id });
-             this.sendErrorToHost(message.id, -32000, `Policy Engine Blocked: ${rule?.name}`);
+             this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: rule?.id, reason: rule?.name });
+             this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: Rule '${rule?.name}' triggered.`);
              return;
-          }
-
-          if (action === 'prompt' || action === 'sandbox') {
-             let diffText = undefined;
-             let stagingPath = undefined;
-             let absoluteOriginalPath = undefined;
-
-             if (action === 'sandbox' && (toolName.includes('write_file') || toolName.includes('edit_file'))) {
-                const targetFile = args.path || args.file || args.filename;
-                const content = args.content || args.text;
-                if (targetFile && content) {
-                   const staged = this.cowFs.stageWrite(targetFile, content);
-                   diffText = staged.diff;
-                   stagingPath = staged.stagingPath;
-                   absoluteOriginalPath = staged.absoluteOriginalPath;
-                }
-             }
-
+          } else if (action === 'prompt') {
              const result = await PromptBridge.ask(
                 `Intercepted ${toolName}`,
                 `Tool: ${toolName}\nArgs: ${JSON.stringify(sanitizedArgs, null, 2)}`,
-                rule?.riskLevel || 'HIGH',
-                diffText
+                rule?.riskLevel || 'HIGH'
              );
-
-             this.logAndBroadcast({ type: 'tui_decision', toolName, action: result.action });
-
-             if (result.action === 'reject' || result.action === 'timeout') {
-                if (stagingPath) this.cowFs.discard(stagingPath);
-                this.sendErrorToHost(message.id, -32000, 'User rejected the action or prompt timed out.');
+             if (result.action !== 'approve') {
+                this.logAndBroadcast({ type: 'user_denied', toolName, ruleId: rule?.id });
+                this.sendErrorToHost(message.id, -32000, `USER DENIED: Execution rejected by human operator.`);
                 return;
              }
-
-             if (result.action === 'approve' && stagingPath && absoluteOriginalPath) {
-                // Handle COW File writes directly in the proxy
-                this.cowFs.commit(absoluteOriginalPath, stagingPath);
-                this.sendSuccessToHost(message.id, { content: [{ type: 'text', text: 'File written successfully via MCP-Shield Sandbox.' }] });
+             this.logAndBroadcast({ type: 'user_allowed', toolName, ruleId: rule?.id });
+          } else if (action === 'sandbox') {
+             if (args.path && args.content) {
+                const staged = this.cowFs.stageWrite(args.path, args.content);
+                this.logAndBroadcast({ type: 'cow_staged', toolName, payload: staged });
+                
+                const result = await PromptBridge.ask(
+                   `Sandbox Write: ${toolName}`,
+                   `Tool: ${toolName}\nTarget: ${args.path}`,
+                   rule?.riskLevel || 'HIGH',
+                   staged.diff
+                );
+                if (result.action === 'approve') {
+                   this.cowFs.commit(staged.stagingPath, staged.absoluteOriginalPath);
+                   this.logAndBroadcast({ type: 'cow_committed', toolName, payload: { path: staged.absoluteOriginalPath } });
+                   this.sendSuccessToHost(message.id, { content: [{ type: 'text', text: 'File changes approved and written.' }] });
+                } else {
+                   this.cowFs.discard(staged.stagingPath);
+                   this.logAndBroadcast({ type: 'cow_discarded', toolName });
+                   this.sendErrorToHost(message.id, -32000, 'USER DENIED: Staged file changes rejected.');
+                }
                 return;
              }
           }
@@ -159,8 +156,12 @@ export class ProxyServer {
         
         // Pass to child stdin
         const output = JSON.stringify(message) + '\n';
-        if (this.child && this.child.stdin) {
-          this.child.stdin.write(output);
+        if (this.child && this.child.stdin && this.child.stdin.writable) {
+          try {
+            this.child.stdin.write(output);
+          } catch (writeErr: any) {
+            this.logAndBroadcast({ type: 'stream_error', reason: `Failed to write to child stdin: ${writeErr.message}` });
+          }
         }
       } catch (err: any) {
         this.logAndBroadcast({ type: 'internal_error', reason: err.message });
@@ -184,7 +185,9 @@ export class ProxyServer {
         }
         
         const output = JSON.stringify(message) + '\n';
-        process.stdout.write(output);
+        try {
+          process.stdout.write(output);
+        } catch {}
       } catch (err) {
         this.logAndBroadcast({ type: 'parse_error', reason: 'Failed to parse JSON from outbound stream, dropping payload.' });
         return;
@@ -194,12 +197,25 @@ export class ProxyServer {
 
   private sendErrorToHost(id: any, code: number, message: string) {
      const errorPayload = { jsonrpc: '2.0', id, error: { code, message } };
-     process.stdout.write(JSON.stringify(errorPayload) + '\n');
+     try {
+       process.stdout.write(JSON.stringify(errorPayload) + '\n');
+     } catch {}
   }
 
   private sendSuccessToHost(id: any, result: any) {
      const successPayload = { jsonrpc: '2.0', id, result };
-     process.stdout.write(JSON.stringify(successPayload) + '\n');
+     try {
+       process.stdout.write(JSON.stringify(successPayload) + '\n');
+     } catch {}
+  }
+
+  public stop(): void {
+    if (this.dashboard) {
+      try { this.dashboard.stop(); } catch {}
+    }
+    if (this.policyEngine) {
+      try { this.policyEngine.close(); } catch {}
+    }
   }
 
   public start() {
@@ -215,8 +231,15 @@ export class ProxyServer {
 
     this.child.on('error', (err) => {
        console.error(`[MCP-SHIELD] Failed to spawn target process: ${err.message}`);
+       this.stop();
        process.exit(1);
     });
+
+    if (this.child.stdin) {
+      this.child.stdin.on('error', () => {
+        // Suppress EPIPE on child stdin disconnect
+      });
+    }
 
     process.stdin.on('data', (chunk: Buffer) => {
       this.inboundFramer.append(chunk);
@@ -229,15 +252,34 @@ export class ProxyServer {
     }
 
     this.child.on('exit', (code) => {
+      this.stop();
       process.exit(code ?? 0);
     });
 
-    process.on('SIGINT', () => {
-      if (this.child) this.child.kill('SIGINT');
-    });
+    const handleShutdown = (signal: string) => {
+      if (this.child) {
+        try {
+          this.child.kill(signal as NodeJS.Signals);
+        } catch {}
+        
+        // Grace period before escalating to force kill
+        const killTimer = setTimeout(() => {
+          try {
+            if (this.child && !this.child.killed) {
+              this.child.kill('SIGKILL');
+            }
+          } catch {}
+          this.stop();
+          process.exit(1);
+        }, 3000);
+        killTimer.unref();
+      } else {
+        this.stop();
+        process.exit(0);
+      }
+    };
 
-    process.on('SIGTERM', () => {
-      if (this.child) this.child.kill('SIGTERM');
-    });
+    process.on('SIGINT', () => handleShutdown('SIGINT'));
+    process.on('SIGTERM', () => handleShutdown('SIGTERM'));
   }
 }

@@ -29,6 +29,8 @@ export class ReplayCommand {
     
     const lines = fs.readFileSync(logPath, 'utf8').trim().split('\n');
     let prevHash = 'GENESIS';
+    let expectedSeq = 0;
+    const auditKey = process.env.MCP_SHIELD_AUDIT_KEY || null;
     
     console.log(`\n▶️  REPLAYING SESSION: ${logPath}\n`);
     
@@ -36,23 +38,35 @@ export class ReplayCommand {
        if (!line.trim()) continue;
        const entry = JSON.parse(line);
        
+       // Verify sequence order to prevent truncation or reordering
+       if (entry.seq !== undefined && entry.seq !== expectedSeq) {
+          console.error(`❌ SEQUENCE MISMATCH! Expected seq #${expectedSeq}, got #${entry.seq}`);
+          process.exit(1);
+       }
+       expectedSeq++;
+
        // Verify integrity using canonical JSON serialization
        const canonicalData = ReplayCommand.canonicalStringify(entry.data);
-       const computedHash = crypto.createHash('sha256').update(prevHash + canonicalData).digest('hex');
+       let computedHash: string;
+       if (auditKey) {
+         computedHash = crypto.createHmac('sha256', auditKey).update(prevHash + canonicalData).digest('hex');
+       } else {
+         computedHash = crypto.createHash('sha256').update(prevHash + canonicalData).digest('hex');
+       }
        
        if (computedHash !== entry.hash || prevHash !== entry.previousHash) {
-          console.error(`❌ TAMPER DETECTED! Hash chain broken at timestamp ${entry.data.timestamp}`);
+          console.error(`❌ TAMPER DETECTED! Hash chain broken at seq #${entry.seq ?? 'N/A'} timestamp ${entry.data.timestamp}`);
           process.exit(1);
        }
        prevHash = entry.hash;
 
        // Visualize
-       console.log(`[${entry.data.timestamp}] ${entry.data.type.toUpperCase()}`);
+       console.log(`[#${entry.seq ?? 0} | ${entry.data.timestamp}] ${entry.data.type.toUpperCase()}`);
        if (entry.data.toolName) console.log(`  Tool: ${entry.data.toolName}`);
        if (entry.data.action) console.log(`  Action: ${entry.data.action}`);
        if (entry.data.reason) console.log(`  Reason: ${entry.data.reason}`);
        console.log('---');
     }
-    console.log(`\n✅ Session Replay Complete. Log integrity mathematically verified.`);
+    console.log(`\n✅ Session Replay Complete. Total ${expectedSeq} log entries mathematically verified.`);
   }
 }

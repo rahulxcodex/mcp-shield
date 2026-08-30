@@ -1,22 +1,52 @@
 {
   "name": "mcp-shield",
   "version": "1.0.0",
-  "description": "> **Tagline:** *The Zero-Trust Security Gateway, AST Firewall & Secret Sanitizer for Model Context Protocol (MCP) and AI Agents.*",
-  "main": "index.js",
+  "description": "The Zero-Trust Security Gateway, AST Firewall & Secret Sanitizer for Model Context Protocol (MCP) and AI Agents.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "mcp-shield": "./bin/mcp-shield.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "shield.config.default.yaml",
+    "LICENSE",
+    "README.md",
+    "BENCHMARKS.md",
+    "REDTEAM.md",
+    "SECURITY.md",
+    "THREAT_MODEL.md"
+  ],
   "directories": {
     "test": "tests"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
+    "test:redteam": "jest tests/redteam",
+    "test:integration": "jest tests/integration",
     "fuzz": "ts-node scripts/fuzz.ts",
     "bench": "ts-node benchmarks/proxy-latency.bench.ts",
-    "test:redteam": "jest tests/redteam"
+    "prepack": "npm run build"
   },
-  "keywords": [],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "zero-trust",
+    "firewall",
+    "dlp",
+    "ast-parser",
+    "ai-agents",
+    "sandbox",
+    "container"
+  ],
+  "author": "MCP-Shield Contributors",
+  "license": "Apache-2.0",
   "type": "commonjs",
   "dependencies": {
-    "@types/diff": "^7.0.2",
-    "@types/js-yaml": "^4.0.9",
     "diff": "^9.0.0",
     "express": "^5.2.1",
     "ink": "^7.1.1",
@@ -28,8 +58,10 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@types/diff": "^7.0.2",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
     "@types/uuid": "^10.0.0",

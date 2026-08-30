@@ -27,7 +27,11 @@ export class JsonRpcStreamFramer extends EventEmitter {
   private process() {
     let newlineIndex: number;
     while ((newlineIndex = this.buffer.indexOf(10)) !== -1) { // 10 = '\n'
-      const frame = this.buffer.subarray(0, newlineIndex);
+      let end = newlineIndex;
+      if (end > 0 && this.buffer[end - 1] === 13) { // 13 = '\r'
+        end--;
+      }
+      const frame = this.buffer.subarray(0, end);
       this.buffer = this.buffer.subarray(newlineIndex + 1);
 
       if (frame.length > 0) {

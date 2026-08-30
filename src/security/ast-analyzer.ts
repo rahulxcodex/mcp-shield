@@ -25,15 +25,16 @@ export class ASTAnalyzer {
 
   private readonly COMMAND_WRAPPERS = new Set([
     'sudo', 'doas', 'pkexec', 'env', 'command', 'builtin',
-    'nohup', 'setsid', 'time', 'nice', 'stdbuf', 'timeout', 'chroot'
+    'nohup', 'setsid', 'time', 'nice', 'stdbuf', 'timeout', 'chroot',
+    'xargs', 'busybox', 'toybox', 'runuser', 'su'
   ]);
 
   private readonly DESTRUCTIVE_TOOLS = new Set([
-    'shred', 'srm', 'wipe'
+    'shred', 'srm', 'wipe', 'del', 'rd', 'rmdir', 'erase'
   ]);
 
   private readonly DISK_FORMAT_TOOLS = new Set([
-    'mkfs', 'fdisk', 'parted', 'gdisk', 'sfdisk', 'cfdisk'
+    'mkfs', 'fdisk', 'parted', 'gdisk', 'sfdisk', 'cfdisk', 'format'
   ]);
 
   constructor() {
@@ -315,15 +316,31 @@ export class ASTAnalyzer {
           }
         }
 
-        // Destructive rm check
-        if (cmdName === 'rm') {
-          const hasRecursive = args.some(t =>
-            t === '-r' || t === '-R' || t === '-rf' || t === '-fr' ||
-            t.startsWith('-r') || t.startsWith('-R') || t === '--recursive'
-          );
+        // Destructive rm / del / erase check
+        if (cmdName === 'rm' || cmdName === 'del' || cmdName === 'erase') {
+          const hasRecursive = cmdName === 'del' || cmdName === 'erase' || args.some(t => {
+            if (t === '--recursive') return true;
+            if (t.startsWith('-') && !t.startsWith('--')) {
+              return t.includes('r') || t.includes('R') || t.includes('s') || t.includes('S');
+            }
+            if (t.startsWith('/')) { // Windows /s /q
+              return t.toLowerCase() === '/s';
+            }
+            return false;
+          });
           const hasDangerousTarget = args.some(t => this.isDangerousTarget(t));
           if (hasRecursive && hasDangerousTarget) {
             return { isSafe: false, reason: `Destructive root deletion blocked: "${node.text}"` };
+          }
+        }
+
+        // Safe pipe tool subshell escape check (awk/sed arbitrary command execution)
+        if (cmdName === 'awk' || cmdName === 'sed') {
+          const hasSubshellEscape = args.some(a => 
+            /system\s*\(|getline\s+[^<]+<|e\s+["']|\/bin\/(ba)?sh/i.test(a)
+          );
+          if (hasSubshellEscape) {
+            return { isSafe: false, reason: `Subshell escape pattern detected in "${cmdName}": "${node.text}"` };
           }
         }
 

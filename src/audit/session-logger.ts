@@ -5,11 +5,17 @@ import * as crypto from 'crypto';
 export class SessionLogger {
   private logFile: string;
   private previousHash: string = 'GENESIS';
+  private sequenceNumber: number = 0;
+  private auditKey: string | null = process.env.MCP_SHIELD_AUDIT_KEY || null;
 
-  constructor() {
-    const logDir = path.join(process.cwd(), '.mcp-shield', 'logs');
-    fs.mkdirSync(logDir, { recursive: true });
-    this.logFile = path.join(logDir, `session-${Date.now()}.jsonl`);
+  constructor(customLogFile?: string) {
+    if (customLogFile) {
+      this.logFile = customLogFile;
+    } else {
+      const logDir = path.join(process.cwd(), '.mcp-shield', 'logs');
+      fs.mkdirSync(logDir, { recursive: true });
+      this.logFile = path.join(logDir, `session-${Date.now()}.jsonl`);
+    }
   }
 
   private canonicalStringify(obj: any): string {
@@ -22,18 +28,28 @@ export class SessionLogger {
     const sortedKeys = Object.keys(obj).sort();
     const result: string[] = [];
     for (const key of sortedKeys) {
-      result.push(JSON.stringify(key) + ':' + this.canonicalStringify(obj[key]));
+      if (obj[key] !== undefined) {
+        result.push(JSON.stringify(key) + ':' + this.canonicalStringify(obj[key]));
+      }
     }
     return '{' + result.join(',') + '}';
   }
 
+  private computeDigest(data: string): string {
+    if (this.auditKey) {
+      return crypto.createHmac('sha256', this.auditKey).update(data).digest('hex');
+    }
+    return crypto.createHash('sha256').update(data).digest('hex');
+  }
+
   public log(event: { type: string; toolName?: string; action?: string; ruleId?: string; payload?: any; reason?: string }) {
-    const eventObj = { timestamp: new Date().toISOString(), ...event };
+    const seq = this.sequenceNumber++;
+    const eventObj = { seq, timestamp: new Date().toISOString(), ...event };
     const canonicalData = this.canonicalStringify(eventObj);
     
-    // Hash chain for tamper-evidence
-    const hash = crypto.createHash('sha256').update(this.previousHash + canonicalData).digest('hex');
-    const entry = { data: eventObj, hash, previousHash: this.previousHash };
+    // Hash chain with sequence for tamper-evidence & anti-truncation
+    const hash = this.computeDigest(this.previousHash + canonicalData);
+    const entry = { seq, data: eventObj, hash, previousHash: this.previousHash };
     
     this.previousHash = hash;
     fs.appendFileSync(this.logFile, JSON.stringify(entry) + '\n');

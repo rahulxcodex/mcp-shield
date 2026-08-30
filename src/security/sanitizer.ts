@@ -6,6 +6,11 @@ export const SECRET_PATTERNS = [
   { name: 'OPENAI_KEY', regex: /sk-(?:proj-)?[a-zA-Z0-9]{20,}/g },
   { name: 'SLACK_TOKEN', regex: /xox[baprs]-[a-zA-Z0-9]{10,}/g },
   { name: 'GITHUB_PAT', regex: /ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82}/g },
+  { name: 'GOOGLE_API_KEY', regex: /AIza[0-9A-Za-z\-_]{35}/g },
+  { name: 'STRIPE_KEY', regex: /sk_(?:live|test)_[0-9a-zA-Z]{24,}/g },
+  { name: 'HUGGINGFACE_TOKEN', regex: /hf_[a-zA-Z0-9]{34,}/g },
+  { name: 'GITLAB_PAT', regex: /glpat-[0-9a-zA-Z\-_]{20,}/g },
+  { name: 'JWT_TOKEN', regex: /ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,}/g },
   { name: 'SSH_PRIVATE_KEY', regex: /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----/g }
 ];
 
@@ -13,14 +18,7 @@ export const SECRET_PATTERNS = [
 export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MCP_SHIELD_HONEY_TOKENS.split(',') : [];
 
 // Combine all patterns into a single Regex. Capture groups map to patterns.
-// Group 1: AWS
-// Group 2: Anthropic (placed before OpenAI to avoid prefix overlap)
-// Group 3: OpenAI
-// Group 4: Slack
-// Group 5: GitHub
-// Group 6: SSH
-// Group 7: High Entropy fallback (includes base64url characters - and _)
-const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9]{20,})|(xox[baprs]-[a-zA-Z0-9]{10,})|(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82})|(-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----)|([a-zA-Z0-9+\/=\-_]{40,})/g;
+const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9]{20,})|(xox[baprs]-[a-zA-Z0-9]{10,})|(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----)|([a-zA-Z0-9+\/=\-_]{40,})/g;
 
 export class SecretSanitizer {
   private secretToToken = new Map<string, string>();
@@ -36,10 +34,12 @@ export class SecretSanitizer {
   private charFrequencies = new Uint32Array(256);
 
   public checkHoneyTokens(payload: string): boolean {
+    if (!payload) return false;
     const envTokens = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MCP_SHIELD_HONEY_TOKENS.split(',') : [];
     const allTokens = [...HONEY_TOKENS, ...envTokens];
     for (const token of allTokens) {
-      if (token && payload.includes(token.trim())) return true;
+      const trimmed = (token || '').trim();
+      if (trimmed.length > 0 && payload.includes(trimmed)) return true;
     }
     return false;
   }
@@ -95,19 +95,19 @@ export class SecretSanitizer {
 
   public sanitize(payload: string): string {
     // Single-pass Lexer for all patterns and entropy! Time complexity reduced from O(K*N) to O(N)
-    return payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, ssh, highEntropy) => {
-      // If it matched a known pattern (groups 1-6), register immediately
-      if (aws || anthropic || openai || slack || github || ssh) {
+    return payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, google, stripe, hf, gitlab, jwt, ssh, highEntropy) => {
+      // If it matched a known pattern (groups 1-11), register immediately
+      if (aws || anthropic || openai || slack || github || google || stripe || hf || gitlab || jwt || ssh) {
         return this.registerSecret(match);
       }
       
-      // If it matched the high entropy fallback (group 7)
+      // If it matched the high entropy fallback (group 12)
       if (highEntropy) {
         // Skip already tokenized sections (avoids recursive matching edge cases)
         if (match.startsWith('[[SHIELD_SECRET_')) return match;
         
         const entropy = this.calculateEntropy(match);
-        if (entropy > 4.5) {
+        if (entropy > 4.2) {
           return this.registerSecret(match);
         }
       }

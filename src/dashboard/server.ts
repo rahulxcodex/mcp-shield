@@ -8,7 +8,7 @@ export class DashboardServer {
   private wss = new WebSocketServer({ server: this.server });
   private clients = new Set<WebSocket>();
 
-  constructor(private port: number = 3333) {
+  constructor(private port: number = process.env.MCP_SHIELD_DASHBOARD_PORT ? parseInt(process.env.MCP_SHIELD_DASHBOARD_PORT, 10) : 3333) {
     this.app.get('/', (req, res) => {
       res.send(`
         <html>
@@ -82,5 +82,14 @@ export class DashboardServer {
         client.send(message);
       }
     }
+  }
+
+  public stop(): void {
+    for (const client of this.clients) {
+      try { client.close(); } catch {}
+    }
+    this.clients.clear();
+    try { this.wss.close(); } catch {}
+    try { this.server.close(); } catch {}
   }
 }

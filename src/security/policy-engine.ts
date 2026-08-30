@@ -182,6 +182,26 @@ export class PolicyEngine {
     return path.posix.normalize(clean).toLowerCase();
   }
 
+  private extractCandidatePaths(obj: any): string[] {
+    const paths: string[] = [];
+    if (!obj || typeof obj !== 'object') return paths;
+
+    for (const [key, val] of Object.entries(obj)) {
+      if (typeof val === 'string' && val.trim().length > 0) {
+        const lowerKey = key.toLowerCase();
+        if (
+          ['path', 'file', 'filename', 'filepath', 'target', 'source', 'dest', 'destination', 'uri', 'dir', 'directory', 'cwd'].includes(lowerKey) ||
+          val.includes('/') || val.includes('\\') || val.startsWith('.') || val.startsWith('~')
+        ) {
+          paths.push(val);
+        }
+      } else if (typeof val === 'object' && val !== null) {
+        paths.push(...this.extractCandidatePaths(val));
+      }
+    }
+    return paths;
+  }
+
   public evaluateToolCall(toolName: string, args: Record<string, any>): { action: PolicyRule['action']; rule?: PolicyRule } {
     const config = this.getConfig();
 
@@ -197,19 +217,21 @@ export class PolicyEngine {
       if (!isTarget) continue;
 
       if (rule.matchers) {
-        if (rule.matchers.pathMatches && (args.path || args.file || args.filename)) {
-          const rawTarget = (args.path || args.file || args.filename) as string;
-          const normalizedTarget = this.normalizePathForMatching(rawTarget);
+        if (rule.matchers.pathMatches) {
+          const candidatePaths = this.extractCandidatePaths(args);
+          for (const rawTarget of candidatePaths) {
+            const normalizedTarget = this.normalizePathForMatching(rawTarget);
 
-          const isForbidden = rule.matchers.pathMatches.forbiddenPaths.some(p => {
-             const normalizedRule = this.normalizePathForMatching(p);
-             const regexStr = normalizedRule
-               .replace(/\./g, '\\.')
-               .replace(/\*\*/g, '.*')
-               .replace(/\*/g, '[^/]*');
-             return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
-          });
-          if (isForbidden) return { action: rule.action, rule };
+            const isForbidden = rule.matchers.pathMatches.forbiddenPaths.some(p => {
+               const normalizedRule = this.normalizePathForMatching(p);
+               const regexStr = normalizedRule
+                 .replace(/\./g, '\\.')
+                 .replace(/\*\*/g, '.*')
+                 .replace(/\*/g, '[^/]*');
+               return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
+            });
+            if (isForbidden) return { action: rule.action, rule };
+          }
         }
       } else {
          return { action: rule.action, rule };

@@ -67,7 +67,8 @@ export class ContainerSandbox {
       dockerArgs.push('--security-opt=no-new-privileges');
     }
 
-    // 4. Resource limits (Mitigate DoS & token/CPU burn)
+    // 4. Resource limits (Mitigate DoS, fork bombs & token/CPU burn)
+    dockerArgs.push('--pids-limit=128');
     if (this.options.memoryLimit) {
       dockerArgs.push(`--memory=${this.options.memoryLimit}`);
     }
@@ -105,14 +106,19 @@ export class ContainerSandbox {
   }
 
   public spawnProcess(targetCmd: string, targetArgs: string[]): { cmd: string; args: string[] } {
-    if (this.options.enabled && this.isAvailable()) {
+    if (this.options.enabled) {
+      if (!this.isAvailable()) {
+        throw new Error(
+          `[MCP-SHIELD] Zero-Trust Isolation Error: Container sandboxing is enabled in policy, but Docker daemon is unreachable. Refusing unisolated host execution.`
+        );
+      }
       return {
         cmd: 'docker',
         args: this.buildDockerArgs(targetCmd, targetArgs)
       };
     }
 
-    // Fallback to raw execution if container isolation is disabled or docker unavailable
+    // Raw execution when container isolation is explicitly disabled
     return {
       cmd: targetCmd,
       args: targetArgs
