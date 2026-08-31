@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "local-python": {
+      "command": "python",
+      "args": ["-m", "mcp_server_sqlite", "--db-path", "./app.db"],
+      "disabled": false
+    },
+    "fetch-tool": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "disabled": true
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/developer/workspace"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    },
+    "github": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "mcp/github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_mocktoken1234567890"
+      }
+    }
+  }
+}

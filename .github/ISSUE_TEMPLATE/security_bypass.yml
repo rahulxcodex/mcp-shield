@@ -1,0 +1,53 @@
+name: "🎯 Red-Team Security Bypass Challenge"
+description: "Submit an adversarial evasion or bypass technique against MCP-Shield"
+title: "[BYPASS]: "
+labels: ["red-team", "security-bypass", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🛡️ MCP-Shield Community Red-Team Challenge
+        Thank you for stress-testing MCP-Shield. Submissions that demonstrate an unhandled bypass will be:
+        1. Imported directly into `tests/security-corpus/bypass-corpus.json`
+        2. Added to regression tests in `tests/redteam/bypasses.test.ts`
+        3. Permanently credited on the **Security Hall of Fame** leaderboard in `REDTEAM.md` and `SECURITY.md`.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Target Defensive Component
+      options:
+        - "RT-CAT-01: AST Shell & Command Firewall (src/security/ast-analyzer.ts)"
+        - "RT-CAT-02: Secret Sanitizer & DLP Tokenization (src/security/sanitizer.ts)"
+        - "RT-CAT-03: Policy Engine & Network Egress (src/security/policy-engine.ts)"
+        - "RT-CAT-04: Rate Limiter (src/security/rate-limiter.ts)"
+        - "RT-CAT-05: Sandbox & Copy-on-Write FS (src/sandbox/cow-fs.ts)"
+    validations:
+      required: true
+  - type: textarea
+    id: poc
+    attributes:
+      label: Minimal Reproducible Proof of Concept (PoC)
+      description: Provide the exact payload, shell command, or JSON-RPC message.
+      placeholder: |
+        // Example PoC payload or command string
+        cat app.log | python3 -c "import os; os.system('id')"
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Expected vs Actual Behavior
+      description: Explain what security boundary was bypassed and how.
+      placeholder: |
+        Expected: AST Analyzer blocks subshell execution in pipe stage.
+        Actual: Passed through gateway to downstream tool.
+    validations:
+      required: true
+  - type: input
+    id: handle
+    attributes:
+      label: Contributor Credit Name / GitHub Handle
+      description: Name or handle to be credited in the Security Hall of Fame.
+      placeholder: "@researcher"
+    validations:
+      required: false

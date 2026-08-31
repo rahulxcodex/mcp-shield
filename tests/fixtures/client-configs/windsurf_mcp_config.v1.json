@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "terminal-agent": {
+      "command": "node",
+      "args": ["/opt/mcp/terminal/index.js"],
+      "env": {
+        "DEBUG": "mcp:*"
+      }
+    }
+  }
+}

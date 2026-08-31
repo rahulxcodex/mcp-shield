@@ -301,6 +301,96 @@ export class ASTAnalyzer {
     return { cmdName: '', args: [] };
   }
 
+  private parseCommandFlagsAndOperands(rawArgs: string[], cmdName: string): {
+    flags: Set<string>;
+    operands: string[];
+    isRecursive: boolean;
+    isForce: boolean;
+  } {
+    const flags = new Set<string>();
+    const operands: string[] = [];
+    let endOfOptions = false;
+
+    for (let i = 0; i < rawArgs.length; i++) {
+      const raw = rawArgs[i];
+      const token = this.normalizeToken(raw);
+      if (!token) continue;
+
+      if (endOfOptions) {
+        operands.push(token);
+        continue;
+      }
+
+      if (token === '--') {
+        endOfOptions = true;
+        continue;
+      }
+
+      // Long options: --recursive, --force, --exclude=dir
+      if (token.startsWith('--')) {
+        const optBody = token.slice(2);
+        const optName = optBody.split('=')[0].toLowerCase();
+        flags.add(optName);
+        continue;
+      }
+
+      // PowerShell-style parameters: -Recurse, -Force, etc.
+      if (/^-(recurse|force|confirm|whatif)$/i.test(token)) {
+        flags.add(token.slice(1).toLowerCase());
+        continue;
+      }
+
+      // Windows cmd switches: /s, /q, /f, /s/q, /q/s, etc. for del/erase/rmdir/rd
+      if (
+        token.startsWith('/') &&
+        (cmdName === 'del' || cmdName === 'erase' || cmdName === 'rmdir' || cmdName === 'rd') &&
+        /^\/([sqfpa](\/[sqfpa])*)$/i.test(token)
+      ) {
+        const switches = token.toLowerCase().split('/').filter(Boolean);
+        for (const s of switches) {
+          flags.add(s);
+        }
+        continue;
+      }
+
+      // POSIX Short flags: -rf, -fr, -r, -f, -R, -rfv, -v, -i, -I
+      if (token.startsWith('-') && token.length > 1 && token !== '-') {
+        if (token.includes('=')) {
+          const optName = token.slice(1).split('=')[0].toLowerCase();
+          flags.add(optName);
+        } else if (/^-[a-zA-Z0-9]+$/.test(token)) {
+          // Tokenize combined short flags: each character is treated as an individual switch
+          for (let j = 1; j < token.length; j++) {
+            const char = token[j];
+            flags.add(char);
+            flags.add(char.toLowerCase());
+          }
+        } else {
+          flags.add(token.slice(1).toLowerCase());
+        }
+        continue;
+      }
+
+      // Positional path / operand
+      operands.push(token);
+    }
+
+    let isRecursive = false;
+    if (cmdName === 'rm') {
+      isRecursive = flags.has('r') || flags.has('R') || flags.has('recursive');
+    } else if (cmdName === 'del' || cmdName === 'erase') {
+      isRecursive = flags.has('s') || flags.has('S') || flags.has('recurse') || flags.has('recursive') || flags.has('r') || flags.has('R');
+    } else if (cmdName === 'rmdir' || cmdName === 'rd') {
+      isRecursive = flags.has('s') || flags.has('S') || flags.has('recurse') || flags.has('r') || flags.has('R');
+    } else if (cmdName === 'chmod' || cmdName === 'chown') {
+      isRecursive = flags.has('r') || flags.has('R') || flags.has('recursive');
+    }
+
+    const isForce = flags.has('f') || flags.has('F') || flags.has('force') || flags.has('q');
+
+    return { flags, operands, isRecursive, isForce };
+  }
+
   private walk(node: Parser.SyntaxNode | null | undefined, depth: number): ASTAnalysisResult {
     if (!node || typeof node.type !== 'string') {
       return { isSafe: true };
@@ -381,20 +471,12 @@ export class ASTAnalyzer {
           }
         }
 
-        // Destructive rm / del / erase check
-        if (cmdName === 'rm' || cmdName === 'del' || cmdName === 'erase') {
-          const hasRecursive = cmdName === 'del' || cmdName === 'erase' || args.some(t => {
-            if (t === '--recursive') return true;
-            if (t.startsWith('-') && !t.startsWith('--')) {
-              return t.includes('r') || t.includes('R') || t.includes('s') || t.includes('S');
-            }
-            if (t.startsWith('/')) { // Windows /s /q
-              return t.toLowerCase() === '/s';
-            }
-            return false;
-          });
-          const hasDangerousTarget = args.some(t => this.isDangerousTarget(t));
-          if (hasRecursive && hasDangerousTarget) {
+        const parsedInvocation = this.parseCommandFlagsAndOperands(args, cmdName);
+
+        // Destructive rm / del / erase / rmdir / rd check
+        if (cmdName === 'rm' || cmdName === 'del' || cmdName === 'erase' || cmdName === 'rmdir' || cmdName === 'rd') {
+          const hasDangerousTarget = parsedInvocation.operands.some(t => this.isDangerousTarget(t));
+          if (parsedInvocation.isRecursive && hasDangerousTarget) {
             return { isSafe: false, reason: `Destructive root deletion blocked: "${node.text}"` };
           }
         }
@@ -411,17 +493,16 @@ export class ASTAnalyzer {
 
         // File shredding and wiping tools
         if (this.DESTRUCTIVE_TOOLS.has(cmdName)) {
-          const hasDangerousTarget = args.some(t => this.isDangerousTarget(t));
-          if (hasDangerousTarget || args.includes('-u') || args.includes('-z')) {
+          const hasDangerousTarget = parsedInvocation.operands.some(t => this.isDangerousTarget(t)) || args.some(t => this.isDangerousTarget(t));
+          if (hasDangerousTarget || parsedInvocation.flags.has('u') || parsedInvocation.flags.has('z')) {
             return { isSafe: false, reason: `Destructive file wiping tool "${cmdName}" blocked: "${node.text}"` };
           }
         }
 
         // Recursive chmod / chown on root or system directories
         if (cmdName === 'chmod' || cmdName === 'chown') {
-          const isRecursive = args.some(t => t === '-R' || t === '--recursive' || t.startsWith('-R'));
-          const hasDangerousTarget = args.some(t => this.isDangerousTarget(t));
-          if (isRecursive && hasDangerousTarget) {
+          const hasDangerousTarget = parsedInvocation.operands.some(t => this.isDangerousTarget(t));
+          if (parsedInvocation.isRecursive && hasDangerousTarget) {
             return { isSafe: false, reason: `Recursive system permission/ownership mutation with "${cmdName}" blocked: "${node.text}"` };
           }
         }
@@ -493,15 +574,31 @@ export class ASTAnalyzer {
             n && (n.type === 'command_name' || n.type === 'word' || n.type === 'string')
           );
           const tokens = tokenNodes.map(n => n.text);
-          const { cmdName } = this.unwrapCommandTokens(tokens);
+          const { cmdName, args } = this.unwrapCommandTokens(tokens);
 
-          if (cmdName) {
-            if (!this.SAFE_PIPE_TARGETS.has(cmdName)) {
-              return { isSafe: false, reason: `Piping to non-allowlisted command "${cmdName}" is blocked.` };
+          if (!cmdName) {
+            return { isSafe: false, reason: 'Piping to dynamic or empty command is blocked.' };
+          }
+
+          if (cmdName === 'xargs') {
+            const xargsParsed = this.unwrapCommandTokens(args);
+            if (!xargsParsed.cmdName || !this.SAFE_PIPE_TARGETS.has(xargsParsed.cmdName) || this.INTERPRETERS.has(xargsParsed.cmdName)) {
+              return { isSafe: false, reason: `Piping to xargs with command "${xargsParsed.cmdName || 'arbitrary'}" is blocked.` };
+            }
+          } else if (!this.SAFE_PIPE_TARGETS.has(cmdName)) {
+            return { isSafe: false, reason: `Piping to non-allowlisted command "${cmdName}" is blocked.` };
+          }
+
+          if (cmdName === 'awk' || cmdName === 'sed') {
+            const hasSubshellEscape = args.some(a => 
+              /system\s*\(|getline\s+[^<]+<|e\s+["']|\/bin\/(ba)?sh/i.test(a)
+            );
+            if (hasSubshellEscape) {
+              return { isSafe: false, reason: `Subshell escape pattern detected in "${cmdName}": "${pipedCmd.text}"` };
             }
           }
         } else {
-          return { isSafe: false, reason: `Piping to compound statement or subshell is blocked.` };
+          return { isSafe: false, reason: `Piping to compound statement or subshell is blocked: "${pipedCmd.text}"` };
         }
       }
     }

@@ -1,0 +1,39 @@
+name: "⚠️ False Positive Report"
+description: "Report a legitimate command, tool argument, or non-secret string erroneously blocked or sanitized by MCP-Shield"
+title: "[FALSE POSITIVE]: "
+labels: ["false-positive", "usability", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🛡️ False Positive & Usability Feedback
+        MCP-Shield operates with zero telemetry to protect your privacy. Community reports of false positives help us refine AST analysis and entropy thresholds without adding friction to benign workflows.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component triggered the false positive?
+      options:
+        - "AST Analyzer (Legitimate command blocked as destructive)"
+        - "Secret Sanitizer / DLP (Benign hash/UUID/string sanitized as secret)"
+        - "Policy Engine (Allowed tool or path denied)"
+        - "Rate Limiter (Legitimate bursts throttled)"
+    validations:
+      required: true
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Command / Snippet / JSON-RPC Request
+      description: Provide the command or snippet that was falsely flagged (scrub any sensitive real data).
+      placeholder: |
+        rm -exclude=cache ./dist
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Workflow Context
+      description: What tool or MCP server were you using when this happened?
+      placeholder: |
+        Running build script with Claude Desktop and filesystem MCP server.
+    validations:
+      required: true

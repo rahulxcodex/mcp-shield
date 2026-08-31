@@ -19,7 +19,7 @@ export const SECRET_PATTERNS = [
 export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MCP_SHIELD_HONEY_TOKENS.split(',') : [];
 
 // Combine all patterns into a single Regex. Capture groups map to patterns.
-const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9]{20,})|(xox[baprs]-[a-zA-Z0-9]{10,})|(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----)|([a-zA-Z0-9+\/=\-_]{40,})/g;
+const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9]{20,})|(xox[baprs]-[a-zA-Z0-9]{10,})|(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{82})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----)|\b([a-zA-Z0-9+\/_\-]{40,}={0,2})\b/g;
 
 export class SecretSanitizer {
   private vault = new SecretVault();
@@ -29,7 +29,7 @@ export class SecretSanitizer {
     this.config = config;
   }
 
-  // Removed class-level charFrequencies to fix concurrency bug
+  private charFrequencies = new Uint32Array(256);
 
   public checkHoneyTokens(payload: string): boolean {
     if (!payload) return false;
@@ -46,14 +46,15 @@ export class SecretSanitizer {
     const len = str.length;
     if (len === 0) return 0;
     
-    const charFrequencies = new Uint32Array(256);
+    const freqs = this.charFrequencies;
+    freqs.fill(0);
     for (let i = 0; i < len; i++) {
-      charFrequencies[str.charCodeAt(i) & 0xFF]++;
+      freqs[str.charCodeAt(i) & 0xFF]++;
     }
     
     let entropy = 0;
     for (let i = 0; i < 256; i++) {
-      const count = charFrequencies[i];
+      const count = freqs[i];
       if (count > 0) {
         const p = count / len;
         entropy -= p * Math.log2(p);

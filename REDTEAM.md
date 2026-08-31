@@ -37,12 +37,18 @@ Before submitting an advisory or pull request, please verify your findings using
 npm run test:redteam
 ```
 
-### 2. Run the Adversarial AST Fuzzer (Thousands of Mutations)
+### 2. Run the Adversarial Bypass Corpus Regression Suite
 ```bash
+npx jest tests/security-corpus/bypass-corpus.test.ts
+```
+
+### 3. Run Property-Based Fuzzing & Stress Tests
+```bash
+npx jest tests/security-corpus/property-based.test.ts
 npm run fuzz
 ```
 
-### 3. Run the Full Test Suite
+### 4. Run the Full Test Suite
 ```bash
 npm test
 ```
@@ -51,33 +57,28 @@ npm test
 
 ## 📝 Submitting a Bypass / Vulnerability
 
-### Step 1: Prepare a Minimal Reproducible PoC
+### Option A: Community Bypass Challenge (Public Issue Template)
+Submit your evasion payload through our [Bypass Challenge GitHub Issue Template](.github/ISSUE_TEMPLATE/security_bypass.yml). Submissions are automatically imported via `scripts/import-bypass.ts` and evaluated against the regression suite.
 
-Create a standalone test case following the format in [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts):
+### Option B: Pull Request to `bypass-corpus.json` & `bypasses.test.ts`
+1. Import your payload to `tests/security-corpus/bypass-corpus.json` using the helper:
+   ```bash
+   npx ts-node scripts/import-bypass.ts "ast_evasion_wrappers" "Description of bypass technique" "evasion_command_payload"
+   ```
+2. Add your dedicated regression test to [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts).
 
-```typescript
-it('RT-0109: [Short Title of Bypass Technique]', () => {
-  const payload = 'your_evasion_command_here';
-  const result = astAnalyzer.analyzeCommand(payload);
-  
-  // A successful bypass demonstrates that the evasion passes analysis
-  expect(result.isSafe).toBe(true); // Demonstrates bypass
-});
-```
-
-### Step 2: Responsible Disclosure
-
-- **Non-Critical & Red-Team Tests**: Open a Pull Request adding the test case to `tests/redteam/bypasses.test.ts`.
-- **Critical Bypasses** (e.g., remote code execution on host, complete sandbox escape, zero-day DLP extraction): Report privately to **`security@example.com`** or open a private GitHub Security Advisory in accordance with [SECURITY.md](SECURITY.md).
+### Option C: Private Responsible Disclosure (Critical Zero-Days)
+For critical zero-day vulnerabilities (direct host arbitrary code execution, complete sandbox breakouts, zero-day key extraction), please report privately via **`security@example.com`** or via GitHub Private Security Advisories per [SECURITY.md](SECURITY.md).
 
 ---
 
 ## 🏆 Hall of Fame & Acknowledgments
 
-Contributors who submit novel bypasses or hardening improvements will be permanently credited in:
+Contributors who submit novel bypasses or hardening improvements are permanently credited in:
 
+- The [Security Hall of Fame & CVE Writeups in SECURITY.md](SECURITY.md)
 - The [GitHub Release Notes](https://github.com/rahulxcodex/mcp-shield/releases)
-- The Security Hall of Fame section in [SECURITY.md](SECURITY.md)
 - The [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts) test headers
 
 Thank you for helping keep AI developer environments secure!
+
