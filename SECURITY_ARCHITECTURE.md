@@ -98,18 +98,18 @@ MCP-Shield operates on a **Zero-Trust Architecture** designed specifically for a
   - `secretAccess`: schema properties named `api_key`, `secret`, `token`, `password`, `credential`.
 - Deceptive tools (e.g. `calculate_metrics` taking a `command` string) are accurately flagged and subjected to AST firewall rules.
 
-### 4. AST Command Firewall (`src/security/ast-analyzer.ts`)
-- Uses `tree-sitter-bash` native C bindings to parse POSIX shell commands into an Abstract Syntax Tree.
-- **Grammar & Platform Scope**:
-  - **POSIX Shells (`bash`, `sh`, `zsh`)**: Full Abstract Syntax Tree traversal and node normalization.
-  - **Windows Shells (`cmd.exe`, `powershell`)**: Lexical argument tokenization, parameter switch parsing (`/s`, `/q`, `-Recurse`), and path switch disambiguation (`/src` vs `/s`).
+### 4. AST Command Firewall (`src/security/ast-analyzer.ts`, `src/security/powershell-analyzer.ts`, `src/security/cmd-analyzer.ts`)
+- **Multi-Dialect Semantic Analysis**:
+  - **POSIX Shells (`bash`, `sh`, `zsh`)**: Full Concrete Syntax Tree compilation via `tree-sitter-bash` native C bindings, evaluating pipelines, subshells, and command substitutions.
+  - **PowerShell (`pwsh`, `powershell.exe`)**: Dedicated AST parser (`PowerShellASTAnalyzer`) implementing pipeline construction, scriptblock extraction, cmdlet alias canonicalization (`del`, `rm`, `ri`, `irm`, `iwr`, `saps`, `gc`, `sc`), parameter prefix resolution (`-r`, `-rec`, `-fo`, `-Confirm:$false`), base64 UTF-16LE / UTF-8 recursive unrolling (`-EncodedCommand`), and sensitive `$env:*` leakage protection.
+  - **Windows Command Prompt (`cmd.exe`)**: Dedicated semantic parser (`CmdAnalyzer`) de-obfuscating caret escapes (`^`), quote slicing, compound chaining (`&`, `&&`, `||`, `|`), delayed expansion (`!VAR!`), wrapper unwrapping (`cmd /c`), and destructive system primitives (`vssadmin delete shadows`, `bcdedit`, `del /s /q`).
 - **Wrapper Unwinding**: Recursively resolves and unwinds execution wrappers:
-  `sudo`, `env`, `nohup`, `nice`, `stdbuf`, `timeout`, `su`, `doas`, `strace`, `ltrace`, `pkexec`, `time`.
+  `sudo`, `env`, `nohup`, `nice`, `stdbuf`, `timeout`, `su`, `doas`, `strace`, `ltrace`, `pkexec`, `time`, `cmd.exe /c`, `powershell.exe -Command`.
 - **Evasion Defenses**:
-  - Delimiter and expansion tricks: `$IFS`, `${VAR:-...}`, dynamic variable execution (`$CMD`).
-  - Redirections & Heredocs: `bash <<< "..."`, `sh < /tmp/x.sh`, process substitutions `<(...)`.
-  - Dangerous builtins & subshells: `$()`, backticks, `eval`, `source`, `exec`.
-  - Destructive primitives: `rm -rf /`, `rm -rf *`, `mkfs.*`, `dd if=/dev/...`, `shred`, fork bombs (`:(){ :|:& };:`).
+  - Delimiter and expansion tricks: `$IFS`, `${VAR:-...}`, dynamic variable execution (`$CMD`, `& $cmd`, `!CMD!`).
+  - Redirections & Heredocs: `bash <<< "..."`, `sh < /tmp/x.sh`, process substitutions `<(...)`, `Out-File`.
+  - Dangerous builtins & subshells: `$()`, backticks, `eval`, `source`, `exec`, `Invoke-Expression` (`iex`), dynamic .NET reflection (`[System.Diagnostics.Process]::Start`).
+  - Destructive primitives: `rm -rf /`, `Remove-Item -Recurse C:\`, `del /s /q C:\`, `vssadmin delete shadows`, `mkfs.*`, `dd if=/dev/...`, `shred`, fork bombs (`:(){ :|:& };:`).
 
 ### 5. Multi-IP DNS Rebinding & Egress Network Shield (`src/security/network-proxy.ts`, `src/security/ip-utils.ts`)
 - **Centralized CIDR & Numerical Masking**: Parses IPv4 and IPv6 addresses into numerical BigInts to perform exact CIDR subnet matches across Loopback (`127.0.0.0/8`, `::1`), Link-Local (`169.254.0.0/16`, `fe80::/10`), Cloud Metadata (`169.254.169.254`, `fd00:ec2::254`), and Private Ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`, `100.64.0.0/10`).

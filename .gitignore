@@ -6,3 +6,5 @@ dist/
 .DS_Store
 scratch/
 coverage/
+*.sbom.json
+sbom.json

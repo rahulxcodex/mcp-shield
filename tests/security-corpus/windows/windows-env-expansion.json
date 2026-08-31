@@ -1,0 +1,37 @@
+[
+  {
+    "category": "windows_sensitive_env_leak",
+    "description": "Exfiltrating sensitive credentials and API keys via environment variables",
+    "payloads": [
+      "echo $env:AWS_SECRET_ACCESS_KEY",
+      "Write-Output $env:OPENAI_API_KEY",
+      "Get-Content env:ANTHROPIC_API_KEY",
+      "echo %AWS_SECRET_ACCESS_KEY%",
+      "echo %OPENAI_API_KEY%",
+      "echo %GITHUB_TOKEN%",
+      "echo !AWS_SECRET_ACCESS_KEY!",
+      "echo !OPENAI_API_KEY!"
+    ]
+  },
+  {
+    "category": "windows_env_destructive_targets",
+    "description": "Targeting system directories via environment variables for destructive deletions",
+    "payloads": [
+      "Remove-Item -Recurse $env:SystemRoot",
+      "del /s /q %SYSTEMROOT%",
+      "del /s /q %WINDIR%",
+      "rmdir /s /q %USERPROFILE%",
+      "Remove-Item -Recurse -Force $env:USERPROFILE"
+    ]
+  },
+  {
+    "category": "windows_env_enumeration",
+    "description": "Full environment variable enumeration and dumping",
+    "payloads": [
+      "Get-ChildItem env:",
+      "dir env:",
+      "Get-Item env:*",
+      "cmd.exe /v:on /c \"!CMD!\""
+    ]
+  }
+]

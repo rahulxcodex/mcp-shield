@@ -6,32 +6,54 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-and-test:
+    name: Test on ${{ matrix.os }} (Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         node-version: [20.x, 22.x]
 
     steps:
     - name: Harden Runner
+      if: runner.os == 'Linux'
       uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
       with:
         egress-policy: audit
 
-    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+    - name: Checkout Repository
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
     
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Setup Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
         
-    - run: npm ci
-    - run: npm audit signatures
-    - run: npm run typecheck
-    - run: npm run build
-    - run: npm test
-    - run: npm run test:redteam
-    - run: npm run fuzz
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Verify Lockfile Signatures
+      if: runner.os == 'Linux'
+      run: npm audit signatures
+
+    - name: Typecheck
+      run: npm run typecheck
+
+    - name: Compile Production Build
+      run: npm run build
+
+    - name: Run Test Suite & Windows Corpus
+      run: npm test
+
+    - name: Run Red-Team Validation Suite
+      run: npm run test:redteam
+
+    - name: Run Property-Based AST Fuzzer
+      run: npm run fuzz

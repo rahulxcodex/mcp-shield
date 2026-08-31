@@ -1,0 +1,25 @@
+[
+  {
+    "category": "windows_path_traversal",
+    "description": "Windows backslash, mixed slash, and dot-dot traversal paths to sensitive system directories",
+    "payloads": [
+      "..\\..\\..\\Windows\\System32\\config\\SAM",
+      "C:\\..\\Windows\\System32\\drivers\\etc\\hosts",
+      "C:/Windows/../Windows/System32/config/SYSTEM",
+      "\\..\\..\\Windows\\System32",
+      "C:\\Program Files\\..\\..\\Windows"
+    ]
+  },
+  {
+    "category": "windows_unc_and_device_paths",
+    "description": "UNC administrative shares, device paths, and Alternate Data Streams",
+    "payloads": [
+      "\\\\127.0.0.1\\c$\\Windows\\System32",
+      "\\\\localhost\\admin$\\System32",
+      "\\\\?\\C:\\Windows\\System32",
+      "\\\\.\\PhysicalDrive0",
+      "C:\\test.txt:hidden.exe",
+      "evil.ps1::$DATA"
+    ]
+  }
+]

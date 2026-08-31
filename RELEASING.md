@@ -14,14 +14,17 @@ MCP-Shield adheres to [Semantic Versioning 2.0.0](https://semver.org/):
 
 ---
 
-## 🔒 Supply-Chain Security & Provenance
+## 🔒 Supply-Chain Security & Release Assurance
 
 Every official release published through our automated pipeline enforces:
 
-1. **GitHub Actions OpenID Connect (OIDC)**: Cryptographically verified publishing to npm without persistent long-lived tokens.
-2. **Build Provenance**: Verified attestation generated via `--provenance` linking the published package to the exact git commit and GitHub workflow run.
-3. **CycloneDX Software Bill of Materials (SBOM)**: Machine-readable `sbom.json` generated and attached to each GitHub Release.
-4. **Automated CI Hardening**: CI workflows run through StepSecurity Harden Runner to audit egress traffic and prevent runner tampering.
+1. **Cryptographically Signed Commits & Tags**: All release tags and commits must be signed using GPG (`git tag -s`) or SSH (`git tag -u <key_id>`) to guarantee author identity.
+2. **GitHub Actions OpenID Connect (OIDC)**: Cryptographically verified publishing to npm without persistent long-lived tokens via trusted publishing.
+3. **Build Provenance**: Verified attestation generated via `npm publish --provenance` linking the published package to the exact git commit, builder, and GitHub workflow run.
+4. **CycloneDX Software Bill of Materials (SBOM)**: Machine-readable `mcp-shield.sbom.json` generated using `@cyclonedx/cyclonedx-npm` and attached to each GitHub Release.
+5. **Reproducible Automated Pipeline**: Only GitHub Actions CI publishes releases. Direct developer publishes to npm are blocked by policy.
+6. **Pinned Actions & Dependency Scanning**: All GitHub Action steps are pinned to immutable 40-character commit SHAs. Pull requests are gated by Dependabot and GitHub Dependency Review.
+7. **Multi-OS Native Matrix**: All releases pass comprehensive test suites and security corpora across both `ubuntu-latest` and `windows-latest` (Node 20.x, 22.x).
 
 ---
 
@@ -29,7 +32,7 @@ Every official release published through our automated pipeline enforces:
 
 ### Step 1: Pre-Release Verification
 
-Run the complete test and audit suites locally before cutting a release:
+Run the complete test, security corpora, and fuzzing suites locally:
 
 ```bash
 # Ensure working directory is clean
@@ -39,11 +42,11 @@ git status
 npm run typecheck
 npm run build
 
-# Run all test suites, red-team challenges, and fuzzers
+# Run all test suites, Windows adversarial corpora, red-team challenges, and fuzzers
 npm test
 npm run test:redteam
 npm run fuzz
-npm run bench
+npm run sbom
 ```
 
 ### Step 2: Bump Version
@@ -61,20 +64,20 @@ npm version minor --no-git-tag-version
 npm version major --no-git-tag-version
 ```
 
-### Step 3: Commit and Tag
+### Step 3: Commit and Create Signed Tag
 
-Commit the version change and create a signed git tag:
+Commit the version change and create a cryptographically signed git tag:
 
 ```bash
 VERSION="v$(node -p "require('./package.json').version")"
-git add package.json
-git commit -m "chore: release ${VERSION}"
-git tag -a "${VERSION}" -m "Release ${VERSION}"
+git add package.json package-lock.json
+git commit -S -m "chore: release ${VERSION}"
+git tag -s "${VERSION}" -m "Release ${VERSION}"
 ```
 
 ### Step 4: Push to GitHub
 
-Push the commit and tag to trigger the automated GitHub Actions release workflow:
+Push the commit and signed tag to trigger the automated GitHub Actions release workflow:
 
 ```bash
 git push origin main
@@ -84,11 +87,13 @@ git push origin "${VERSION}"
 ### Step 5: Automated Workflow Execution
 
 The `.github/workflows/release.yml` workflow automatically:
-1. Checks out the tagged commit.
-2. Compiles TypeScript production artifacts (`npm run build`).
-3. Generates a CycloneDX `sbom.json`.
-4. Publishes to npm with cryptographic `--provenance`.
-5. Creates a GitHub Release with the attached SBOM.
+1. Hardens the runner environment with StepSecurity.
+2. Checks out the tagged commit with full git history.
+3. Performs a clean build and runs the full test suite + security corpora.
+4. Generates a CycloneDX Software Bill of Materials (`mcp-shield.sbom.json`).
+5. Generates the package tarball (`mcp-shield-*.tgz`).
+6. Publishes to npm with cryptographic `--provenance` via OIDC.
+7. Creates a signed GitHub Release attaching the SBOM and tarball package.
 
 ---
 

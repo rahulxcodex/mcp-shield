@@ -1,6 +1,8 @@
 import Parser from 'tree-sitter';
 import Bash from 'tree-sitter-bash';
 import * as path from 'path';
+import { PowerShellASTAnalyzer } from './powershell-analyzer';
+import { CmdAnalyzer } from './cmd-analyzer';
 
 export interface ASTAnalysisResult {
   isSafe: boolean;
@@ -30,12 +32,20 @@ if (TreeClass?.prototype) {
 
 export class ASTAnalyzer {
   private parser: Parser;
+  private psAnalyzer: PowerShellASTAnalyzer;
+  private cmdAnalyzer: CmdAnalyzer;
   private readonly MAX_RECURSION_DEPTH = 50;
 
   private readonly SAFE_PIPE_TARGETS = new Set([
     'grep', 'awk', 'sed', 'sort', 'uniq', 'wc', 'cat', 'head', 'tail',
     'less', 'more', 'jq', 'cut', 'tr', 'column', 'tee', 'nl', 'fold',
-    'fmt', 'expand', 'unexpand', 'paste', 'tac', 'rev', 'diff', 'comm'
+    'fmt', 'expand', 'unexpand', 'paste', 'tac', 'rev', 'diff', 'comm',
+    'select-object', 'where-object', 'foreach-object', 'tee-object',
+    'sort-object', 'group-object', 'measure-object', 'out-null',
+    'out-string', 'format-table', 'format-list', 'format-wide', 'format-custom',
+    'select-string', 'get-member', 'export-csv', 'convertto-json', 'convertfrom-json',
+    'convertto-csv', 'convertfrom-csv', 'write-output', 'write-host', 'select', 'where',
+    'find', 'findstr', 'clip', 'type', 'echo', 'sls', 'ft', 'fl'
   ]);
 
   private readonly INTERPRETERS = new Set([
@@ -64,6 +74,8 @@ export class ASTAnalyzer {
       delete (Bash as any).nodeSubclasses;
     } catch {}
     this.parser.setLanguage(Bash);
+    this.psAnalyzer = new PowerShellASTAnalyzer();
+    this.cmdAnalyzer = new CmdAnalyzer(this.psAnalyzer);
   }
 
   public analyzeCommand(command: string): ASTAnalysisResult {
@@ -94,20 +106,9 @@ export class ASTAnalyzer {
     const deIfsCommand = command
       .replace(/\$\{IFS(?::[^}]+)?\}|\$IFS(?:\$9|\$@|\$\*)?/g, ' ')
       .replace(/\$'[\t\n\s\\]+'|\$'\\x20'|\$'\\40'/gi, ' ');
-    if (deIfsCommand !== command) {
-      try {
-        const deIfsTree = this.parser.parse(deIfsCommand);
-        if (deIfsTree?.rootNode) {
-          const deIfsResult = this.walk(deIfsTree.rootNode, 0);
-          if (!deIfsResult.isSafe) {
-            return { isSafe: false, reason: `$IFS evasion detected: ${deIfsResult.reason}` };
-          }
-        }
-      } catch {}
-    }
-
+    
     try {
-      let tree = this.parser.parse(command);
+      let tree = this.parser.parse(deIfsCommand);
       let root = this.getRoot(tree);
       if (!root) {
         try {
@@ -115,16 +116,30 @@ export class ASTAnalyzer {
         } catch {}
         this.parser = new Parser();
         this.parser.setLanguage(Bash);
-        tree = this.parser.parse(command);
+        tree = this.parser.parse(deIfsCommand);
         root = this.getRoot(tree);
       }
       if (root) {
-        return this.walk(root, 0);
+        const bashResult = this.walk(root, 0);
+        if (!bashResult.isSafe) {
+          return bashResult;
+        }
       }
-      return { isSafe: false, isParseError: true, reason: 'AST Parsing Failure: Unable to obtain syntax tree root node' };
-    } catch (err: any) {
-      return { isSafe: false, isParseError: true, reason: `AST Parsing Failure: ${err.message}` };
+    } catch {}
+
+    // 4. PowerShell Semantic & AST analysis layer
+    const psResult = this.psAnalyzer.analyzeCommand(command);
+    if (!psResult.isSafe) {
+      return { isSafe: false, reason: psResult.reason };
     }
+
+    // 5. cmd.exe Semantic & Lexical analysis layer
+    const cmdResult = this.cmdAnalyzer.analyzeCommand(command);
+    if (!cmdResult.isSafe) {
+      return { isSafe: false, reason: cmdResult.reason };
+    }
+
+    return { isSafe: true };
   }
 
   private getRoot(tree: any): Parser.SyntaxNode | null {

@@ -85,8 +85,8 @@ To maintain credibility and avoid overpromising, MCP-Shield defines clear defens
    - Hardware-level timing attacks, cold-boot memory extraction, or microarchitectural vulnerabilities (Spectre/Meltdown) are out of scope.
 5. **Subjective Prompt Persuasion & Semantic Intent**:
    - MCP-Shield is an execution and data gateway enforcing deterministic syntactic rules, DLP redaction, and sandbox boundaries. It is not an LLM intent classifier and does not evaluate whether benign text is persuasive or manipulative.
-6. **Windows Native PowerShell AST Grammar Parsing**:
-   - Native C AST parsing is strictly implemented for POSIX shell grammar (`tree-sitter-bash`). On Windows, cmd.exe and PowerShell arguments are processed via lexical tokenization and switch parsers (`/s`, `/q`, `-Recurse`) rather than a full native PowerShell AST compiler.
+6. **Windows PowerShell and cmd.exe Semantic Parsing**:
+   - Multi-dialect semantic analysis is implemented across POSIX (`tree-sitter-bash`), PowerShell (`PowerShellASTAnalyzer` covering cmdlet aliases, parameter prefix matching, dynamic invocations `&`, base64 `-EncodedCommand` recursive inspection, and `$env:*` leakage), and cmd.exe (`CmdAnalyzer` covering carets, compound operators `&`/`&&`/`||`, delayed expansion `!VAR!`, and system tampering `vssadmin delete shadows`). All attack vectors are verified continuously in native Windows CI (`tests/security-corpus/windows/`).
 7. **Environment-Variable Egress Enforcement Boundary**:
    - Network egress filtering operates as an environment-level proxy shim (`HTTP_PROXY` / `HTTPS_PROXY`). It provides domain policy and DNS-rebinding protection for standard HTTP/HTTPS SDKs. Downstream tools initiating raw TCP sockets or deliberately ignoring proxy environment variables bypass this shim unless Docker container network isolation (`network=none`) is enabled.
 8. **In-Process Vault Encryption Key Storage**:

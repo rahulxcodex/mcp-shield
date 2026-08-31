@@ -1,0 +1,48 @@
+[
+  {
+    "category": "cmd_caret_obfuscation",
+    "description": "Caret escape sequence obfuscation targeting cmd.exe builtins and system files",
+    "payloads": [
+      "d^e^l /s /q C:\\",
+      "r^m^d^i^r /s /q C:\\Windows",
+      "p^o^w^e^r^s^h^e^l^l -c Remove-Item -Recurse C:\\",
+      "c^m^d /c d^e^l /s /q C:\\*",
+      "f^o^r^m^a^t C: /fs:NTFS /q /y"
+    ]
+  },
+  {
+    "category": "cmd_compound_chaining",
+    "description": "Chaining commands with &, &&, ||, and pipes in cmd.exe",
+    "payloads": [
+      "echo Safe & del /s /q C:\\",
+      "dir && rmdir /s /q C:\\Windows",
+      "whoami || del /s /q %SYSTEMROOT%",
+      "echo harmless & vssadmin delete shadows /all /quiet",
+      "dir | del /s /q C:\\"
+    ]
+  },
+  {
+    "category": "cmd_wrappers_and_spawns",
+    "description": "cmd.exe switches /c, /s, /k, /q and start detached spawning",
+    "payloads": [
+      "cmd.exe /c \"del /s /q C:\\\"",
+      "cmd /s /c \"rmdir /s /q C:\\Windows\"",
+      "cmd.exe /q /c \"del /f /q /s C:\\*\"",
+      "cmd /k del /s /q C:\\",
+      "start cmd.exe /c del /s /q C:\\",
+      "start powershell.exe -enc JABjAG0AZAAgAD0AIAAnAFIAZQBtAG8AdgBlAC0ASQB0AGUAbQAnAA=="
+    ]
+  },
+  {
+    "category": "cmd_system_tampering",
+    "description": "Volume Shadow Copy deletion, bcdedit recovery disablement, and formatting",
+    "payloads": [
+      "vssadmin delete shadows /all /quiet",
+      "vssadmin.exe delete shadows /all",
+      "bcdedit /set {default} recoveryenabled No",
+      "bcdedit /set {current} bootstatuspolicy ignoreallfailures",
+      "format C: /fs:NTFS /q /y",
+      "diskpart /s wipe.txt"
+    ]
+  }
+]

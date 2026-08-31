@@ -34,6 +34,7 @@
     "bench:secrets": "ts-node benchmarks/secret-detection.bench.ts",
     "bench:tokens": "ts-node benchmarks/token-overhead.bench.ts",
     "bench:all": "ts-node benchmarks/proxy-latency.bench.ts",
+    "sbom": "cyclonedx-npm --output-format JSON --output-file mcp-shield.sbom.json",
     "prepack": "npm run build"
   },
   "keywords": [
@@ -64,6 +65,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "^1.19.0",
     "@types/diff": "^7.0.2",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
