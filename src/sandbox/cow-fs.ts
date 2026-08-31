@@ -8,6 +8,10 @@ export interface FileIdentity {
   dev: number;
   mode: number;
   exists: boolean;
+  mtimeMs?: number;
+  ctimeMs?: number;
+  size?: number;
+  sha256?: string;
 }
 
 export class COWFileSystem {
@@ -35,6 +39,7 @@ export class COWFileSystem {
 
     let canonicalTarget = resolvedPath;
     let identity: FileIdentity = { ino: 0, dev: 0, mode: 0, exists: false };
+    let oldContent = '';
     
     if (fs.existsSync(resolvedPath)) {
       const lstat = fs.lstatSync(resolvedPath);
@@ -48,7 +53,17 @@ export class COWFileSystem {
       if (stat.isSymbolicLink()) {
         throw new Error(`COW SECURITY VIOLATION: Canonical target is a symlink: "${canonicalTarget}".`);
       }
-      identity = { ino: stat.ino, dev: stat.dev, mode: stat.mode, exists: true };
+      oldContent = fs.readFileSync(canonicalTarget, 'utf8');
+      identity = {
+        ino: stat.ino,
+        dev: stat.dev,
+        mode: stat.mode,
+        exists: true,
+        mtimeMs: stat.mtimeMs,
+        ctimeMs: stat.ctimeMs,
+        size: stat.size,
+        sha256: crypto.createHash('sha256').update(oldContent).digest('hex')
+      };
     }
     
     const rel = path.relative(this.rootDir, canonicalTarget);
@@ -62,11 +77,6 @@ export class COWFileSystem {
 
     fs.mkdirSync(path.dirname(stagingPath), { recursive: true });
     fs.writeFileSync(stagingPath, newContent, { encoding: 'utf8', mode: 0o600 });
-
-    let oldContent = '';
-    if (identity.exists) {
-      oldContent = fs.readFileSync(canonicalTarget, 'utf8');
-    }
 
     const diff = Diff.createTwoFilesPatch(
       canonicalTarget,
@@ -89,8 +99,21 @@ export class COWFileSystem {
       if (currentStat.isSymbolicLink()) {
         throw new Error('COW TOCTOU DETECTED: Target was replaced with a symlink before commit.');
       }
-      if (currentStat.ino !== originalIdentity.ino || currentStat.dev !== originalIdentity.dev) {
+      if (
+        currentStat.ino !== originalIdentity.ino ||
+        currentStat.dev !== originalIdentity.dev ||
+        (originalIdentity.mtimeMs !== undefined && currentStat.mtimeMs !== originalIdentity.mtimeMs) ||
+        (originalIdentity.ctimeMs !== undefined && currentStat.ctimeMs !== originalIdentity.ctimeMs) ||
+        (originalIdentity.size !== undefined && currentStat.size !== originalIdentity.size)
+      ) {
         throw new Error('COW TOCTOU DETECTED: File identity changed (inode swap or file replacement).');
+      }
+      if (originalIdentity.sha256 !== undefined) {
+        const currentContent = fs.readFileSync(absoluteOriginalPath, 'utf8');
+        const currentHash = crypto.createHash('sha256').update(currentContent).digest('hex');
+        if (currentHash !== originalIdentity.sha256) {
+          throw new Error('COW TOCTOU DETECTED: File identity changed (inode swap or file replacement).');
+        }
       }
     } else if (originalIdentity && !originalIdentity.exists) {
       if (fs.existsSync(absoluteOriginalPath)) {
