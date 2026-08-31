@@ -65,7 +65,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@cyclonedx/cyclonedx-npm": "^1.19.0",
+    "@cyclonedx/cyclonedx-npm": "^6.0.1",
     "@types/diff": "^7.0.2",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
