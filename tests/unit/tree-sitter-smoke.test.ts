@@ -69,4 +69,42 @@ describe('Tree-sitter Parser Smoke & Multi-Realm Integrity Test Suite', () => {
       expect(tree.rootNode.type).toBe('program');
     }
   });
+
+  it('SMOKE-05: Enforces exact AST node shapes for pipelines, substitutions, and redirects', () => {
+    const parser = new Parser();
+    try {
+      delete (Bash as any).nodeSubclasses;
+    } catch {}
+    parser.setLanguage(Bash);
+
+    // 1. Pipeline node shape invariant
+    const pipeTree = parser.parse('cat logs.txt | grep error | wc -l');
+    const pipeNode = pipeTree.rootNode.namedChildren[0];
+    expect(pipeNode.type).toBe('pipeline');
+    expect(pipeNode.namedChildren.length).toBe(3);
+    pipeNode.namedChildren.forEach(child => {
+      expect(child.type).toBe('command');
+    });
+
+    // 2. Command substitution node shape invariant ($() and ``)
+    const subshellDollar = parser.parse('echo $(whoami)');
+    const cmdDollar = subshellDollar.rootNode.namedChildren[0];
+    const subshellNode = cmdDollar.namedChildren.find(n => n.type === 'command_substitution');
+    expect(subshellNode).toBeDefined();
+    expect(subshellNode?.type).toBe('command_substitution');
+
+    // 3. Redirected statement node shape invariant
+    const redirectTree = parser.parse('cat < input.txt > output.txt');
+    const redirectNode = redirectTree.rootNode.namedChildren[0];
+    expect(redirectNode.type).toBe('redirected_statement');
+    const redirects = redirectNode.namedChildren.filter(n => n.type === 'file_redirect');
+    expect(redirects.length).toBe(2);
+
+    // 4. Parameter expansion node shape invariant
+    const paramTree = parser.parse('echo ${SECRET_KEY:-default}');
+    const cmdParam = paramTree.rootNode.namedChildren[0];
+    const expansion = cmdParam.namedChildren.find(n => n.type === 'expansion');
+    expect(expansion).toBeDefined();
+  });
 });
+

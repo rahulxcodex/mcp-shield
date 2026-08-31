@@ -1,4 +1,4 @@
-# Zero-Allocation High-Entropy DLP: Sanitizing Secrets on the Hot Path in < 150µs 🔑
+# Pre-Allocated Buffer High-Entropy DLP: Sanitizing Secrets on the Hot Path in < 150µs 🔑
 
 *By Rahul (@rahulxcodex) — Creator of MCP-Shield*
 
@@ -8,7 +8,7 @@ A major risk in the Model Context Protocol (MCP) ecosystem is **secret leakage**
 
 To solve this, we built a **Lossless Reversible Data Loss Prevention (DLP) Sanitizer** into **MCP-Shield**.
 
-In this post, we explain how we achieved **100% precision and 100% recall** while eliminating heap allocations and keeping latency under **150 microseconds**.
+In this post, we explain how we achieved **sub-150 microsecond latency** while eliminating per-calculation TypedArray allocations and maintaining high-throughput Shannon entropy scanning.
 
 ---
 
@@ -81,12 +81,12 @@ function calculateEntropyBad(str: string): number {
 
 In a stream processing thousands of lines of logs per second, this triggers continuous V8 garbage collection cycles, degrading proxy throughput.
 
-### The Zero-Allocation Hot-Path Solution
+### The Pre-Allocated Hot-Path Buffer Solution
 In MCP-Shield, we pre-allocate an instance buffer `this.charFrequencies = new Uint32Array(256)` once when the sanitizer initializes:
 
 ```typescript
 export class SecretSanitizer {
-  // Pre-allocated frequency buffer to ensure ZERO heap allocation on hot-path entropy checks
+  // Pre-allocated frequency buffer to eliminate heap allocations on entropy frequency counts
   private charFrequencies = new Uint32Array(256);
 
   private calculateEntropy(str: string): number {
@@ -119,11 +119,11 @@ export class SecretSanitizer {
 
 ---
 
-## 4. Empirical Benchmarks: 100% Precision / 100% Recall
+## 4. Empirical Baseline Benchmarks
 
-We benchmarked MCP-Shield across **1,780 lines** of real-world source code (TypeScript, Python), YAML configs, CI/CD logs, SSH private keys, and noisy build logs:
+> **⚠️ Disclosure**: Tested against our curated baseline corpus of 1,780 lines of simulated multi-language code, configs, and logs (`benchmarks/secret-detection.bench.ts`). This verifies deterministic rule coverage against known formats and high-entropy noise fixtures; independent external evaluation against held-out public datasets is ongoing.
 
-| Category | Lines | Real Secrets | True Positives | False Positives | False Negatives | Precision | Recall |
+| Category | Lines | Real Secrets | True Positives | False Positives | False Negatives | Precision (Baseline) | Recall (Baseline) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Source Code (TypeScript)** | 420 | 60 | 60 | 0 | 0 | 100.0% | 100.0% |
 | **Source Code (Python)** | 340 | 40 | 40 | 0 | 0 | 100.0% | 100.0% |

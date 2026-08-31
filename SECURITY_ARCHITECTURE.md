@@ -79,7 +79,10 @@ MCP-Shield operates on a **Zero-Trust Architecture** designed specifically for a
 - **Honey-Token Detection**: Actively alerts and quarantines processes attempting to read decoy canary tokens (`MCP_SHIELD_HONEY_TOKENS`).
 
 ### 3. AST Command Firewall (`src/security/ast-analyzer.ts`)
-- Uses `tree-sitter-bash` to parse shell commands into an Abstract Syntax Tree.
+- Uses `tree-sitter-bash` native C bindings to parse POSIX shell commands into an Abstract Syntax Tree.
+- **Grammar & Platform Scope**:
+  - **POSIX Shells (`bash`, `sh`, `zsh`)**: Full Abstract Syntax Tree traversal and node normalization.
+  - **Windows Shells (`cmd.exe`, `powershell`)**: Lexical argument tokenization, parameter switch parsing (`/s`, `/q`, `-Recurse`), and path switch disambiguation (`/src` vs `/s`).
 - **Wrapper Unwinding**: Recursively resolves and unwinds execution wrappers:
   `sudo`, `env`, `nohup`, `nice`, `stdbuf`, `timeout`, `su`, `doas`, `strace`, `ltrace`, `pkexec`, `time`.
 - **Evasion Defenses**:

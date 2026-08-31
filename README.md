@@ -1,10 +1,13 @@
 # MCP-Shield 🛡️
 
 [![CI](https://github.com/rahulxcodex/mcp-shield/actions/workflows/ci.yml/badge.svg)](https://github.com/rahulxcodex/mcp-shield/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Coverage: 85%](https://img.shields.io/badge/Coverage-85%25-brightgreen.svg)](SECURITY_AUDIT.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B%20%7C%2020%2B%20%7C%2022%2B-green.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
 [![Security: Zero--Trust](https://img.shields.io/badge/Security-Zero--Trust-red.svg)](SECURITY_ARCHITECTURE.md)
+
+> ⚠️ **Project Status**: Active Development • Pre-1.0 Stability • Seeking External Security Review & Community Red-Teaming.
 
 > **The Zero-Trust Security Gateway, AST Shell Firewall & Secret Sanitizer for the Model Context Protocol (MCP) and Autonomous AI Agents.**
 
@@ -62,7 +65,7 @@ Today, MCP clients grant LLMs raw shell execution, unfiltered filesystem access,
 
 I built **MCP-Shield** because **developers shouldn't have to choose between the productivity of autonomous AI agents and the safety of their host machines.**
 
-MCP-Shield sits directly on the stdio wire as a sub-millisecond, zero-allocation proxy. It parses shell ASTs with native Tree-Sitter grammar, tokenizes credentials with lossless entropy redaction, and isolates file operations before a single byte reaches your operating system.
+MCP-Shield sits directly on the stdio wire as a sub-millisecond, low-overhead streaming proxy. It parses shell ASTs with native Tree-Sitter grammar, tokenizes credentials with lossless entropy redaction, and isolates file operations before a single byte reaches your operating system.
 
 ---
 
@@ -111,8 +114,8 @@ With the rapid adoption of AI coding assistants and autonomous agents in tools l
 
 | Capability | Description |
 | :--- | :--- |
-| 🌲 **AST Shell Parsing** | Employs `tree-sitter-bash` native C bindings to parse shell commands into Abstract Syntax Trees. Defeats syntactic evasions (`$IFS`, nested quotes, wrapper stacking `sudo env nice`, subshells `$()`, heredocs, pipelines, and fork bombs) with strict POSIX short-flag splitting (`-rf` vs `-exclude`). |
-| 🔑 **Reversible DLP Secret Sanitizer** | Single-pass scanning with high-entropy tokenization (AWS, OpenAI, Anthropic, GitHub PATs, SSH keys) using zero-allocation buffers. Yields **100% Precision and 100% Recall** on labeled benchmarks with provably lossless roundtrip restoration. |
+| 🌲 **AST Shell Parsing** | Employs `tree-sitter-bash` native C bindings to parse shell commands into Abstract Syntax Trees. Defeats syntactic evasions (`$IFS`, nested quotes, wrapper stacking `sudo env nice`, subshells `$()`, heredocs, pipelines, and fork bombs) with strict POSIX short-flag splitting (`-rf` vs `-exclude`). *(Note: Windows cmd.exe / PowerShell commands use heuristic lexical switch tokenization).* |
+| 🔑 **Reversible DLP Secret Sanitizer** | Single-pass scanning with high-entropy tokenization (AWS, OpenAI, Anthropic, GitHub PATs, SSH keys) using pre-allocated entropy frequency buffers. Reversibly tokenizes cloud credentials with lossless roundtrip restoration (evaluated against an internal baseline test suite; independent held-out benchmarks pending). |
 | 🌐 **DNS Rebinding & Egress Shield** | Validates network targets, performs active IP pinning, blocks SSRF to link-local/private ranges (RFC 1918, `169.254.169.254`, IPv6 `::1`), and enforces domain allowlists/blocklists. |
 | 📂 **Copy-on-Write (COW) Staging** | Intercepts file writes and redirects modifications to an isolated staging directory (`.mcp-shield/cow`), generating diffs for operator review before committing to disk. |
 | 📦 **Container Sandbox Isolation** | Automatically spawns untrusted MCP servers in ephemeral Docker containers with dropped capabilities (`--cap-drop=ALL`), `network=none`, and read-only root filesystems. |
@@ -121,6 +124,21 @@ With the rapid adoption of AI coding assistants and autonomous agents in tools l
 | 🚦 **Sliding-Window Rate Limiting** | Throttles runaway autonomous loops per tool and across the global session. |
 | 📜 **Tamper-Evident Audit Logging** | Records cryptographically chained logs (SHA-256 / HMAC-SHA-256) with sequence numbers to detect tampering or log deletion. |
 | 📊 **Real-Time Web Dashboard** | Embedded Express & WebSocket dashboard at `http://localhost:3333` for live telemetry, attack visualization, and policy management. |
+
+---
+
+## ❓ Frequently Asked Questions
+
+### Q: Why not just run the agent in a Docker container?
+> **Answer**: Containerization isolates the host OS kernel and filesystem, but **containers alone do not solve the AI tool security problem**:
+> 1. **No Context DLP**: Containers don't inspect tool outputs. If an agent `cat`s an API key or SSH key inside the container, that key leaks directly into the third-party LLM prompt context.
+> 2. **Host Filesystem Mounts**: Developers use coding agents to edit their local repository files. Giving a container bind mounts to your local source code grants the agent raw write access to mutate or delete files.
+> 3. **No Wire Policy or Rate Limiting**: Containers cannot prevent runaway tool loops or enforce semantic command syntax policies on the JSON-RPC wire.
+>
+> MCP-Shield provides **defense-in-depth**: semantic stdio firewalling, lossless reversible DLP tokenization, and it can *also* orchestrate ephemeral Docker containers (`--cap-drop=ALL`) as an optional sandbox layer.
+
+### Q: How does Windows support differ from POSIX / Linux?
+> **Answer**: MCP-Shield uses `tree-sitter-bash` C bindings to parse standard POSIX shell grammar (`bash`, `sh`, `zsh`). On Windows, cmd.exe commands and PowerShell parameter switches (`/s`, `/q`, `-Recurse`) are processed via dedicated lexical argument tokenization and path disambiguation routines rather than a full native PowerShell AST grammar.
 
 ---
 
@@ -164,25 +182,25 @@ mcp-shield wrap -- python -m mcp_server_git
 
 ## ⚡ Performance & Empirical Accuracy
 
-MCP-Shield is built for ultra-low latency and empirically proven security:
+MCP-Shield is built for ultra-low latency and empirically grounded security:
 
 - **Hot-Path Interception Overhead**: `~ 150 µs` (p50 median) — adds `< 0.04%` latency to LLM tool calls
 - **AST Parser Throughput**: `> 7,500 ops/sec` (< 130 µs per command)
-- **DLP Sanitizer Accuracy**: **100% Precision / 100% Recall** across 1,780+ lines of test code and logs
-- **DLP Scanner Speed**: `> 200,000 lines/sec` with pre-allocated zero-allocation entropy buffers
+- **DLP Sanitizer Coverage**: `100%` baseline coverage on internal synthetic test corpus (1,780 lines; independent held-out benchmarks pending)
+- **DLP Scanner Speed**: `> 200,000 lines/sec` with pre-allocated entropy frequency buffers
 - **Rate Limiting & Policy Evaluation**: `< 5 µs` (> 200,000 ops/sec)
 
-See [BENCHMARKS.md](BENCHMARKS.md) for reproducible benchmark runs, category breakdowns, and latency percentiles.
+See [BENCHMARKS.md](BENCHMARKS.md) for reproducible benchmark runs, methodology disclosures, category breakdowns, and latency percentiles.
 
 ---
 
 ## 🎯 Red-Team, Bug Bounty & Security Audit
 
-Security tools must be validated against hostile, adversarial pressure:
+Security tools must be validated against hostile, adversarial pressure rather than self-authored benchmarks alone:
 
 - 🛡️ **Independent Security Audit**: Read our full external assessment in [SECURITY_AUDIT.md](SECURITY_AUDIT.md).
-- 📋 **Documented CVEs**: Review full writeups and patch histories in [SECURITY.md](SECURITY.md) (`CVE-2026-SHIELD-001`, `CVE-2026-SHIELD-002`, `CVE-2026-SHIELD-003`).
-- 🎯 **Public Bypass Challenge**: Submit new bypass PoCs via the [Bypass Challenge Template](.github/ISSUE_TEMPLATE/security_bypass.yml).
+- 📋 **Documented CVEs & Real Bypasses**: Review full writeups, root cause analyses, and verified regression patches in [SECURITY.md](SECURITY.md) (`CVE-2026-SHIELD-001`, `CVE-2026-SHIELD-002`, `CVE-2026-SHIELD-003`).
+- 🎯 **Public Bypass Challenge**: We publish all validated bypass reports. Submit new bypass PoCs via the [Bypass Challenge Template](.github/ISSUE_TEMPLATE/security_bypass.yml).
 - ⚠️ **Zero-Telemetry False Positive Reporting**: Report benign collisions via the [False Positive Template](.github/ISSUE_TEMPLATE/false_positive.yml).
 
 ```bash
@@ -192,8 +210,11 @@ npx jest tests/security-corpus/bypass-corpus.test.ts
 # Run fast-check property-based tests
 npx jest tests/security-corpus/property-based.test.ts
 
-# Run the complete test suite (480+ tests across 16 suites)
-npm test
+# Run the performance regression CI gate
+npm run test:perf-gate
+
+# Run the complete test suite with coverage
+npm run test:coverage
 ```
 
 ---
@@ -214,6 +235,13 @@ npm test
 
 ---
 
+## ⚖️ Trademark Disclaimer
+
+MCP-Shield is an independent, community-driven open-source project and is not affiliated with, endorsed by, or sponsored by Anthropic, PBC or the Model Context Protocol trademark holders. *"Model Context Protocol"* and *"MCP"* are used solely for descriptive, technical, and compatibility identification purposes under nominative fair use.
+
+---
+
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+

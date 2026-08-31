@@ -71,11 +71,22 @@ MCP-Shield operates as an inline security gateway between an AI Client / Host En
 - **Unauthorized Network Egress & DNS Rebinding**: Pinning DNS resolutions and blocking RFC 1918 / IPv6 private ranges and metadata endpoints (`169.254.169.254`).
 - **Uncontrolled File Mutation**: Staging file modifications for review via Copy-on-Write.
 
-### ❌ Out-of-Scope (Known Limitations)
+### ❌ Out-of-Scope (Explicit Non-Goals & Architectural Boundaries)
 
-- **Pre-Compromised Host**: If an attacker already has root/kernel-level access to the host before MCP-Shield starts, security guarantees cannot hold.
-- **Hardware & Side-Channel Attacks**: Hardware-level timing attacks or microarchitectural exploits (Spectre/Meltdown).
-- **Social Engineering of the Operator**: If a human operator manually approves a destructive diff or dangerous command via prompt bridge, MCP-Shield respects the human decision.
+To maintain credibility and avoid overpromising, MCP-Shield defines clear defensive boundaries:
+
+1. **Pre-Compromised Host & Kernel Breakouts**:
+   - If an adversary already has root or kernel-level privileges on the host before MCP-Shield starts, memory scraping, process injection, or proxy bypass cannot be prevented.
+2. **Supply-Chain Compromises in Wrapped MCP Servers**:
+   - MCP-Shield sits on the wire as a stream proxy. It does not perform static code analysis (SAST) on downstream server dependencies (e.g., malicious npm/pip packages executing native code during package install).
+3. **Unwrapped Remote Network Transports (Raw SSE/TCP)**:
+   - MCP-Shield enforces policy on local stdio JSON-RPC streams and child process invocations. If an MCP client connects directly to a remote MCP server over raw unintercepted network sockets without passing through the MCP-Shield proxy, it is outside the enforcement perimeter.
+4. **Physical Access & Hardware Side-Channels**:
+   - Hardware-level timing attacks, cold-boot memory extraction, or microarchitectural vulnerabilities (Spectre/Meltdown) are out of scope.
+5. **Subjective Prompt Persuasion & Semantic Intent**:
+   - MCP-Shield is an execution and data gateway enforcing deterministic syntactic rules, DLP redaction, and sandbox boundaries. It is not an LLM intent classifier and does not evaluate whether benign text is persuasive or manipulative.
+6. **Windows Native PowerShell AST Grammar Parsing**:
+   - Native C AST parsing is strictly implemented for POSIX shell grammar (`tree-sitter-bash`). On Windows, cmd.exe and PowerShell arguments are processed via lexical tokenization and switch parsers (`/s`, `/q`, `-Recurse`) rather than a full native PowerShell AST compiler.
 
 ---
 

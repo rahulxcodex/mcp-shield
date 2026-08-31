@@ -10,6 +10,22 @@ module.exports = {
   testMatch: ["**/tests/**/*.test.ts"],
   modulePathIgnorePatterns: ["<rootDir>/dist"],
   setupFiles: ["<rootDir>/tests/setup-tree-sitter.ts"],
+  collectCoverageFrom: [
+    "src/security/**/*.ts",
+    "src/core/stream-framing.ts",
+    "src/sandbox/**/*.ts",
+    "!src/security/capabilities.ts",
+    "!src/security/network-proxy.ts",
+    "!src/**/*.d.ts"
+  ],
+  coverageReporters: ["text", "lcov", "json-summary"],
+  coverageThreshold: {
+    global: {
+      lines: 75,
+      functions: 75,
+      statements: 75
+    }
+  },
   transform: {
     ...tsJestTransformCfg,
   },

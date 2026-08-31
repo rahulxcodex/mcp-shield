@@ -331,8 +331,10 @@ export function runSecretDetectionBenchmark(iterations: number = 20): SecretBenc
 
 function printBenchmarkReport(report: SecretBenchmarkReport) {
   console.log('\n================================================================================');
-  console.log('🎯 MCP-SHIELD SECRET SANITIZER (DLP) PRECISION & RECALL BENCHMARK');
-  console.log('================================================================================\n');
+  console.log('🎯 MCP-SHIELD SECRET SANITIZER (DLP) BASELINE BENCHMARK');
+  console.log('================================================================================');
+  console.log('⚠️  DISCLOSURE: Evaluated against internal synthetic baseline test suite.');
+  console.log('    Independent validation with external held-out corpora is pending.\n');
 
   console.log(`- Total Evaluated Lines: ${report.totalLines.toLocaleString()}`);
   console.log(`- Total Payload Size:    ${(report.totalBytes / 1024).toFixed(2)} KB`);
@@ -340,9 +342,9 @@ function printBenchmarkReport(report: SecretBenchmarkReport) {
   console.log(`- True Positives (TP):   ${report.truePositives}`);
   console.log(`- False Positives (FP):  ${report.falsePositives}`);
   console.log(`- False Negatives (FN):  ${report.falseNegatives}`);
-  console.log(`- Precision:             ${(report.precision * 100).toFixed(2)}%`);
-  console.log(`- Recall:                ${(report.recall * 100).toFixed(2)}%`);
-  console.log(`- F1-Score:              ${(report.f1Score * 100).toFixed(2)}%`);
+  console.log(`- Precision (Baseline):  ${(report.precision * 100).toFixed(2)}%`);
+  console.log(`- Recall (Baseline):     ${(report.recall * 100).toFixed(2)}%`);
+  console.log(`- F1-Score (Baseline):   ${(report.f1Score * 100).toFixed(2)}%`);
   console.log(`- Scanner Speed:         ${report.throughputLinesPerSec.toLocaleString()} lines/sec\n`);
 
   console.log('| Category | Lines | Real Secrets | TP | FP | FN | Precision | Recall |');

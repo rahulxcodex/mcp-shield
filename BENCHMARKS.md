@@ -34,9 +34,15 @@ Below are the verified empirical benchmark results executed on standard develope
 
 ---
 
-## 🎯 Labeled Secret Detection (DLP) Precision & Recall
+## 🎯 Labeled Secret Detection (DLP) Baseline Evaluation
 
-To ground detection claims with empirical evidence, the Secret Sanitizer is evaluated against a curated, multi-language dataset of realistic source files (TypeScript, Python, YAML, JSON, Shell, SQL), build logs, CI environment dumps, and stack traces with both true credential patterns and high-entropy non-secret noise (SHA-256 hashes, UUIDs, CSS hashes, base64 payloads).
+> [!WARNING]
+> ### ⚠️ Methodology Disclosure & Benchmark Caveat
+> **Measured against our own curated baseline corpus (`benchmarks/secret-detection.bench.ts`); independent held-out validation is pending.**
+>
+> The metrics in this section represent deterministic regression testing across 1,780 lines of simulated source code, logs, and configs. Because this initial dataset was hand-authored alongside the sanitizer's regex and Shannon entropy heuristics to establish a functional baseline, achieving **100% precision and 100% recall on this corpus is a smoke/regression test, not proof of 100% detection in the wild**.
+>
+> Real-world DLP scanners inevitably encounter edge-case false positives (e.g., non-secret high-entropy tokens) and novel key syntaxes. We are actively working to integrate independent, third-party held-out datasets (such as GitGuardian and TruffleHog benchmark corpora) to evaluate out-of-distribution generalization.
 
 | Metric | Evaluated Value | Context |
 | :--- | :--- | :--- |
@@ -45,12 +51,12 @@ To ground detection claims with empirical evidence, the Secret Sanitizer is eval
 | **True Positives (TP)** | **300** | Successfully quarantined & tokenized secrets |
 | **False Positives (FP)** | **0** | Non-secret tokens erroneously scrubbed |
 | **False Negatives (FN)** | **0** | Secrets missed during single-pass scan |
-| **Precision** | **100.00%** | TP / (TP + FP) |
-| **Recall** | **100.00%** | TP / (TP + FN) |
-| **F1-Score** | **100.00%** | Harmonic mean of Precision & Recall |
+| **Precision (Baseline Corpus)** | **100.00%** | TP / (TP + FP) |
+| **Recall (Baseline Corpus)** | **100.00%** | TP / (TP + FN) |
+| **F1-Score (Baseline Corpus)** | **100.00%** | Harmonic mean of Precision & Recall |
 | **Scanner Throughput** | **2,13,721 lines/sec** | 8.74 MB/s raw scanning speed |
 
-### Breakdown by Workload Category
+### Breakdown by Workload Category (Baseline Corpus)
 
 | Category | Evaluated Lines | Real Secrets | TP | FP | FN | Precision | Recall |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -64,6 +70,20 @@ To ground detection claims with empirical evidence, the Secret Sanitizer is eval
 
 ---
 
+## 🛡️ Real-World Proof: Adversarial Bypasses vs. Synthetic Benchmarks
+
+Synthetic benchmarks prove execution speed and rule correctness against expected patterns, but **the only true proof of defensive security is adversarial stress testing and transparent disclosure of bypasses**.
+
+MCP-Shield maintains an open [Red-Team & Security Research Program](REDTEAM.md) with dedicated issue templates for reporting filter evasions. Every validated bypass report is assigned a tracking identifier, added to our permanent regression suite (`tests/security-corpus/bypass-corpus.json` and `tests/redteam/bypasses.test.ts`), and published transparently in [SECURITY.md](SECURITY.md):
+
+- **[CVE-2026-SHIELD-001](SECURITY.md#cve-2026-shield-001)**: AST subshell and `$IFS` parameter expansion bypass (Patched & regression-tested).
+- **[CVE-2026-SHIELD-002](SECURITY.md#cve-2026-shield-002)**: POSIX short-flag substring match collisions in `rm` (Patched & regression-tested).
+- **[CVE-2026-SHIELD-003](SECURITY.md#cve-2026-shield-003)**: Multi-stage pipeline command execution evasions (Patched & regression-tested).
+
+We encourage researchers to submit novel bypasses via our [Bypass Challenge Template](.github/ISSUE_TEMPLATE/security_bypass.yml).
+
+---
+
 ## 🔍 Detailed Architectural Analysis
 
 ### 1. Negligible Real-World Overhead
@@ -73,7 +93,7 @@ In modern AI agent workflows, LLM token generation latency ranges from **500 ms 
 Because `tree-sitter-bash` compiles down to optimized native C bindings, AST generation avoids the exponential backtracking common in regex-based command filters. Even deeply nested command structures parse in under 300 µs.
 
 ### 3. Allocation-Minimized Shannon Entropy & Reversible Tokenization
-The Secret Sanitizer employs single-pass compound regex scanning and a pre-allocated frequency buffer for Shannon entropy calculations, eliminating per-call memory allocations. Matched credentials are stored in an in-memory session vault and substituted with lightweight UUID tokens that are provably losslessly restored on return traffic.
+The Secret Sanitizer employs single-pass compound regex scanning and a **pre-allocated frequency buffer (`Uint32Array(256)`)** for Shannon entropy calculations, eliminating per-call memory allocations during entropy math. Matched credentials are stored in an in-memory session vault and substituted with lightweight UUID tokens that are losslessly restored on return traffic.
 
 ### 4. Sliding Window Rate Limiting
 Rate limiting executes entirely in-memory with bounded sliding windows and automatic capacity eviction, achieving over 1,000,000 operations per second.
@@ -88,9 +108,10 @@ You can reproduce all benchmark numbers locally with our automated test scripts:
 # 1. Run full proxy latency and throughput benchmark
 npm run bench
 
-# 2. Run labeled secret detection precision & recall benchmark
+# 2. Run labeled secret detection baseline benchmark
 npm run bench:secrets
 
 # 3. Run all benchmarks
 npm run bench:all
 ```
+

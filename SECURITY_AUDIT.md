@@ -11,7 +11,7 @@
 
 An independent source-code security review and adversarial penetration test of the **MCP-Shield** Zero-Trust Security Gateway was conducted to evaluate its resilience against real-world AI agent tool abuse, command injection, parser evasion, DLP extraction, and sandbox escapes.
 
-The assessment validated that MCP-Shield provides an effective defense-in-depth boundary for Model Context Protocol (MCP) clients (Claude Desktop, Cursor, Windsurf, Cline) and local AI agent runtimes. Key strengths include native Tree-Sitter AST grammar parsing (eliminating catastrophic regex backtracking), single-pass Shannon entropy DLP sanitization with zero-allocation buffers, and isolated Copy-on-Write staging.
+The assessment validated that MCP-Shield provides an effective defense-in-depth boundary for Model Context Protocol (MCP) clients (Claude Desktop, Cursor, Windsurf, Cline) and local AI agent runtimes. Key strengths include native Tree-Sitter AST grammar parsing (eliminating catastrophic regex backtracking), single-pass Shannon entropy DLP sanitization with pre-allocated frequency buffers, and isolated Copy-on-Write staging.
 
 All identified vulnerabilities from the initial testing phase were remediated, verified via automated property-based fuzz testing, and documented as historical security advisories in [`SECURITY.md`](SECURITY.md).
 
@@ -48,7 +48,7 @@ The assessment employed a three-tiered hybrid evaluation model:
 | **SEC-01** | AST Parameter Expansion & $IFS Obfuscation Bypass | **HIGH (8.2)** | `ASTAnalyzer` | ✅ **Fixed** (`CVE-2026-SHIELD-001`) |
 | **SEC-02** | Short Flag Substring Collision & Flag Disambiguation | **MEDIUM (5.8)** | `ASTAnalyzer` | ✅ **Fixed** (`CVE-2026-SHIELD-002`) |
 | **SEC-03** | Multi-Stage Pipeline Compound Subshell Evasion | **HIGH (7.8)** | `ASTAnalyzer` | ✅ **Fixed** (`CVE-2026-SHIELD-003`) |
-| **SEC-04** | Per-Call Uint32Array Allocation in Shannon Entropy | **LOW (3.2)** | `SecretSanitizer` | ✅ **Fixed** (Zero-Allocation Buffer) |
+| **SEC-04** | Per-Call Uint32Array Allocation in Shannon Entropy | **LOW (3.2)** | `SecretSanitizer` | ✅ **Fixed** (Pre-Allocated Frequency Buffer) |
 | **SEC-05** | Unchecked Schema Drift on MCP Client Adapters | **LOW (3.5)** | `ProtectCommand` | ✅ **Fixed** (Pinned Schema & CI) |
 
 ---
@@ -63,7 +63,7 @@ The assessment employed a three-tiered hybrid evaluation model:
 ### 2. High-Throughput Reversible DLP Secret Sanitizer
 - **Observation**: `calculateEntropy()` instantiated a new 256-element `Uint32Array` on every candidate match. Additionally, word boundary delimiters were needed to avoid capturing variable assignments.
 - **Remediation**: Replaced dynamic allocations with a pre-allocated instance buffer `this.charFrequencies = new Uint32Array(256)` zeroed via `.fill(0)`. Updated compound regex boundaries.
-- **Verification**: Verified with `benchmarks/secret-detection.bench.ts` achieving **100% Precision and 100% Recall** across 1,780 lines of test code and logs, and lossless roundtrip property tests in `tests/security-corpus/property-based.test.ts`.
+- **Verification**: Verified with `benchmarks/secret-detection.bench.ts` achieving **100% baseline rule coverage** across 1,780 lines of internal test fixtures (independent held-out benchmarks pending), and lossless roundtrip property tests in `tests/security-corpus/property-based.test.ts`.
 
 ### 3. Client Schema Drift Protection
 - **Observation**: Auto-protection commands did not validate JSON structures before mutating configuration files for Claude Desktop, Cursor, Windsurf, or Cline.
@@ -80,3 +80,4 @@ The MCP-Shield architecture has matured into a robust, low-overhead security gat
 1. **Continuous Fuzzing**: Maintain automated property-based fuzz runs in CI workflows.
 2. **Community Bug Bounty**: Actively ingest submissions from the public Bypass Challenge into `tests/security-corpus/bypass-corpus.json`.
 3. **Formal Verification**: Expand fast-check coverage as new tool integration adapters are added.
+4. **Independent Held-Out DLP Validation**: Benchmark DLP against external industry corpora (e.g. GitGuardian and TruffleHog standard test sets) to evaluate out-of-distribution generalization.
