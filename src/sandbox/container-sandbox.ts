@@ -6,6 +6,7 @@ export interface ContainerSandboxOptions {
   image?: string;
   network?: 'none' | 'bridge' | 'host';
   readOnlyRoot?: boolean;
+  readOnlyWorkspace?: boolean;
   memoryLimit?: string;
   cpuQuota?: string;
   dropCapabilities?: string[];
@@ -14,17 +15,35 @@ export interface ContainerSandboxOptions {
   tmpfsMounts?: string[];
   user?: string;
   env?: Record<string, string>;
+  unsafeOverrides?: boolean;
 }
 
+/**
+ * ContainerSandbox provides OS and network-level container isolation.
+ *
+ * Security Architecture Invariants:
+ * - Rejects `network: host` by default (requires explicit `unsafeOverrides: true`).
+ * - Enforces `--cap-drop=ALL` and `--security-opt=no-new-privileges`.
+ * - Defaults root filesystem to `--read-only`.
+ * - Mounts workspace read-only (`:ro`) when container isolation is active by default to protect repository files,
+ *   delegating transactional writes to the COW staging boundary.
+ */
 export class ContainerSandbox {
   private options: Required<ContainerSandboxOptions>;
 
   constructor(customOptions: ContainerSandboxOptions = {}) {
+    if (customOptions.network === 'host' && !customOptions.unsafeOverrides) {
+      throw new Error(
+        `[MCP-SHIELD] INSECURE CONTAINER CONFIGURATION: 'network: host' violates zero-trust isolation. Pass unsafeOverrides: true if explicitly intended.`
+      );
+    }
+
     this.options = {
       enabled: customOptions.enabled ?? false,
       image: customOptions.image || 'node:20-alpine',
       network: customOptions.network || 'none',
       readOnlyRoot: customOptions.readOnlyRoot ?? true,
+      readOnlyWorkspace: customOptions.readOnlyWorkspace ?? false,
       memoryLimit: customOptions.memoryLimit || '512m',
       cpuQuota: customOptions.cpuQuota || '1.0',
       dropCapabilities: customOptions.dropCapabilities || ['ALL'],
@@ -32,7 +51,8 @@ export class ContainerSandbox {
       workspaceMount: customOptions.workspaceMount || process.cwd(),
       tmpfsMounts: customOptions.tmpfsMounts || ['/tmp', '/run'],
       user: customOptions.user || '1000:1000',
-      env: customOptions.env || {}
+      env: customOptions.env || {},
+      unsafeOverrides: customOptions.unsafeOverrides ?? false
     };
   }
 
@@ -85,10 +105,11 @@ export class ContainerSandbox {
       dockerArgs.push(`--tmpfs=${tmpfs}:rw,noexec,nosuid,size=64m`);
     }
 
-    // 6. Workspace volume mounting
+    // 6. Workspace volume mounting (with explicit read-write vs read-only boundary)
     if (this.options.workspaceMount) {
       const normalizedPath = path.resolve(this.options.workspaceMount).replace(/\\/g, '/');
-      dockerArgs.push('-v', `${normalizedPath}:/workspace:rw`);
+      const mountMode = this.options.readOnlyWorkspace ? 'ro' : 'rw';
+      dockerArgs.push('-v', `${normalizedPath}:/workspace:${mountMode}`);
       dockerArgs.push('-w', '/workspace');
     }
 
@@ -108,7 +129,7 @@ export class ContainerSandbox {
       dockerArgs.push('-e', `${k}=${v}`);
     }
 
-    // 9. Base image and command
+    // 10. Base image and command
     dockerArgs.push(this.options.image);
     dockerArgs.push(targetCmd, ...targetArgs);
 

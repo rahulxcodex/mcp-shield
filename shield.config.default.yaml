@@ -11,9 +11,15 @@ sandbox:
   cowEnabled: true
   cowStagingDir: .mcp-shield/cow
   autoCommitOnApproval: true
+  readOnlyWorkspace: false
 
 egress:
   enabled: true
+  allowMode: allow
+  allowPrivateNetworks: false
+  blockLoopback: true
+  blockLinkLocal: true
+  blockMetadataEndpoints: true
   blockedDomains:
     - "*.ngrok.io"
     - "*.evil.com"

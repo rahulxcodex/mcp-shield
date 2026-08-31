@@ -10,14 +10,16 @@ interface VaultEntry {
 
 export class SecretVault {
   private key: Buffer | null;
+  private hmacKey: Buffer | null;
   private readonly algorithm = 'aes-256-gcm';
-  private secrets = new Map<string, VaultEntry>(); // id -> entry
+  private secrets = new Map<string, VaultEntry>(); // keyed HMAC id -> entry
   private tokenToId = new Map<string, string>();
   private readonly MAX_CACHE_SIZE = 5000;
   private readonly DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
 
   constructor() {
     this.key = crypto.randomBytes(32);
+    this.hmacKey = crypto.randomBytes(32);
   }
 
   private encrypt(secret: string): { encrypted: Buffer; iv: Buffer; tag: Buffer } {
@@ -35,6 +37,11 @@ export class SecretVault {
     return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
   }
 
+  private computeKeyedId(secret: string): string {
+    if (!this.hmacKey) throw new Error("Vault is cleared");
+    return crypto.createHmac('sha256', this.hmacKey).update(secret).digest('hex');
+  }
+
   private evictStale(now: number) {
     for (const [id, entry] of this.secrets.entries()) {
       if (entry.expiresAt <= now) {
@@ -48,12 +55,12 @@ export class SecretVault {
     const now = Date.now();
     this.evictStale(now);
 
-    const secretHash = crypto.createHash('sha256').update(secret).digest('hex');
+    const secretKeyedId = this.computeKeyedId(secret);
     
-    if (this.secrets.has(secretHash)) {
-      const entry = this.secrets.get(secretHash)!;
-      this.secrets.delete(secretHash); // Refresh LRU position
-      this.secrets.set(secretHash, entry);
+    if (this.secrets.has(secretKeyedId)) {
+      const entry = this.secrets.get(secretKeyedId)!;
+      this.secrets.delete(secretKeyedId); // Refresh LRU position
+      this.secrets.set(secretKeyedId, entry);
       return entry.token;
     }
 
@@ -69,8 +76,8 @@ export class SecretVault {
     const token = `[[SHIELD_SECRET_${crypto.randomUUID()}]]`;
     const { encrypted, iv, tag } = this.encrypt(secret);
     
-    this.secrets.set(secretHash, { encrypted, iv, tag, token, expiresAt: now + ttlMs });
-    this.tokenToId.set(token, secretHash);
+    this.secrets.set(secretKeyedId, { encrypted, iv, tag, token, expiresAt: now + ttlMs });
+    this.tokenToId.set(token, secretKeyedId);
 
     return token;
   }
@@ -99,6 +106,10 @@ export class SecretVault {
     if (this.key) {
       crypto.randomFillSync(this.key);
       this.key = null;
+    }
+    if (this.hmacKey) {
+      crypto.randomFillSync(this.hmacKey);
+      this.hmacKey = null;
     }
     this.secrets.clear();
     this.tokenToId.clear();

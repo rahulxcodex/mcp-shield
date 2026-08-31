@@ -17,6 +17,16 @@ export interface Lifecycle {
   stop(): Promise<void>;
 }
 
+/**
+ * Explicit Pipeline Representations:
+ * 1. RawSecurityInput: Raw, unmodified input evaluated for AST safety, SSRF/egress, rate limits, and security rules.
+ * 2. SanitizedLogContextInput: Redacted representation for logs, audit trails, and TUI prompt bridge.
+ * 3. RestoredExecutionInput: Selectively restored arguments passed to downstream tools with explicit trust & secret access.
+ */
+export type RawSecurityInput = Record<string, any>;
+export type SanitizedLogContextInput = Record<string, any>;
+export type RestoredExecutionInput = Record<string, any>;
+
 export class ProxyServer implements Lifecycle {
   private child: ChildProcess | null = null;
   private inboundFramer = new JsonRpcStreamFramer();
@@ -127,33 +137,22 @@ export class ProxyServer implements Lifecycle {
 
       if (message.method === 'call_tool' && message.params && message.params.name) {
         const toolName = message.params.name;
-        const args = message.params.arguments || {};
+        
+        // 1. Extract RAW SECURITY INPUT (Evaluated for all security checks)
+        const rawArgs: RawSecurityInput = message.params.arguments || {};
         const registeredTool = this.session.toolRegistry.get(toolName);
         
-        const sanitizedArgsStr = this.session.sanitizer.sanitize(JSON.stringify(args));
-        const sanitizedArgs = JSON.parse(sanitizedArgsStr);
+        // 2. Generate SANITIZED LOG CONTEXT INPUT (For safe logging & TUI)
+        const sanitizedArgsStr = this.session.sanitizer.sanitize(JSON.stringify(rawArgs));
+        const sanitizedArgs: SanitizedLogContextInput = JSON.parse(sanitizedArgsStr);
         
         this.logAndBroadcast({ type: 'tool_call_intercepted', toolName, payload: sanitizedArgs });
 
         if (registeredTool) {
-           const inferred = this.session.toolRegistry.get(toolName)?.inferredCapabilities;
-           // If we're executing this tool, we're observing its inferred capabilities in action
+           const inferred = registeredTool.inferredCapabilities;
            if (inferred) {
-               registeredTool.observedCapabilities.filesystemRead = registeredTool.observedCapabilities.filesystemRead || inferred.filesystemRead;
-               registeredTool.observedCapabilities.filesystemWrite = registeredTool.observedCapabilities.filesystemWrite || inferred.filesystemWrite;
-               registeredTool.observedCapabilities.shellExecution = registeredTool.observedCapabilities.shellExecution || inferred.shellExecution;
-               registeredTool.observedCapabilities.networkAccess = registeredTool.observedCapabilities.networkAccess || inferred.networkAccess;
-               registeredTool.observedCapabilities.processSpawn = registeredTool.observedCapabilities.processSpawn || inferred.processSpawn;
-               registeredTool.observedCapabilities.destructiveOperation = registeredTool.observedCapabilities.destructiveOperation || inferred.destructiveOperation;
-               registeredTool.observedCapabilities.secretAccess = registeredTool.observedCapabilities.secretAccess || inferred.secretAccess;
+             this.session.updateObservedCapabilities(toolName, inferred);
            }
-           
-           // Re-calculate trust with observed behavior
-           registeredTool.trustLevel = CapabilityInferencer.calculateTrustLevel(
-               registeredTool.declaredCapabilities, 
-               registeredTool.inferredCapabilities,
-               registeredTool.observedCapabilities
-           );
         }
 
         const evidence: Evidence[] = [];
@@ -163,20 +162,20 @@ export class ProxyServer implements Lifecycle {
            evidence.push({ detector: 'rate-limiter', finding: `RATE_LIMIT_EXCEEDED: Runaway loop detected for tool '${toolName}'.`, risk: 'CRITICAL' });
         }
 
-        // 0. Honey-Token DLP Check
-        if (this.session.sanitizer.checkHoneyTokens(JSON.stringify(args))) {
+        // 0. Honey-Token DLP Check (Evaluated against RawSecurityInput)
+        if (this.session.sanitizer.checkHoneyTokens(JSON.stringify(rawArgs))) {
            evidence.push({ detector: 'sanitizer', finding: 'HONEY_TOKEN_ACCESSED: LLM attempted to use a decoy credential.', risk: 'CRITICAL' });
         }
         
-        // 0.5 Egress Network Firewall (URL/argument-level check)
-        const egressCheck = this.session.policyEngine.checkEgress(args);
+        // 0.5 Egress Network Firewall (URL/argument-level check against RawSecurityInput)
+        const egressCheck = this.session.policyEngine.checkEgress(rawArgs);
         if (egressCheck.isBlocked) {
-           evidence.push({ detector: 'url-egress-filter', finding: `EGRESS_BLOCKED: Unauthorized URL argument to ${egressCheck.domain}`, risk: 'CRITICAL' });
+           evidence.push({ detector: 'url-egress-filter', finding: `EGRESS_BLOCKED: Unauthorized destination ${egressCheck.domain || 'endpoint'}: ${egressCheck.reason || ''}`, risk: 'CRITICAL' });
         }
 
-        // 2. AST Firewall
+        // 2. AST Firewall (Evaluated against RawSecurityInput commands)
         if (registeredTool?.inferredCapabilities.shellExecution || /bash|shell|terminal|exec|run|do_cmd|cmd/i.test(toolName)) {
-           const cmd = args.command || args.cmd || '';
+           const cmd = rawArgs.command || rawArgs.cmd || '';
            const astResult = this.astAnalyzer.analyzeCommand(cmd);
            if (!astResult.isSafe) {
               const risk = astResult.reason?.includes('ARBITRARY_CODE_EXECUTION') ? 'HIGH' : 'CRITICAL';
@@ -189,11 +188,11 @@ export class ProxyServer implements Lifecycle {
            evidence.push({ detector: 'capability-attestation', finding: 'CAPABILITY_MISMATCH: Inferred capabilities exceed declared capabilities.', risk: 'HIGH' });
         }
 
-        // Evaluate Policy Unified Engine
+        // Evaluate Policy Unified Engine against RawSecurityInput
         const evaluationContext: EvaluationContext = {
            toolName,
            capabilities: registeredTool ? Object.keys(registeredTool.inferredCapabilities).filter((k) => (registeredTool.inferredCapabilities as any)[k]) : undefined,
-           args,
+           args: rawArgs,
            evidence
         };
 
@@ -208,10 +207,9 @@ export class ProxyServer implements Lifecycle {
         const action = securityResult.decision;
 
         const printMarketingBlock = (toolName: string, args: any, risk: string, reason: string) => {
-           const red = '\\x1b[31m';
-           const bold = '\\x1b[1m';
-           const yellow = '\\x1b[33m';
-           const reset = '\\x1b[0m';
+           const red = '\x1b[31m';
+           const bold = '\x1b[1m';
+           const reset = '\x1b[0m';
            
            const cmdStr = (args.command || args.cmd || JSON.stringify(args)).substring(0, 150);
            
@@ -231,17 +229,17 @@ ${reason}
 ${bold}Action:${reset}
 ${red}BLOCKED${reset}
 `;
-           process.stderr.write(msg + '\\n');
+           try { process.stderr.write(msg + '\n'); } catch {}
         };
 
         if (action === 'quarantine') {
-           printMarketingBlock(toolName, args, 'CRITICAL', securityResult.reasonCode);
+           printMarketingBlock(toolName, rawArgs, 'CRITICAL', securityResult.reasonCode);
            this.logAndBroadcast({ type: 'quarantine', toolName, reason: securityResult.reasonCode });
            this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: ${securityResult.reasonCode}`);
            if (this.child) { this.child.kill('SIGKILL'); }
            return;
         } else if (action === 'block') {
-           printMarketingBlock(toolName, args, 'HIGH', securityResult.reasonCode);
+           printMarketingBlock(toolName, rawArgs, 'HIGH', securityResult.reasonCode);
            this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: securityResult.ruleId, reason: securityResult.reasonCode });
            this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: ${securityResult.reasonCode}`);
            return;
@@ -258,8 +256,8 @@ ${red}BLOCKED${reset}
            }
            this.logAndBroadcast({ type: 'user_allowed', toolName, ruleId: securityResult.ruleId });
         } else if (action === 'sandbox') {
-           const targetPath = args.path || args.file || args.filename || args.filepath || args.target;
-           const content = args.content || args.text || args.data;
+           const targetPath = rawArgs.path || rawArgs.file || rawArgs.filename || rawArgs.filepath || rawArgs.target;
+           const content = rawArgs.content || rawArgs.text || rawArgs.data;
            if (targetPath && typeof content === 'string') {
               const staged = this.cowFs.stageWrite(targetPath, content);
               this.logAndBroadcast({ type: 'cow_staged', toolName, payload: staged });
@@ -288,18 +286,32 @@ ${red}BLOCKED${reset}
         }
       }
       
-      // Restore tokenized secrets in inbound tool call parameters before sending to downstream server
+      // 3. RESTORED EXECUTION INPUT: Granular Trust & Capability-Aware Secret Restoration
       if (message.method === 'call_tool') {
          const toolName = message.params.name;
          const registeredTool = this.session.toolRegistry.get(toolName);
          
-         // Trust-aware secret restoration
-         if (registeredTool?.trustLevel === 'TRUSTED') {
+         const isTrusted = registeredTool?.trustLevel === 'TRUSTED';
+         const hasSecretCapability = registeredTool?.declaredCapabilities.secretAccess || registeredTool?.inferredCapabilities.secretAccess;
+         
+         if (isTrusted && hasSecretCapability) {
+            // Restore tokenized secrets only for TRUSTED tools with explicit secret access capability
             const payloadStr = JSON.stringify(message.params);
             const restoredStr = this.session.sanitizer.restore(payloadStr);
             message.params = JSON.parse(restoredStr);
+            this.logAndBroadcast({ type: 'secret_restored', toolName, trustLevel: registeredTool.trustLevel });
+         } else if (isTrusted && !hasSecretCapability) {
+            this.logAndBroadcast({
+              type: 'secret_restoration_skipped',
+              toolName,
+              reason: 'Tool is TRUSTED but does not have declared secretAccess capability; masked tokens retained.'
+            });
          } else {
-            this.logAndBroadcast({ type: 'secret_forwarding_blocked', toolName, reason: `Server trust level is ${registeredTool?.trustLevel || 'UNKNOWN'}, skipping secret restoration.` });
+            this.logAndBroadcast({
+              type: 'secret_restoration_denied',
+              toolName,
+              reason: `Server trust level is ${registeredTool?.trustLevel || 'UNKNOWN'}; masked tokens retained.`
+            });
          }
       }
       
@@ -375,8 +387,6 @@ ${red}BLOCKED${reset}
 
      return safeEnv;
   }
-
-  // stop method removed from here and implemented at the end of the class
 
   public async start(): Promise<number> {
     this.setupFramers();

@@ -115,8 +115,10 @@ With the rapid adoption of AI coding assistants and autonomous agents in tools l
 | Capability | Description |
 | :--- | :--- |
 | 🌲 **AST Shell Command Filter** | Employs `tree-sitter-bash` native C bindings to parse shell commands into Abstract Syntax Trees. Defeats known syntactic evasion classes (`$IFS`, nested quotes, wrapper stacking `sudo env nice`, subshells `$()`, heredocs, pipelines, and fork bombs) with strict POSIX short-flag splitting (`-rf` vs `-exclude`). *(Note: Windows cmd.exe / PowerShell commands use lexical argument switch tokenization).* |
+| 🔍 **Schema-First Capability Inference** | Evaluates tool safety by deeply inspecting JSON Schema parameter properties (`command`, `cmd`, `url`, `path`, `dest`, `api_key`) and formats (`format: uri`, `format: path`) before falling back to tool names or descriptions, preventing evasions via deceptive naming. |
 | 🔑 **Reversible DLP Secret Sanitizer** | Single-pass scanning with high-entropy tokenization (AWS, OpenAI, Anthropic, GitHub PATs, SSH keys) using pre-allocated entropy frequency buffers and ephemeral in-process vault storage. Reversibly tokenizes cloud credentials with lossless roundtrip restoration (evaluated against an internal baseline test suite; independent held-out benchmarks pending). |
-| 🌐 **DNS Rebinding & Egress Proxy Shim** | Environment-level proxy filter (`HTTP_PROXY`/`HTTPS_PROXY`) that performs active IP pinning, blocks SSRF to link-local/private ranges (RFC 1918, `169.254.169.254`, IPv6 `::1`), and enforces domain allowlists/blocklists for standard HTTP/HTTPS SDKs. |
+| 🔒 **Granular Vault Restoration Policy** | Secrets are restored only for `TRUSTED` servers possessing declared `secretAccess` capabilities. Untrusted or suspicious servers receive masked tokens to prevent downstream credential releases. |
+| 🌐 **Multi-IP DNS Rebinding & CIDR Egress Shield** | Environment-level proxy filter (`HTTP_PROXY`/`HTTPS_PROXY`) with numerical CIDR parsing (BigInt) that resolves all A/AAAA records, blocks SSRF to link-local/private ranges (RFC 1918, `169.254.169.254`, IPv6 `::1`, `fc00::/7`, `fe80::/10`, and IPv4-mapped IPv6 `::ffff:127.0.0.1`), and enforces strict IP pinning. |
 | 📂 **Copy-on-Write (COW) Staging** | Intercepts file writes and redirects modifications to an isolated staging directory (`.mcp-shield/cow`), generating diffs for operator review before committing to disk. |
 | 📦 **Container Sandbox Isolation (Optional)** | Hardening mode: spawns untrusted MCP servers in ephemeral Docker containers with dropped capabilities (`--cap-drop=ALL`), `network=none`, and read-only root filesystems (opt-in; host execution with AST/DLP filtering is default for developer ergonomics). |
 | 🛡️ **Client Schema Drift Protection** | Pinned, CI-tested adapters for **Claude Desktop**, **Cursor IDE**, **Windsurf**, and **Cline** that guarantee safe wrapping across client updates with automatic rollback backups. |
@@ -182,12 +184,13 @@ mcp-shield wrap -- python -m mcp_server_git
 
 ## ⚡ Performance & Empirical Accuracy
 
-MCP-Shield is built for ultra-low latency and empirically grounded security:
+MCP-Shield is built for ultra-low latency, zero LLM hot-path overhead, and empirically grounded security:
 
 - **Hot-Path Interception Overhead**: `~ 150 µs` (p50 median) — adds `< 0.04%` latency to LLM tool calls
 - **AST Parser Throughput**: `> 7,500 ops/sec` (< 130 µs per command)
+- **Token Efficiency**: `0%` added tokens for benign output; `-24.2%` prompt token compression on credentials via DLP; `-67.3%` context savings by blocking runaway error stack traces
 - **DLP Sanitizer Coverage**: `100%` baseline coverage on internal synthetic test corpus (1,780 lines; independent held-out benchmarks pending)
-- **DLP Scanner Speed**: `> 200,000 lines/sec` with pre-allocated entropy frequency buffers
+- **DLP Scanner Speed**: `> 115,000 lines/sec` with pre-allocated entropy frequency buffers
 - **Rate Limiting & Policy Evaluation**: `< 5 µs` (> 200,000 ops/sec)
 
 See [BENCHMARKS.md](BENCHMARKS.md) for reproducible benchmark runs, methodology disclosures, category breakdowns, and latency percentiles.
@@ -204,11 +207,17 @@ Security tools must be validated against hostile, adversarial pressure rather th
 - ⚠️ **Zero-Telemetry False Positive Reporting**: Report benign collisions via the [False Positive Template](.github/ISSUE_TEMPLATE/false_positive.yml).
 
 ```bash
+# Run the complete test suite (522 tests across 21 suites)
+npm test
+
 # Run the adversarial bypass corpus regression suite
 npx jest tests/security-corpus/bypass-corpus.test.ts
 
 # Run fast-check property-based tests
 npx jest tests/security-corpus/property-based.test.ts
+
+# Run token and context overhead benchmark
+npm run bench:tokens
 
 # Run the performance regression CI gate
 npm run test:perf-gate
@@ -244,4 +253,3 @@ MCP-Shield is an independent, community-driven open-source project and is not af
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
-

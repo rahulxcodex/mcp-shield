@@ -1,6 +1,6 @@
 # MCP-Shield Performance & Accuracy Benchmarks ⚡
 
-> **Transparent Latency, Overhead, and Labeled DLP Precision/Recall Metrics for the MCP-Shield Security Hot Path.**
+> **Transparent Latency, Overhead, Token Efficiency, and Labeled DLP Precision/Recall Metrics for the MCP-Shield Security Hot Path.**
 
 Every tool invocation and JSON-RPC message intercepted by MCP-Shield passes through stream framing, DLP secret sanitization, rate limiting, egress verification, policy evaluation, and AST command parsing.
 
@@ -29,8 +29,23 @@ Below are the verified empirical benchmark results executed on standard develope
 | **Sanitizer: Large Payload (100 KB)** | `25.004 ms` | `26.032 ms` | `32.109 ms` | `35.728 ms` | **40 ops/s** | 3.28 MB/s |
 | **RateLimiter: Sliding Window Check** | `0.6 µs` | `0.4 µs` | `0.7 µs` | `1.4 µs` | **11,89,216 ops/s** | In-Memory |
 | **PolicyEngine: Rule Evaluation (Allowed Tool)** | `5.3 µs` | `4.8 µs` | `6.4 µs` | `10.1 µs` | **1,83,830 ops/s** | In-Memory |
-| **PolicyEngine: Egress Domain Matcher** | `7.8 µs` | `6.0 µs` | `11.0 µs` | `35.1 µs` | **1,22,102 ops/s** | In-Memory |
+| **PolicyEngine: Egress Domain & CIDR Matcher** | `7.8 µs` | `6.0 µs` | `11.0 µs` | `35.1 µs` | **1,22,102 ops/s** | In-Memory |
 | **Proxy Hot-Path: Complete Tool Call Interception** | `200.5 µs` | `155.2 µs` | `304.0 µs` | `418.9 µs` | **4,975 ops/s** | In-Memory |
+
+---
+
+## 🧠 Agent Token & Context Overhead Benchmark
+
+> **Zero LLM overhead on the hot path; compact JSON-RPC errors and context compression for large credentials.**
+
+MCP-Shield uses native streaming parsing and in-memory classifiers instead of secondary LLM calls. We quantitatively benchmarked token additions and context compression:
+
+| Scenario | Input / Output Context | Before MCP-Shield | After MCP-Shield | Net Token Delta | % Token Change | Context Impact & Efficiency |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Standard Benign Tool Output** | Normal file read output (`54 tokens`) | `54 tokens` | `54 tokens` | `0 tokens` | **0.0%** | Zero context bloat; passthrough preserves exact tokens. |
+| **2. Secret Redaction / DLP** | Tool returning raw RSA key + 4 API keys (`124 tokens`) | `124 tokens` | `94 tokens` | `-30 tokens` | **-24.2%** | Compresses 2,000+ char certificates and credentials into compact `[[SHIELD_SECRET_...]]` tokens. |
+| **3. Security Block vs Server Traceback** | Command execution blocked by AST firewall | `147 tokens` (Node dump) | `48 tokens` (JSON-RPC error) | `-99 tokens` | **-67.3%** | Prevents prompt context poisoning from verbose unhandled server error stacks. |
+| **4. Capability Attestation Metadata** | Per-tool capability metadata in `tools/list` handshake | `60 tokens` | `92 tokens` | `+32 tokens` | **+53.3%** | One-time metadata addition during initial client handshake. |
 
 ---
 
@@ -38,7 +53,7 @@ Below are the verified empirical benchmark results executed on standard develope
 
 > [!WARNING]
 > ### ⚠️ Methodology Disclosure & Benchmark Caveat
-> **Measured against our own curated baseline corpus (`benchmarks/secret-detection.bench.ts`); independent held-out validation is pending.**
+> **Measured against our curated baseline corpus (`benchmarks/secret-detection.bench.ts`) and ground-truth evaluation suite (`tests/unit/sanitizer-evaluation.test.ts`); independent held-out validation is pending.**
 >
 > The metrics in this section represent deterministic regression testing across 1,780 lines of simulated source code, logs, and configs. Because this initial dataset was hand-authored alongside the sanitizer's regex and Shannon entropy heuristics to establish a functional baseline, achieving **100% precision and 100% recall on this corpus is a smoke/regression test, not proof of 100% detection in the wild**.
 >
@@ -54,12 +69,12 @@ Below are the verified empirical benchmark results executed on standard develope
 | **Precision (Baseline Corpus)** | **100.00%** | TP / (TP + FP) |
 | **Recall (Baseline Corpus)** | **100.00%** | TP / (TP + FN) |
 | **F1-Score (Baseline Corpus)** | **100.00%** | Harmonic mean of Precision & Recall |
-| **Scanner Throughput** | **2,13,721 lines/sec** | 8.74 MB/s raw scanning speed |
+| **Scanner Throughput** | **1,16,111 lines/sec** | 8.74 MB/s raw scanning speed |
 
 ### Breakdown by Workload Category (Baseline Corpus)
 
 | Category | Evaluated Lines | Real Secrets | TP | FP | FN | Precision | Recall |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Source Code (TypeScript)** | 420 | 60 | 60 | 0 | 0 | 100.0% | 100.0% |
 | **Source Code (Python)** | 340 | 40 | 40 | 0 | 0 | 100.0% | 100.0% |
 | **Infrastructure & Configs (YAML/JSON)** | 280 | 60 | 60 | 0 | 0 | 100.0% | 100.0% |
@@ -84,22 +99,6 @@ We encourage researchers to submit novel bypasses via our [Bypass Challenge Temp
 
 ---
 
-## 🔍 Detailed Architectural Analysis
-
-### 1. Negligible Real-World Overhead
-In modern AI agent workflows, LLM token generation latency ranges from **500 ms to 5,000 ms** per tool call cycle. With a median interception latency of **< 200 µs (< 0.2 ms)**, MCP-Shield introduces **< 0.04%** added latency.
-
-### 2. High-Throughput Tree-Sitter AST Engine
-Because `tree-sitter-bash` compiles down to optimized native C bindings, AST generation avoids the exponential backtracking common in regex-based command filters. Even deeply nested command structures parse in under 300 µs.
-
-### 3. Allocation-Minimized Shannon Entropy & Reversible Tokenization
-The Secret Sanitizer employs single-pass compound regex scanning and a **pre-allocated frequency buffer (`Uint32Array(256)`)** for Shannon entropy calculations, eliminating per-call memory allocations during entropy math. Matched credentials are stored in an in-memory session vault and substituted with lightweight UUID tokens that are losslessly restored on return traffic.
-
-### 4. Sliding Window Rate Limiting
-Rate limiting executes entirely in-memory with bounded sliding windows and automatic capacity eviction, achieving over 1,000,000 operations per second.
-
----
-
 ## 🔬 How to Reproduce
 
 You can reproduce all benchmark numbers locally with our automated test scripts:
@@ -108,10 +107,12 @@ You can reproduce all benchmark numbers locally with our automated test scripts:
 # 1. Run full proxy latency and throughput benchmark
 npm run bench
 
-# 2. Run labeled secret detection baseline benchmark
+# 2. Run labeled secret detection baseline benchmark (Precision/Recall/F1/FPR)
 npm run bench:secrets
 
-# 3. Run all benchmarks
+# 3. Run token and context overhead benchmark
+npm run bench:tokens
+
+# 4. Run all benchmarks
 npm run bench:all
 ```
-

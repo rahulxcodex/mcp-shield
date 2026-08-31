@@ -53,6 +53,31 @@ export class ProtectCommand {
     return path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
   }
 
+  /**
+   * Deterministically resolves the mcp-shield executable entry point.
+   * Handles local development, global npm installs, and npx invocations reliably.
+   */
+  public static resolveShieldExecutable(): string {
+    const candidatePaths = [
+      path.resolve(__dirname, '../../../bin/mcp-shield.js'),
+      path.resolve(__dirname, '../../bin/mcp-shield.js'),
+      path.resolve(__dirname, '../bin/mcp-shield.js'),
+      path.resolve(__dirname, '../../dist/index.js')
+    ];
+
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        try {
+          return fs.realpathSync(p);
+        } catch {
+          return p;
+        }
+      }
+    }
+
+    return 'mcp-shield';
+  }
+
   public static validateConfigSchema(config: any): { isValid: boolean; error?: string } {
     if (!config || typeof config !== 'object') {
       return { isValid: false, error: 'Config root is not a valid JSON object' };
@@ -109,7 +134,7 @@ export class ProtectCommand {
       return result;
     }
 
-    const shieldScript = shieldScriptPath || (process.argv ? process.argv[1] : 'mcp-shield');
+    const shieldScript = shieldScriptPath || this.resolveShieldExecutable();
 
     if (config.mcpServers && Object.keys(config.mcpServers).length > 0) {
       for (const [serverName, serverDetails] of Object.entries<McpServerEntry>(config.mcpServers)) {

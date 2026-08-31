@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
-import { RegisteredTool, CapabilityInferencer, ToolCapabilities } from '../security/capabilities';
+import { RegisteredTool, ToolProfile, CapabilityInferencer, ToolCapabilities } from '../security/capabilities';
 import { PolicyEngine, ShieldConfig } from '../security/policy-engine';
 import { SecretSanitizer } from '../security/sanitizer';
 import { RateLimiter } from '../security/rate-limiter';
@@ -90,32 +90,45 @@ export class SecuritySession {
       throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool '${toolName}' changed its schema dynamically.`);
     }
 
-    const inferredCapabilities = CapabilityInferencer.infer(toolName, schema, description);
-    const declaredCapabilities = CapabilityInferencer.getDeclared(schema);
-    const trustLevel = CapabilityInferencer.calculateTrustLevel(declaredCapabilities, inferredCapabilities);
-    
-    const registered: RegisteredTool = {
-      serverId: this.serverIdentity,
+    const profile = CapabilityInferencer.createProfile(
+      this.serverIdentity,
       toolName,
       description,
-      inputSchema: schema,
-      schemaHash: hash,
-      declaredCapabilities,
-      inferredCapabilities,
-      observedCapabilities: existing ? existing.observedCapabilities : {
-        filesystemRead: false,
-        filesystemWrite: false,
-        shellExecution: false,
-        networkAccess: false,
-        processSpawn: false,
-        destructiveOperation: false,
-        secretAccess: false
-      },
-      trustLevel,
-      firstSeen: existing ? existing.firstSeen : Date.now()
+      schema,
+      existing
+    );
+
+    this.toolRegistry.set(toolName, profile);
+    return profile;
+  }
+
+  public updateObservedCapabilities(toolName: string, observed: Partial<ToolCapabilities>): RegisteredTool | undefined {
+    const existing = this.toolRegistry.get(toolName);
+    if (!existing) return undefined;
+
+    const newObserved: ToolCapabilities = {
+      filesystemRead: existing.observedCapabilities.filesystemRead || !!observed.filesystemRead,
+      filesystemWrite: existing.observedCapabilities.filesystemWrite || !!observed.filesystemWrite,
+      shellExecution: existing.observedCapabilities.shellExecution || !!observed.shellExecution,
+      networkAccess: existing.observedCapabilities.networkAccess || !!observed.networkAccess,
+      processSpawn: existing.observedCapabilities.processSpawn || !!observed.processSpawn,
+      destructiveOperation: existing.observedCapabilities.destructiveOperation || !!observed.destructiveOperation,
+      secretAccess: existing.observedCapabilities.secretAccess || !!observed.secretAccess
     };
 
-    this.toolRegistry.set(toolName, registered);
-    return registered;
+    const trustLevel = CapabilityInferencer.calculateTrustLevel(
+      existing.declaredCapabilities,
+      existing.inferredCapabilities,
+      newObserved
+    );
+
+    const updatedProfile: ToolProfile = Object.freeze({
+      ...existing,
+      observedCapabilities: newObserved,
+      trustLevel
+    });
+
+    this.toolRegistry.set(toolName, updatedProfile);
+    return updatedProfile;
   }
 }

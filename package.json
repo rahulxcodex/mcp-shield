@@ -32,6 +32,7 @@
     "fuzz": "ts-node scripts/fuzz.ts",
     "bench": "ts-node benchmarks/proxy-latency.bench.ts",
     "bench:secrets": "ts-node benchmarks/secret-detection.bench.ts",
+    "bench:tokens": "ts-node benchmarks/token-overhead.bench.ts",
     "bench:all": "ts-node benchmarks/proxy-latency.bench.ts",
     "prepack": "npm run build"
   },

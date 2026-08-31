@@ -37,8 +37,17 @@ export class COWFileSystem {
     let identity: FileIdentity = { ino: 0, dev: 0, mode: 0, exists: false };
     
     if (fs.existsSync(resolvedPath)) {
+      const lstat = fs.lstatSync(resolvedPath);
+      // STRICT SYMLINK INVARIANT: Refuse symlink targets entirely for COW writes
+      if (lstat.isSymbolicLink()) {
+        throw new Error(`COW SECURITY VIOLATION: Symlink target "${originalPath}" is forbidden for copy-on-write staging.`);
+      }
+
       canonicalTarget = fs.realpathSync(resolvedPath);
       const stat = fs.lstatSync(canonicalTarget);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`COW SECURITY VIOLATION: Canonical target is a symlink: "${canonicalTarget}".`);
+      }
       identity = { ino: stat.ino, dev: stat.dev, mode: stat.mode, exists: true };
     }
     
@@ -77,22 +86,29 @@ export class COWFileSystem {
         throw new Error('COW TOCTOU DETECTED: Original file was deleted before commit.');
       }
       const currentStat = fs.lstatSync(absoluteOriginalPath);
+      if (currentStat.isSymbolicLink()) {
+        throw new Error('COW TOCTOU DETECTED: Target was replaced with a symlink before commit.');
+      }
       if (currentStat.ino !== originalIdentity.ino || currentStat.dev !== originalIdentity.dev) {
-        throw new Error('COW TOCTOU DETECTED: File identity changed (symlink swap or replacement).');
+        throw new Error('COW TOCTOU DETECTED: File identity changed (inode swap or file replacement).');
       }
     } else if (originalIdentity && !originalIdentity.exists) {
       if (fs.existsSync(absoluteOriginalPath)) {
         throw new Error('COW TOCTOU DETECTED: File was created before commit by another process.');
       }
-      // Ensure parent directory is safe and inside workspace
+      // Ensure parent directory is safe, exists, and is strictly inside workspace
       const parentDir = path.dirname(absoluteOriginalPath);
       if (fs.existsSync(parentDir)) {
-          const canonicalParent = fs.realpathSync(parentDir);
-          const rel = path.relative(this.rootDir, canonicalParent);
-          const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
-          if (!isInside) {
-             throw new Error('SANDBOX ESCAPE: Parent directory resolves outside workspace root.');
-          }
+        const parentLstat = fs.lstatSync(parentDir);
+        if (parentLstat.isSymbolicLink()) {
+          throw new Error('COW TOCTOU DETECTED: Parent directory is a symlink.');
+        }
+        const canonicalParent = fs.realpathSync(parentDir);
+        const rel = path.relative(this.rootDir, canonicalParent);
+        const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
+        if (!isInside) {
+          throw new Error('SANDBOX ESCAPE: Parent directory resolves outside workspace root.');
+        }
       }
     }
     
@@ -105,12 +121,21 @@ export class COWFileSystem {
 
     const newContent = fs.readFileSync(stagingPath);
     
-    // Atomic file replacement via temp file
+    // Atomic file replacement via temp file with immediate identity re-verification
     const tempFile = `${absoluteOriginalPath}.tmp.${crypto.randomBytes(4).toString('hex')}`;
     const fd = fs.openSync(tempFile, 'wx', originalIdentity?.exists ? originalIdentity.mode : 0o644);
     fs.writeSync(fd, newContent);
     fs.fsyncSync(fd);
     fs.closeSync(fd);
+
+    // Final pre-rename validation
+    if (fs.existsSync(absoluteOriginalPath)) {
+      const finalStat = fs.lstatSync(absoluteOriginalPath);
+      if (finalStat.isSymbolicLink()) {
+        fs.unlinkSync(tempFile);
+        throw new Error('COW TOCTOU DETECTED: Target was replaced with a symlink immediately before rename.');
+      }
+    }
     
     fs.renameSync(tempFile, absoluteOriginalPath);
     

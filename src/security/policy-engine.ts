@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { z } from 'zod';
 import { SecurityResult } from './types';
+import { IpClassifier, EgressSecurityConfig } from './ip-utils';
 
 export const PolicyRuleSchema = z.object({
   id: z.string(),
@@ -36,16 +37,17 @@ export const ShieldConfigSchema = z.object({
     cowEnabled: z.boolean(),
     cowStagingDir: z.string(),
     autoCommitOnApproval: z.boolean(),
+    readOnlyWorkspace: z.boolean().optional(),
   }),
   egress: z.object({
     enabled: z.boolean(),
     allowMode: z.enum(['allow', 'deny']).default('allow'),
     allowedDomains: z.array(z.string()).optional(),
     blockedDomains: z.array(z.string()).optional(),
-    allowPrivateNetworks: z.boolean().default(true),
-    blockLoopback: z.boolean().default(false),
-    blockLinkLocal: z.boolean().default(false),
-    blockMetadataEndpoints: z.boolean().default(false)
+    allowPrivateNetworks: z.boolean().default(false),
+    blockLoopback: z.boolean().default(true),
+    blockLinkLocal: z.boolean().default(true),
+    blockMetadataEndpoints: z.boolean().default(true)
   }),
   rules: z.array(PolicyRuleSchema),
   audit: z.object({
@@ -71,29 +73,103 @@ export interface EvaluationContext {
   evidence: Evidence[];
 }
 
+interface CompiledRule {
+  rule: PolicyRule;
+  toolMatchers?: RegExp[];
+  pathMatchers?: RegExp[];
+  disallowedCommands?: RegExp[];
+}
+
+function escapeRegex(pattern: string): string {
+  return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function compileGlobToRegex(glob: string): RegExp {
+  const placeholderDoubleStar = '___DOUBLE_STAR___';
+  const placeholderSingleStar = '___SINGLE_STAR___';
+  const placeholderQuestion = '___QUESTION_MARK___';
+
+  let str = glob
+    .replace(/\*\*/g, placeholderDoubleStar)
+    .replace(/\*/g, placeholderSingleStar)
+    .replace(/\?/g, placeholderQuestion);
+
+  str = str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  str = str
+    .replace(new RegExp(placeholderDoubleStar, 'g'), '.*')
+    .replace(new RegExp(placeholderSingleStar, 'g'), '.*')
+    .replace(new RegExp(placeholderQuestion, 'g'), '.');
+
+  return new RegExp(`^${str}$`, 'i');
+}
+
 export class PolicyEngine {
   private config: ShieldConfig;
+  private compiledRules: CompiledRule[] = [];
 
   constructor(config?: ShieldConfig) {
     if (config) {
       this.config = config;
     } else {
-      // Fallback for tests only
+      // Safe Hardened Defaults
       this.config = {
         version: "1.0",
         profile: "developer",
         redaction: { enabled: true, maskStyle: "token", highEntropyCheck: true, entropyThreshold: 4.5 },
-        sandbox: { cowEnabled: true, cowStagingDir: ".mcp-shield/cow", autoCommitOnApproval: true },
-        egress: { enabled: true, allowMode: "allow", blockedDomains: ["*.ngrok.io", "*.evil.com"], allowPrivateNetworks: true, blockLoopback: false, blockLinkLocal: false, blockMetadataEndpoints: false },
-        rules: [{ id: "allow-all-safe", name: "Allow safe commands", priority: 10, riskLevel: "LOW", action: "allow" }, { id: "block-destructive-rm", name: "Block Recursive Root Deletion", priority: 100, targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }],
+        sandbox: { cowEnabled: true, cowStagingDir: ".mcp-shield/cow", autoCommitOnApproval: true, readOnlyWorkspace: false },
+        egress: {
+          enabled: true,
+          allowMode: "allow",
+          blockedDomains: ["*.ngrok.io", "*.evil.com"],
+          allowPrivateNetworks: false,
+          blockLoopback: true,
+          blockLinkLocal: true,
+          blockMetadataEndpoints: true
+        },
+        rules: [
+          { id: "allow-all-safe", name: "Allow safe commands", priority: 10, riskLevel: "LOW", action: "allow" },
+          { id: "block-destructive-rm", name: "Block Recursive Root Deletion", priority: 100, targetTools: ["*bash*", "*terminal*", "*exec*"], riskLevel: "CRITICAL", action: "block" }
+        ],
         audit: { enabled: true, logDir: ".mcp-shield/logs", tamperEvidentHashing: true }
       };
     }
+
+    this.compileRules();
+  }
+
+  private compileRules(): void {
+    this.compiledRules = this.config.rules.map(rule => {
+      const compiled: CompiledRule = { rule };
+
+      if (rule.targetTools) {
+        compiled.toolMatchers = rule.targetTools.map(t => {
+          if (t.includes('*') || t.includes('?')) {
+            return compileGlobToRegex(t);
+          }
+          return new RegExp(`^${escapeRegex(t)}$`, 'i');
+        });
+      }
+
+      if (rule.matchers?.pathMatches?.forbiddenPaths) {
+        compiled.pathMatchers = rule.matchers.pathMatches.forbiddenPaths.map(p => {
+          const normalizedRule = this.normalizePathForMatching(p);
+          return compileGlobToRegex(normalizedRule);
+        });
+      }
+
+      if (rule.matchers?.astRules?.disallowedCommands) {
+        compiled.disallowedCommands = rule.matchers.astRules.disallowedCommands.map(cmd => {
+          return new RegExp(`^${escapeRegex(cmd)}$`, 'i');
+        });
+      }
+
+      return compiled;
+    });
   }
 
   public start(): void {
-    // start() can stay empty if we don't watch files here anymore, 
-    // or we can remove it. For now, just keep it a no-op to satisfy the interface.
+    // Satisfy interface
   }
 
   public getConfig(): ShieldConfig {
@@ -105,71 +181,52 @@ export class PolicyEngine {
     if (!config.egress?.enabled) return { isBlocked: false };
 
     const argStr = JSON.stringify(args);
-    const urls: URL[] = [];
+    const candidateHosts: string[] = [];
     
-    // Extract anything that looks like a URL
-    const urlRegex = /(?:https?|ftp):\/\/[^\s"'<>]+/gi;
+    // Extract anything that looks like a URL or raw hostname/IP
+    const urlRegex = /(?:https?|ftp|wss?):\/\/([^\s"'<>\/]+)/gi;
     let match;
     while ((match = urlRegex.exec(argStr)) !== null) {
-      try {
-        urls.push(new URL(match[0]));
-      } catch {
-        // Unparseable URL
-      }
+      const hostPort = match[1];
+      const host = hostPort.split(':')[0].replace(/^\[|\]$/g, '');
+      if (host) candidateHosts.push(host);
     }
 
-    // SSRF and Domain Checks
-    for (const url of urls) {
-      const hostname = url.hostname.toLowerCase();
-      
-      const isLoopback = /^(localhost|127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1|0x7f000001)$/.test(hostname) || hostname.endsWith('.localhost');
-      if (config.egress.blockLoopback && isLoopback) {
-         return { isBlocked: true, domain: hostname, reason: 'Loopback address blocked' };
+    // Also look for specific url or host fields in arguments
+    const extractHostFields = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return;
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === 'string') {
+          const lowerK = k.toLowerCase();
+          if (['url', 'uri', 'endpoint', 'host', 'hostname', 'domain'].includes(lowerK)) {
+            try {
+              if (v.includes('://')) {
+                const u = new URL(v);
+                candidateHosts.push(u.hostname);
+              } else {
+                candidateHosts.push(v.split(':')[0].replace(/^\[|\]$/g, ''));
+              }
+            } catch {}
+          }
+        } else if (typeof v === 'object') {
+          extractHostFields(v);
+        }
       }
-      
-      const isLinkLocal = /^169\.254\.\d+\.\d+$/.test(hostname);
-      if (config.egress.blockLinkLocal && isLinkLocal) {
-         return { isBlocked: true, domain: hostname, reason: 'Link-local address blocked' };
-      }
+    };
+    extractHostFields(args);
 
-      if (config.egress.blockMetadataEndpoints && hostname === '169.254.169.254') {
-         return { isBlocked: true, domain: hostname, reason: 'Metadata endpoint blocked' };
-      }
+    // Evaluate all candidates through IpClassifier
+    for (const host of candidateHosts) {
+      const cleanHost = host.trim().toLowerCase();
+      if (!cleanHost) continue;
 
-      const isPrivate = /^(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+|fd[0-9a-f]{2}:.+|fc[0-9a-f]{2}:.+)$/.test(hostname);
-      if (!config.egress.allowPrivateNetworks && isPrivate) {
-         return { isBlocked: true, domain: hostname, reason: 'Private network blocked' };
-      }
-
-      if (config.egress.allowMode === 'deny') {
-         let allowed = false;
-         if (config.egress.allowedDomains) {
-            allowed = config.egress.allowedDomains.some(d => {
-               const lowerAllowed = d.toLowerCase();
-               if (lowerAllowed.startsWith('*.')) {
-                 const apex = lowerAllowed.slice(2);
-                 return hostname === apex || hostname.endsWith('.' + apex);
-               }
-               return hostname === lowerAllowed;
-            });
-         }
-         if (!allowed) {
-            return { isBlocked: true, domain: hostname, reason: 'Domain not in allowed list' };
-         }
-      } else {
-         if (config.egress.blockedDomains) {
-            const blocked = config.egress.blockedDomains.some(d => {
-               const lowerBlocked = d.toLowerCase();
-               if (lowerBlocked.startsWith('*.')) {
-                 const apex = lowerBlocked.slice(2);
-                 return hostname === apex || hostname.endsWith('.' + apex);
-               }
-               return hostname === lowerBlocked;
-            });
-            if (blocked) {
-               return { isBlocked: true, domain: hostname, reason: 'Domain blocked' };
-            }
-         }
+      const check = IpClassifier.checkEgressViolation(cleanHost, config.egress as EgressSecurityConfig);
+      if (check.isBlocked) {
+        return {
+          isBlocked: true,
+          domain: cleanHost,
+          reason: check.reason || 'Blocked by MCP-Shield Egress Policy'
+        };
       }
     }
     
@@ -177,7 +234,7 @@ export class PolicyEngine {
   }
 
   public close(): void {
-    // No-op since we removed watcher
+    // No-op
   }
 
   private normalizePathForMatching(rawPath: string): string {
@@ -211,10 +268,16 @@ export class PolicyEngine {
     return paths;
   }
 
+  /**
+   * Formalized Hierarchical Policy Evaluation:
+   * 1. CRITICAL DETECTORS (Honey-tokens, Rate-limits, AST Shell Injection, Egress Violations)
+   * 2. EXPLICIT CAPABILITY RULES & CONSTRAINTS
+   * 3. TOOL-SPECIFIC RULES, PATH MATCHERS & DISALLOWED COMMANDS (Evaluated in strict priority order)
+   * 4. HIGH-RISK EVIDENCE & SUSPICIOUS ATTESTATION (Escalates allow -> sandbox/prompt)
+   * 5. DEFAULT FAIL-CLOSED
+   */
   public evaluate(context: EvaluationContext): SecurityResult {
-    const config = this.getConfig();
-
-    // Any critical evidence immediately causes a quarantine or block
+    // PHASE 1: CRITICAL DETECTORS
     const criticalEvidence = context.evidence.find(e => e.risk === 'CRITICAL');
     if (criticalEvidence) {
       return {
@@ -238,18 +301,14 @@ export class PolicyEngine {
     let highestSeverity = -1;
     let highestPriority = -1;
 
-    for (const rule of config.rules) {
+    // PHASE 2 & 3: TOOL-SPECIFIC & CAPABILITY POLICY RULES
+    for (const compiled of this.compiledRules) {
+      const rule = compiled.rule;
       let isTarget = false;
 
-      // Check tool names
-      if (rule.targetTools) {
-        isTarget = rule.targetTools.some(t => {
-          if (t.includes('*')) {
-            const regex = new RegExp('^' + t.replace(/\*/g, '.*') + '$', 'i');
-            return regex.test(context.toolName);
-          }
-          return t.toLowerCase() === context.toolName.toLowerCase();
-        });
+      // Check tool names via precompiled regexes
+      if (compiled.toolMatchers) {
+        isTarget = compiled.toolMatchers.some(regex => regex.test(context.toolName));
       } else if (rule.targetCapabilities && context.capabilities) {
         // Check capabilities if targetTools is omitted
         isTarget = rule.targetCapabilities.some(c => context.capabilities?.includes(c));
@@ -262,19 +321,25 @@ export class PolicyEngine {
         let ruleMatches = true;
         let reasonCode = 'RULE_MATCH';
 
-        if (rule.matchers?.pathMatches) {
+        // Check AST disallowed commands if defined on the rule
+        if (compiled.disallowedCommands && compiled.disallowedCommands.length > 0) {
+          const rawCmd = context.args.command || context.args.cmd || '';
+          const isDisallowed = compiled.disallowedCommands.some(regex => regex.test(rawCmd));
+          if (isDisallowed) {
+            ruleMatches = true;
+            reasonCode = 'DISALLOWED_COMMAND_MATCH';
+          } else {
+            ruleMatches = false;
+          }
+        }
+
+        // Check path matchers if defined on the rule
+        if (ruleMatches && compiled.pathMatchers && compiled.pathMatchers.length > 0) {
           const candidatePaths = this.extractCandidatePaths(context.args);
           let pathMatched = false;
           for (const rawTarget of candidatePaths) {
             const normalizedTarget = this.normalizePathForMatching(rawTarget);
-            const isForbidden = rule.matchers.pathMatches.forbiddenPaths.some(p => {
-               const normalizedRule = this.normalizePathForMatching(p);
-               const regexStr = normalizedRule
-                 .replace(/\./g, '\\.')
-                 .replace(/\*\*/g, '.*')
-                 .replace(/\*/g, '[^/]*');
-               return new RegExp(`^${regexStr}$`, 'i').test(normalizedTarget);
-            });
+            const isForbidden = compiled.pathMatchers.some(regex => regex.test(normalizedTarget));
             if (isForbidden) {
                pathMatched = true;
                reasonCode = 'PATH_FORBIDDEN';
@@ -282,14 +347,16 @@ export class PolicyEngine {
             }
           }
           if (!pathMatched) {
-             ruleMatches = false; // Required matcher didn't match
+             ruleMatches = false; // Required path matcher didn't match
           }
         }
 
         if (ruleMatches) {
           let effectiveAction = rule.action;
+          
+          // PHASE 4: HIGH-RISK EVIDENCE ESCALATION
           if (highEvidence && effectiveAction === 'allow') {
-             effectiveAction = 'sandbox'; // Escalate
+             effectiveAction = 'sandbox'; // Escalate allow to sandbox
           }
 
           const severity = actionSeverity[effectiveAction];
@@ -313,7 +380,7 @@ export class PolicyEngine {
        return finalDecision;
     }
 
-    // Default hardened mode: Fail-closed (Allowlist first)
+    // PHASE 5: DEFAULT FAIL-CLOSED
     return { decision: 'block', detector: 'policy-engine', reasonCode: 'DEFAULT_DENY_NO_CAPABILITY_MATCH' };
   }
 }
