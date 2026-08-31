@@ -4,6 +4,7 @@ import { ReplayCommand } from './cli/commands/replay';
 import { InstallCommand } from './cli/commands/install';
 import { ScanCommand } from './cli/commands/scan';
 import { FixCommand } from './cli/commands/fix';
+import { StatsCommand } from './cli/commands/stats';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -13,6 +14,9 @@ if (command === 'protect') {
   process.exit(0);
 } else if (command === 'replay') {
   ReplayCommand.run(args[1]);
+  process.exit(0);
+} else if (command === 'stats' || command === 'report') {
+  StatsCommand.run(args[1]);
   process.exit(0);
 } else if (command === 'install') {
   InstallCommand.run();
@@ -43,6 +47,7 @@ Usage:
   mcp-shield scan                 Scan your MCP servers for security vulnerabilities.
   mcp-shield fix                  Automatically generate and apply security policies.
   mcp-shield protect              Auto-discover and protect MCP clients.
+  mcp-shield stats [log_file]     View shareable security activity & blocked attacks report.
   mcp-shield replay <log_file>    Replay and verify tamper-evident audit logs.
   mcp-shield wrap -- <cmd> [args] Wrap an MCP server with the security gateway.
   `);
