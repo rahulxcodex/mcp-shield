@@ -36,21 +36,21 @@ export class NetworkEgressProxy {
     return this.port;
   }
 
-  private async isAllowed(hostname: string): Promise<boolean> {
+  private async isAllowed(hostname: string): Promise<string | null> {
     try {
       // Resolve IP to prevent DNS rebinding
       const { address } = await lookup(hostname);
       
       // We can use a mocked args object to pass to checkEgress
       const egressCheck = this.policyEngine.checkEgress({ url: `http://${address}` });
-      if (egressCheck.isBlocked) return false;
+      if (egressCheck.isBlocked) return null;
 
       const domainCheck = this.policyEngine.checkEgress({ url: `http://${hostname}` });
-      if (domainCheck.isBlocked) return false;
+      if (domainCheck.isBlocked) return null;
 
-      return true;
+      return address;
     } catch {
-      return false; // Block if DNS fails
+      return null; // Block if DNS fails
     }
   }
 
@@ -63,20 +63,24 @@ export class NetworkEgressProxy {
     
     try {
       const url = new URL(req.url);
-      const allowed = await this.isAllowed(url.hostname);
-      if (!allowed) {
+      const resolvedIp = await this.isAllowed(url.hostname);
+      if (!resolvedIp) {
         res.writeHead(403);
         res.end('Blocked by MCP-Shield Egress Policy');
         return;
       }
 
       const options = {
-        hostname: url.hostname,
+        hostname: resolvedIp,
         port: url.port || 80,
         path: url.pathname + url.search,
         method: req.method,
         headers: req.headers
       };
+      
+      // Ensure the Host header is explicitly set to the original hostname
+      // to preserve virtual hosting and SNI behaviors downstream if applicable.
+      options.headers.host = url.host;
 
       const proxyReq = http.request(options, (proxyRes) => {
         res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
@@ -102,14 +106,14 @@ export class NetworkEgressProxy {
     }
 
     const [hostname, port] = req.url.split(':');
-    const allowed = await this.isAllowed(hostname);
+    const resolvedIp = await this.isAllowed(hostname);
 
-    if (!allowed) {
+    if (!resolvedIp) {
       clientSocket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
       return;
     }
 
-    const serverSocket = net.connect(parseInt(port) || 443, hostname, () => {
+    const serverSocket = net.connect(parseInt(port) || 443, resolvedIp, () => {
       clientSocket.write('HTTP/1.1 200 Connection Established\r\n' +
                          'Proxy-agent: MCP-Shield\r\n\r\n');
       serverSocket.write(head);
@@ -126,3 +130,4 @@ export class NetworkEgressProxy {
     });
   }
 }
+

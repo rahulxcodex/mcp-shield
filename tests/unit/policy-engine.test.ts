@@ -120,6 +120,14 @@ describe('PolicyEngine', () => {
     expect(() => engine.close()).not.toThrow();
   });
 
+  it('should extract paths from obscure keys and relative paths without slashes', () => {
+    // Attack scenario: bypass extraction by using an unknown key and a relative path without a leading slash
+    const result = engine.evaluate({ toolName: 'read_file', args: { target_item: 'etc/passwd' }, evidence: [] });
+    // Since etc/passwd is now correctly extracted, the path matcher will block it.
+    expect(result.decision).toBe('block');
+    expect(result.reasonCode).toBe('PATH_FORBIDDEN');
+  });
+
   it('should default to allow if no rules match', () => {
     const result = engine.evaluate({ toolName: 'unknown_tool', args: { foo: 'bar' }, evidence: [] });
     // Default hardened mode now blocks unknown tools

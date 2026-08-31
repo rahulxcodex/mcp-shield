@@ -198,7 +198,8 @@ export class PolicyEngine {
       if (typeof val === 'string' && val.trim().length > 0) {
         const lowerKey = key.toLowerCase();
         if (
-          ['path', 'file', 'filename', 'filepath', 'target', 'source', 'dest', 'destination', 'uri', 'dir', 'directory', 'cwd'].includes(lowerKey) ||
+          lowerKey.includes('path') || lowerKey.includes('file') || lowerKey.includes('dir') ||
+          ['target', 'source', 'dest', 'destination', 'uri', 'cwd'].includes(lowerKey) ||
           val.includes('/') || val.includes('\\') || val.startsWith('.') || val.startsWith('~')
         ) {
           paths.push(val);

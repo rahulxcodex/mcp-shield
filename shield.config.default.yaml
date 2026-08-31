@@ -21,7 +21,7 @@ egress:
 audit:
   enabled: true
   logDir: .mcp-shield/logs
-  tamperProofHashing: true
+  tamperEvidentHashing: true
 
 rules:
   - id: "allow-all-safe"

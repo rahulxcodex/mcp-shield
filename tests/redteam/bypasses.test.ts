@@ -125,6 +125,19 @@ describe('Red-Team Validation: Security Bypass Challenges', () => {
         expect(astAnalyzer.analyzeCommand(cmd).isSafe).toBe(false);
       }
     });
+
+    it('RT-0108: Blocks dynamic variable command execution and empty variable obfuscation', () => {
+      const dynamicAttacks = [
+        'VAR=rm; $VAR -rf /',
+        'r$@m -rf /',
+        's$*hred /etc/shadow',
+        'b${}ash -c "evil"'
+      ];
+
+      for (const cmd of dynamicAttacks) {
+        expect(astAnalyzer.analyzeCommand(cmd).isSafe).toBe(false);
+      }
+    });
   });
 
   describe('RT-CAT-02: Secret Leakage & Honey-Token Access', () => {

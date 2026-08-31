@@ -141,6 +141,7 @@ export class ASTAnalyzer {
       .replace(/^['"]|['"]$/g, '')
       .replace(/\\/g, '')      // remove all backslash escapes e.g. \r\m\ -> rm
       .replace(/['"]/g, '')    // remove embedded quotes like r""m -> rm
+      .replace(/\$@|\$\*|\$\{\}/g, '') // remove empty variable expansions used for obfuscation e.g. r$@m -> rm
       .trim();
 
     // Extract fallback / default from parameter expansions e.g. ${CMD:-rm} -> rm
@@ -358,6 +359,11 @@ export class ASTAnalyzer {
       const { cmdName, args } = this.unwrapCommandTokens(tokens);
 
       if (cmdName) {
+        // Dynamic variable command execution evasion
+        if (cmdName.startsWith('$')) {
+          return { isSafe: false, reason: `Dynamic variable command execution is blocked: "${node.text}"` };
+        }
+
         // Dynamic execution primitives
         if (cmdName === 'eval' || cmdName === 'exec') {
           return { isSafe: false, reason: `Dynamic evaluation primitive "${cmdName}" is blocked: "${node.text}"` };
