@@ -15,11 +15,12 @@ export class SecretVault {
   private secrets = new Map<string, VaultEntry>(); // keyed HMAC id -> entry
   private tokenToId = new Map<string, string>();
   private readonly MAX_CACHE_SIZE = 5000;
-  private readonly DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
+  private readonly defaultTtlMs: number;
 
-  constructor() {
+  constructor(defaultTtlMs?: number) {
     this.key = crypto.randomBytes(32);
     this.hmacKey = crypto.randomBytes(32);
+    this.defaultTtlMs = defaultTtlMs || 5 * 60 * 1000; // 5 minutes default
   }
 
   private encrypt(secret: string): { encrypted: Buffer; iv: Buffer; tag: Buffer } {
@@ -51,7 +52,7 @@ export class SecretVault {
     }
   }
 
-  public store(secret: string, ttlMs: number = this.DEFAULT_TTL_MS): string {
+  public store(secret: string, ttlMs: number = this.defaultTtlMs): string {
     const now = Date.now();
     this.evictStale(now);
 

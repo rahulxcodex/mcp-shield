@@ -1,19 +1,106 @@
 import * as crypto from 'crypto';
 import { SecretVault } from './vault';
 
-export const SECRET_PATTERNS = [
-  { name: 'AWS_ACCESS_KEY', regex: /(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}/g },
-  { name: 'ANTHROPIC_KEY', regex: /sk-ant-api03-[a-zA-Z0-9\-_]{20,}/g },
-  { name: 'OPENAI_KEY', regex: /sk-(?:proj-)?[a-zA-Z0-9\-_]{20,}/g },
-  { name: 'SLACK_TOKEN', regex: /xox[baprs]-[a-zA-Z0-9\-_]{10,}/g },
-  { name: 'GITHUB_PAT', regex: /ghp_[a-zA-Z0-9]{30,40}|github_pat_[a-zA-Z0-9_]{30,}|gho_[a-zA-Z0-9]{30,40}|ghu_[a-zA-Z0-9]{30,40}|ghs_[a-zA-Z0-9]{30,40}|ghr_[a-zA-Z0-9]{30,40}/g },
-  { name: 'GOOGLE_API_KEY', regex: /AIza[0-9A-Za-z\-_]{35}/g },
-  { name: 'STRIPE_KEY', regex: /sk_(?:live|test)_[0-9a-zA-Z]{24,}|rk_(?:live|test)_[0-9a-zA-Z]{24,}/g },
-  { name: 'HUGGINGFACE_TOKEN', regex: /hf_[a-zA-Z0-9]{34,}/g },
-  { name: 'GITLAB_PAT', regex: /glpat-[0-9a-zA-Z\-_]{20,}/g },
-  { name: 'JWT_TOKEN', regex: /ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,}/g },
-  { name: 'SSH_PRIVATE_KEY', regex: /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----/g }
+export type SecretConfidence = 'KNOWN_SECRET' | 'LIKELY_SECRET' | 'HIGH_ENTROPY' | 'BENIGN_HIGH_ENTROPY';
+
+export interface ModularSecretDetector {
+  name: string;
+  provider: string;
+  regex: RegExp;
+  confidence: SecretConfidence;
+  validator?: (match: string) => boolean;
+}
+
+export const MODULAR_SECRET_DETECTORS: ModularSecretDetector[] = [
+  {
+    name: 'AWS_ACCESS_KEY',
+    provider: 'AWS',
+    regex: /(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => /^(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}$/.test(m)
+  },
+  {
+    name: 'ANTHROPIC_KEY',
+    provider: 'Anthropic',
+    regex: /sk-ant-api03-[a-zA-Z0-9\-_]{20,}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.startsWith('sk-ant-api03-') && m.length >= 35
+  },
+  {
+    name: 'OPENAI_KEY',
+    provider: 'OpenAI',
+    regex: /sk-(?:proj-)?[a-zA-Z0-9\-_]{20,}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => (m.startsWith('sk-proj-') || m.startsWith('sk-')) && m.length >= 25
+  },
+  {
+    name: 'SLACK_TOKEN',
+    provider: 'Slack',
+    regex: /xox[baprs]-[a-zA-Z0-9\-_]{10,}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => /^xox[baprs]-[0-9a-zA-Z\-_]+$/.test(m)
+  },
+  {
+    name: 'GITHUB_PAT',
+    provider: 'GitHub',
+    regex: /ghp_[a-zA-Z0-9]{30,40}|github_pat_[a-zA-Z0-9_]{30,}|gho_[a-zA-Z0-9]{30,40}|ghu_[a-zA-Z0-9]{30,40}|ghs_[a-zA-Z0-9]{30,40}|ghr_[a-zA-Z0-9]{30,40}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.startsWith('ghp_') || m.startsWith('gho_') || m.startsWith('github_pat_')
+  },
+  {
+    name: 'GOOGLE_API_KEY',
+    provider: 'Google',
+    regex: /AIza[0-9A-Za-z\-_]{35}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.startsWith('AIza') && m.length === 39
+  },
+  {
+    name: 'STRIPE_KEY',
+    provider: 'Stripe',
+    regex: /sk_(?:live|test)_[0-9a-zA-Z]{24,}|rk_(?:live|test)_[0-9a-zA-Z]{24,}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => (m.startsWith('sk_live_') || m.startsWith('sk_test_') || m.startsWith('rk_live_') || m.startsWith('rk_test_'))
+  },
+  {
+    name: 'HUGGINGFACE_TOKEN',
+    provider: 'HuggingFace',
+    regex: /hf_[a-zA-Z0-9]{34,}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.startsWith('hf_') && m.length >= 37
+  },
+  {
+    name: 'GITLAB_PAT',
+    provider: 'GitLab',
+    regex: /glpat-[0-9a-zA-Z\-_]{20,}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.startsWith('glpat-') && m.length >= 26
+  },
+  {
+    name: 'JWT_TOKEN',
+    provider: 'JWT',
+    regex: /ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,}/g,
+    confidence: 'LIKELY_SECRET',
+    validator: (m) => {
+      const parts = m.split('.');
+      if (parts.length !== 3) return false;
+      try {
+        const header = Buffer.from(parts[0], 'base64').toString('utf8');
+        return header.includes('alg') || header.includes('typ');
+      } catch {
+        return false;
+      }
+    }
+  },
+  {
+    name: 'SSH_PRIVATE_KEY',
+    provider: 'SSH',
+    regex: /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.includes('-----BEGIN') && m.includes('-----END')
+  }
 ];
+
+export const SECRET_PATTERNS = MODULAR_SECRET_DETECTORS.map(d => ({ name: d.name, regex: d.regex }));
 
 // Load honey tokens from environment
 export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MCP_SHIELD_HONEY_TOKENS.split(',') : [];
@@ -22,11 +109,13 @@ export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MC
 const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9\-_]{20,})|(xox[baprs]-[a-zA-Z0-9\-_]{10,})|(ghp_[a-zA-Z0-9]{30,40}|github_pat_[a-zA-Z0-9_]{30,}|gho_[a-zA-Z0-9]{30,40}|ghu_[a-zA-Z0-9]{30,40}|ghs_[a-zA-Z0-9]{30,40}|ghr_[a-zA-Z0-9]{30,40})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,}|rk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----)|\b([a-zA-Z0-9+\/_\-]{40,}={0,2})\b/g;
 
 export class SecretSanitizer {
-  private vault = new SecretVault();
+  private vault: SecretVault;
   private config?: any;
 
   constructor(config?: any) {
     this.config = config;
+    const ttlMs = config?.vaultTtlMs;
+    this.vault = new SecretVault(ttlMs);
   }
 
   private charFrequencies = new Uint32Array(256);
@@ -68,7 +157,6 @@ export class SecretSanitizer {
   private isFalsePositiveStructure(candidate: string, prefixContext: string): boolean {
     // 1. UUID standard format: 8-4-4-4-12
     if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(candidate)) {
-      // UUIDs are IDs, not secret keys unless explicitly in a secret context
       if (!/(key|secret|token|password|auth|credential|api|bearer)/i.test(prefixContext)) {
         return true;
       }
@@ -138,10 +226,11 @@ export class SecretSanitizer {
     const tokenRegex = /\[\[SHIELD_SECRET_[0-9a-fA-F-]{36}\]\]/g;
     return payload.replace(tokenRegex, (match) => {
       const secret = this.vault.retrieve(match);
-      if (secret) {
-        return secret;
-      }
-      return match;
+      return secret !== null ? secret : match;
     });
+  }
+
+  public clear(): void {
+    this.vault.clear();
   }
 }

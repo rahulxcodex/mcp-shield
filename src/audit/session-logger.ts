@@ -71,11 +71,36 @@ export class SessionLogger {
     this.log({ type: 'SESSION_END' });
   }
 
+  private sanitizePayloadForAudit(payload: any): any {
+    if (!payload || typeof payload !== 'object') return payload;
+    const sanitized: Record<string, any> = Array.isArray(payload) ? [] : {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (typeof v === 'string') {
+        if (v.length > 512) {
+          sanitized[k] = {
+            type: 'string',
+            byteLength: Buffer.byteLength(v, 'utf8'),
+            sha256: crypto.createHash('sha256').update(v).digest('hex'),
+            excerpt: v.slice(0, 128) + '...[truncated for audit data minimization]'
+          };
+        } else {
+          sanitized[k] = v;
+        }
+      } else if (typeof v === 'object' && v !== null) {
+        sanitized[k] = this.sanitizePayloadForAudit(v);
+      } else {
+        sanitized[k] = v;
+      }
+    }
+    return sanitized;
+  }
+
   public log(event: { type: string; toolName?: string; action?: string; ruleId?: string; payload?: any; reason?: string }) {
     if (this.config?.enabled === false) return; // Skip if disabled
 
     const seq = this.sequenceNumber++;
-    const eventObj = { seq, timestamp: new Date().toISOString(), ...event };
+    const safePayload = event.payload ? this.sanitizePayloadForAudit(event.payload) : undefined;
+    const eventObj = { seq, timestamp: new Date().toISOString(), ...event, ...(safePayload ? { payload: safePayload } : {}) };
     const canonicalData = this.canonicalStringify(eventObj);
     
     // Hash chain with sequence for tamper-evidence & anti-truncation

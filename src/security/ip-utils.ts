@@ -366,6 +366,53 @@ export class IpClassifier {
   }
 
   /**
+   * Matches a hostname against a domain pattern:
+   * - 'example.com': Exact apex match only
+   * - '*.example.com': Matches apex 'example.com' and all subdomains 'sub.example.com', 'a.b.example.com'
+   * - '**.example.com': Multi-level wildcard covering apex and all subdomains
+   */
+  public static matchesDomainPattern(hostname: string, pattern: string): boolean {
+    const host = hostname.toLowerCase().trim();
+    const pat = pattern.toLowerCase().trim();
+
+    if (!host || !pat) return false;
+
+    // Multi-level wildcard: **.example.com
+    if (pat.startsWith('**.')) {
+      const baseDomain = pat.slice(3);
+      return host === baseDomain || host.endsWith('.' + baseDomain);
+    }
+
+    // Standard wildcard: *.example.com (matches apex and subdomains)
+    if (pat.startsWith('*.')) {
+      const baseDomain = pat.slice(2);
+      return host === baseDomain || host.endsWith('.' + baseDomain);
+    }
+
+    // Exact match
+    return host === pat;
+  }
+
+  /**
+   * Checks if a URL protocol scheme is supported by MCP-Shield egress gateway.
+   */
+  public static checkProtocolViolation(urlStr: string): { isBlocked: boolean; reason?: string } {
+    if (!urlStr || !urlStr.includes('://')) return { isBlocked: false };
+    try {
+      const parsed = new URL(urlStr);
+      const protocol = parsed.protocol.toLowerCase();
+      const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'ws:', 'wss:']);
+      if (!ALLOWED_PROTOCOLS.has(protocol)) {
+        return {
+          isBlocked: true,
+          reason: `UNSUPPORTED_EGRESS_PROTOCOL: Protocol "${protocol}" is rejected by egress gateway.`
+        };
+      }
+    } catch {}
+    return { isBlocked: false };
+  }
+
+  /**
    * Tests if an IP or Hostname violates the given egress policy configuration.
    */
   public static checkEgressViolation(
@@ -376,7 +423,20 @@ export class IpClassifier {
       return { isBlocked: false };
     }
 
-    const classification = this.classify(ipOrHost);
+    // Check protocol scheme if full URL is passed
+    const protoCheck = this.checkProtocolViolation(ipOrHost);
+    if (protoCheck.isBlocked) {
+      return protoCheck;
+    }
+
+    let target = ipOrHost;
+    try {
+      if (ipOrHost.includes('://')) {
+        target = new URL(ipOrHost).hostname;
+      }
+    } catch {}
+
+    const classification = this.classify(target);
 
     // 1. Loopback blocking
     if (config.blockLoopback !== false && classification.isLoopback) {
@@ -409,28 +469,14 @@ export class IpClassifier {
     if (config.allowMode === 'deny') {
       let isExplicitlyAllowed = false;
       if (config.allowedDomains && config.allowedDomains.length > 0) {
-        isExplicitlyAllowed = config.allowedDomains.some(d => {
-          const lower = d.toLowerCase().trim();
-          if (lower.startsWith('*.')) {
-            const apex = lower.slice(2);
-            return hostname === apex || hostname.endsWith('.' + apex);
-          }
-          return hostname === lower;
-        });
+        isExplicitlyAllowed = config.allowedDomains.some(d => this.matchesDomainPattern(hostname, d));
       }
       if (!isExplicitlyAllowed) {
         return { isBlocked: true, reason: `Domain '${hostname}' is not in allowed domains list.` };
       }
     } else {
       if (config.blockedDomains && config.blockedDomains.length > 0) {
-        const isBlocked = config.blockedDomains.some(d => {
-          const lower = d.toLowerCase().trim();
-          if (lower.startsWith('*.')) {
-            const apex = lower.slice(2);
-            return hostname === apex || hostname.endsWith('.' + apex);
-          }
-          return hostname === lower;
-        });
+        const isBlocked = config.blockedDomains.some(d => this.matchesDomainPattern(hostname, d));
         if (isBlocked) {
           return { isBlocked: true, reason: `Domain '${hostname}' matches blocked domains list.` };
         }

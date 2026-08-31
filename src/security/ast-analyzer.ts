@@ -301,6 +301,139 @@ export class ASTAnalyzer {
     return { cmdName: '', args: [] };
   }
 
+  private analyzeFind(args: string[], fullText: string): ASTAnalysisResult {
+    let i = 0;
+    while (i < args.length) {
+      const arg = args[i];
+      if (arg === '-exec' || arg === '-execdir' || arg === '-ok' || arg === '-okdir') {
+        const nestedCmdTokens: string[] = [];
+        i++;
+        while (i < args.length && args[i] !== ';' && args[i] !== '+' && args[i] !== '\\;') {
+          nestedCmdTokens.push(args[i]);
+          i++;
+        }
+        if (nestedCmdTokens.length > 0) {
+          const nestedResult = this.analyzeCommand(nestedCmdTokens.join(' '));
+          if (!nestedResult.isSafe) {
+            return { isSafe: false, reason: `Dangerous nested command in find ${arg}: ${nestedResult.reason}` };
+          }
+          const { cmdName } = this.unwrapCommandTokens(nestedCmdTokens);
+          if (this.INTERPRETERS.has(cmdName) || cmdName === 'rm' || cmdName === 'dd' || cmdName === 'shred') {
+            return { isSafe: false, reason: `Dangerous utility "${cmdName}" inside find ${arg} is blocked` };
+          }
+        }
+        return { isSafe: false, reason: `find with ${arg} execution is blocked: "${fullText}"` };
+      }
+      if (arg === '-delete') {
+        return { isSafe: false, reason: `find with -delete is blocked: "${fullText}"` };
+      }
+      if (arg === '-fprint' || arg === '-fprint0' || arg === '-fprintf') {
+        const targetFile = args[i + 1];
+        if (targetFile && this.isDangerousTarget(targetFile)) {
+          return { isSafe: false, reason: `find writing to sensitive destination "${targetFile}" is blocked` };
+        }
+      }
+      i++;
+    }
+    return { isSafe: true };
+  }
+
+  private analyzeAwk(args: string[], fullText: string): ASTAnalysisResult {
+    for (const arg of args) {
+      if (/system\s*\(/i.test(arg)) {
+        return { isSafe: false, reason: `awk system() subshell execution is blocked: "${fullText}"` };
+      }
+      if (/getline\s+[^<]*\s*\||\|\s*getline/i.test(arg)) {
+        return { isSafe: false, reason: `awk getline command pipe is blocked: "${fullText}"` };
+      }
+      if (/\/inet\/(tcp|udp)\//i.test(arg)) {
+        return { isSafe: false, reason: `awk network socket access is blocked: "${fullText}"` };
+      }
+      if (/ENVIRON\s*\[/i.test(arg) && /system|exec/i.test(arg)) {
+        return { isSafe: false, reason: `awk environment variable execution is blocked: "${fullText}"` };
+      }
+    }
+    return { isSafe: true };
+  }
+
+  private analyzeSed(args: string[], fullText: string): ASTAnalysisResult {
+    for (const arg of args) {
+      if (/e\s*["']|\/e\b/i.test(arg) || /^e$/i.test(arg)) {
+        return { isSafe: false, reason: `sed command execution extension (e flag) is blocked: "${fullText}"` };
+      }
+      if (/w\s+(\/etc|\/usr|\/bin|\/var|c:)/i.test(arg)) {
+        return { isSafe: false, reason: `sed writing to sensitive system location is blocked: "${fullText}"` };
+      }
+    }
+    return { isSafe: true };
+  }
+
+  private analyzeMv(args: string[], fullText: string): ASTAnalysisResult {
+    const parsed = this.parseCommandFlagsAndOperands(args, 'mv');
+    const operands = parsed.operands;
+
+    if (operands.length < 2) {
+      if (operands.some(t => this.isDangerousTarget(t))) {
+        return { isSafe: false, reason: `Destructive system move command "mv" on system target blocked: "${fullText}"` };
+      }
+      return { isSafe: true };
+    }
+
+    const sources = operands.slice(0, operands.length - 1);
+    const destination = operands[operands.length - 1];
+
+    if (destination === '/dev/null') {
+      return { isSafe: false, reason: `Moving files to /dev/null (silent deletion) is blocked: "${fullText}"` };
+    }
+
+    if (sources.some(s => this.isDangerousTarget(s))) {
+      return { isSafe: false, reason: `Moving sensitive system files is blocked: "${fullText}"` };
+    }
+
+    if (this.isDangerousTarget(destination)) {
+      return { isSafe: false, reason: `Moving files into system directory "${destination}" is blocked: "${fullText}"` };
+    }
+
+    return { isSafe: true };
+  }
+
+  private analyzeSource(args: string[], fullText: string): ASTAnalysisResult {
+    for (const arg of args) {
+      if (arg.startsWith('$') || arg.includes('`') || arg.includes('$(')) {
+        return { isSafe: false, reason: `Sourcing dynamic script path is blocked: "${fullText}"` };
+      }
+      const clean = this.normalizeToken(arg);
+      if (
+        clean.startsWith('/tmp/') ||
+        clean.startsWith('/var/tmp/') ||
+        clean.startsWith('/dev/shm/') ||
+        clean.startsWith('~') ||
+        this.isDangerousTarget(clean)
+      ) {
+        return { isSafe: false, reason: `Sourcing untrusted or system script "${clean}" is blocked: "${fullText}"` };
+      }
+    }
+    return { isSafe: true };
+  }
+
+  private classifyInterpreterMode(cmdName: string, args: string[]): {
+    mode: 'SAFE_ARGS' | 'SCRIPT_FILE' | 'INLINE_CODE' | 'DYNAMIC_CODE';
+    detail?: string;
+  } {
+    if (args.length === 0) return { mode: 'SAFE_ARGS' };
+    const firstArg = args[0];
+    if (['-v', '--version', '-h', '--help', '-V'].includes(firstArg) && args.length === 1) {
+      return { mode: 'SAFE_ARGS' };
+    }
+    if (args.some(a => a === '-c' || a === '-e' || a === '-r' || a === '-eval')) {
+      return { mode: 'INLINE_CODE', detail: 'Inline code flag (-c/-e/-r) detected' };
+    }
+    if (args.some(a => a.startsWith('/tmp/') || a.startsWith('/var/tmp/') || a.startsWith('/dev/shm/'))) {
+      return { mode: 'DYNAMIC_CODE', detail: 'Script loaded from temporary world-writable directory' };
+    }
+    return { mode: 'SCRIPT_FILE' };
+  }
+
   private parseCommandFlagsAndOperands(rawArgs: string[], cmdName: string): {
     flags: Set<string>;
     operands: string[];
@@ -445,6 +578,20 @@ export class ASTAnalyzer {
         n && n.type && n.type !== 'comment' && !n.type.includes('redirect')
       );
 
+      // Check if command position is an expansion node (Item 10)
+      if (tokenNodes.length > 0) {
+        const firstChild = tokenNodes[0];
+        if (
+          firstChild.type === 'simple_expansion' ||
+          firstChild.type === 'expansion' ||
+          firstChild.type === 'command_substitution' ||
+          firstChild.text.startsWith('$') ||
+          firstChild.text.startsWith('`')
+        ) {
+          return { isSafe: false, reason: `Dynamic command name expansion is blocked: "${node.text}"` };
+        }
+      }
+
       const tokens = tokenNodes.map(n => n.text);
       const { cmdName, args } = this.unwrapCommandTokens(tokens);
 
@@ -481,14 +628,34 @@ export class ASTAnalyzer {
           }
         }
 
-        // Safe pipe tool subshell escape check (awk/sed arbitrary command execution)
-        if (cmdName === 'awk' || cmdName === 'sed') {
-          const hasSubshellEscape = args.some(a => 
-            /system\s*\(|getline\s+[^<]+<|e\s+["']|\/bin\/(ba)?sh/i.test(a)
-          );
-          if (hasSubshellEscape) {
-            return { isSafe: false, reason: `Subshell escape pattern detected in "${cmdName}": "${node.text}"` };
-          }
+        // Dedicated Awk analyzer
+        if (cmdName === 'awk') {
+          const awkCheck = this.analyzeAwk(args, node.text);
+          if (!awkCheck.isSafe) return awkCheck;
+        }
+
+        // Dedicated Sed analyzer
+        if (cmdName === 'sed') {
+          const sedCheck = this.analyzeSed(args, node.text);
+          if (!sedCheck.isSafe) return sedCheck;
+        }
+
+        // Dedicated Mv analyzer
+        if (cmdName === 'mv') {
+          const mvCheck = this.analyzeMv(args, node.text);
+          if (!mvCheck.isSafe) return mvCheck;
+        }
+
+        // Dedicated Find analyzer
+        if (cmdName === 'find') {
+          const findCheck = this.analyzeFind(args, node.text);
+          if (!findCheck.isSafe) return findCheck;
+        }
+
+        // Dedicated Source analyzer
+        if (cmdName === 'source' || cmdName === '.') {
+          const sourceCheck = this.analyzeSource(args, node.text);
+          if (!sourceCheck.isSafe) return sourceCheck;
         }
 
         // File shredding and wiping tools
@@ -507,15 +674,6 @@ export class ASTAnalyzer {
           }
         }
 
-        // Dangerous system mv
-        if (cmdName === 'mv') {
-          const hasDangerousSource = args.some((t, i) => i < args.length - 1 && this.isDangerousTarget(t));
-          const toNull = args.some(t => t === '/dev/null');
-          if (hasDangerousSource || (toNull && args.some(t => this.isDangerousTarget(t)))) {
-            return { isSafe: false, reason: `Destructive system move command "${cmdName}" blocked: "${node.text}"` };
-          }
-        }
-
         // Disk formatting and partitioning tools
         if (this.DISK_FORMAT_TOOLS.has(cmdName) || cmdName.startsWith('mkfs.')) {
           return { isSafe: false, reason: `Filesystem format command blocked: "${node.text}"` };
@@ -528,35 +686,19 @@ export class ASTAnalyzer {
           }
         }
 
-        // Dangerous find flags (-exec, -delete, -ok)
-        if (cmdName === 'find') {
-          if (args.some(a => a === '-exec' || a === '-execdir' || a === '-delete' || a === '-ok')) {
-            return { isSafe: false, reason: `Dangerous find command with -exec or -delete blocked: "${node.text}"` };
-          }
-        }
-
-        // Sourcing / executing scripts via source or .
-        if (cmdName === 'source' || cmdName === '.') {
-          const hasSuspiciousScript = args.some(t =>
-            t.startsWith('/tmp/') || t.startsWith('/var/tmp/') || t.startsWith('/dev/shm/') || t.endsWith('.sh')
-          );
-          if (hasSuspiciousScript) {
-            return { isSafe: false, reason: `Sourcing arbitrary shell script blocked: "${node.text}"` };
-          }
-        }
-
-        // Direct interpreter inline/script execution or redirection feeding
+        // Direct interpreter inline/script execution with explicit mode classification
         if (this.INTERPRETERS.has(cmdName)) {
-          const hasInlineExec = args.some(text =>
-            text === '-c' || text === '-e' || text === '-r' ||
-            text.startsWith('/tmp/') || text.startsWith('/var/tmp/') || text.startsWith('/dev/shm/')
-          );
+          const modeInfo = this.classifyInterpreterMode(cmdName, args);
           const hasRedirect = children.some(n =>
             n && (n.type === 'herestring_redirect' || n.type === 'heredoc_redirect' || n.type === 'file_redirect')
           );
           const isParentRedirected = node.parent?.type === 'redirected_statement';
-          if (hasInlineExec || hasRedirect || isParentRedirected) {
-            return { isSafe: false, reason: `ARBITRARY_CODE_EXECUTION: Direct interpreter inline/script execution blocked: "${node.text}"` };
+
+          if (modeInfo.mode === 'INLINE_CODE' || modeInfo.mode === 'DYNAMIC_CODE' || hasRedirect || isParentRedirected) {
+            return {
+              isSafe: false,
+              reason: `Direct interpreter inline/script execution blocked: Interpreter execution mode [${modeInfo.mode}] blocked: "${node.text}"${modeInfo.detail ? ` (${modeInfo.detail})` : ''}`
+            };
           }
         }
       }
@@ -589,13 +731,13 @@ export class ASTAnalyzer {
             return { isSafe: false, reason: `Piping to non-allowlisted command "${cmdName}" is blocked.` };
           }
 
-          if (cmdName === 'awk' || cmdName === 'sed') {
-            const hasSubshellEscape = args.some(a => 
-              /system\s*\(|getline\s+[^<]+<|e\s+["']|\/bin\/(ba)?sh/i.test(a)
-            );
-            if (hasSubshellEscape) {
-              return { isSafe: false, reason: `Subshell escape pattern detected in "${cmdName}": "${pipedCmd.text}"` };
-            }
+          if (cmdName === 'awk') {
+            const awkCheck = this.analyzeAwk(args, pipedCmd.text);
+            if (!awkCheck.isSafe) return awkCheck;
+          }
+          if (cmdName === 'sed') {
+            const sedCheck = this.analyzeSed(args, pipedCmd.text);
+            if (!sedCheck.isSafe) return sedCheck;
           }
         } else {
           return { isSafe: false, reason: `Piping to compound statement or subshell is blocked: "${pipedCmd.text}"` };

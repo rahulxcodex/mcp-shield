@@ -135,7 +135,7 @@ export class ProxyServer implements Lifecycle {
         }
       }
 
-      if (message.method === 'call_tool' && message.params && message.params.name) {
+      if ((message.method === 'call_tool' || message.method === 'tools/call') && message.params && message.params.name) {
         const toolName = message.params.name;
         
         // 1. Extract RAW SECURITY INPUT (Evaluated for all security checks)

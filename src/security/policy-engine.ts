@@ -139,6 +139,11 @@ export class PolicyEngine {
   }
 
   private compileRules(): void {
+    if (!this.config || !Array.isArray(this.config.rules)) {
+      this.compiledRules = [];
+      return;
+    }
+
     this.compiledRules = this.config.rules.map(rule => {
       const compiled: CompiledRule = { rule };
 
@@ -177,36 +182,25 @@ export class PolicyEngine {
   }
 
   public checkEgress(args: Record<string, any>): { isBlocked: boolean; domain?: string; reason?: string } {
-    const config = this.getConfig();
-    if (!config.egress?.enabled) return { isBlocked: false };
+    return PolicyEngine.checkEgress(args, this.getConfig());
+  }
 
-    const argStr = JSON.stringify(args);
-    const candidateHosts: string[] = [];
-    
-    // Extract anything that looks like a URL or raw hostname/IP
-    const urlRegex = /(?:https?|ftp|wss?):\/\/([^\s"'<>\/]+)/gi;
-    let match;
-    while ((match = urlRegex.exec(argStr)) !== null) {
-      const hostPort = match[1];
-      const host = hostPort.split(':')[0].replace(/^\[|\]$/g, '');
-      if (host) candidateHosts.push(host);
+  public static checkEgress(args: any, config: ShieldConfig): { isBlocked: boolean; domain?: string; reason?: string } {
+    if (!config.egress?.enabled) {
+      return { isBlocked: false };
     }
 
-    // Also look for specific url or host fields in arguments
+    const candidateUrlsAndHosts: string[] = [];
     const extractHostFields = (obj: any) => {
       if (!obj || typeof obj !== 'object') return;
       for (const [k, v] of Object.entries(obj)) {
         if (typeof v === 'string') {
           const lowerK = k.toLowerCase();
-          if (['url', 'uri', 'endpoint', 'host', 'hostname', 'domain'].includes(lowerK)) {
-            try {
-              if (v.includes('://')) {
-                const u = new URL(v);
-                candidateHosts.push(u.hostname);
-              } else {
-                candidateHosts.push(v.split(':')[0].replace(/^\[|\]$/g, ''));
-              }
-            } catch {}
+          if (
+            ['url', 'uri', 'endpoint', 'host', 'hostname', 'domain', 'target', 'dest', 'destination', 'link', 'href', 'webhook', 'address'].includes(lowerK) ||
+            v.includes('://')
+          ) {
+            candidateUrlsAndHosts.push(v);
           }
         } else if (typeof v === 'object') {
           extractHostFields(v);
@@ -216,15 +210,15 @@ export class PolicyEngine {
     extractHostFields(args);
 
     // Evaluate all candidates through IpClassifier
-    for (const host of candidateHosts) {
-      const cleanHost = host.trim().toLowerCase();
-      if (!cleanHost) continue;
+    for (const target of candidateUrlsAndHosts) {
+      const clean = target.trim();
+      if (!clean) continue;
 
-      const check = IpClassifier.checkEgressViolation(cleanHost, config.egress as EgressSecurityConfig);
+      const check = IpClassifier.checkEgressViolation(clean, config.egress as EgressSecurityConfig);
       if (check.isBlocked) {
         return {
           isBlocked: true,
-          domain: cleanHost,
+          domain: clean,
           reason: check.reason || 'Blocked by MCP-Shield Egress Policy'
         };
       }
@@ -289,6 +283,7 @@ export class PolicyEngine {
 
     const highEvidence = context.evidence.find(e => e.risk === 'HIGH');
     
+    // Explicit Decision Lattice Precedence: quarantine > block > sandbox > prompt > allow
     const actionSeverity: Record<string, number> = {
       'quarantine': 5,
       'block': 4,
@@ -354,12 +349,17 @@ export class PolicyEngine {
         if (ruleMatches) {
           let effectiveAction = rule.action;
           
+          // Invariant: CRITICAL risk rules cannot map to allow without explicit unsafe overrides
+          if (rule.riskLevel === 'CRITICAL' && effectiveAction === 'allow' && !(this.config as any).unsafeOverrides) {
+            effectiveAction = 'block';
+          }
+
           // PHASE 4: HIGH-RISK EVIDENCE ESCALATION
           if (highEvidence && effectiveAction === 'allow') {
              effectiveAction = 'sandbox'; // Escalate allow to sandbox
           }
 
-          const severity = actionSeverity[effectiveAction];
+          const severity = actionSeverity[effectiveAction] || 1;
           
           // Selection logic: Highest severity wins. If tie, highest priority wins.
           if (severity > highestSeverity || (severity === highestSeverity && rule.priority > highestPriority)) {
