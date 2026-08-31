@@ -31,12 +31,16 @@ describe('Sustained Session Soak & Endurance Test Suite (8+ Hour Simulation)', (
 
     if (global.gc) {
       global.gc();
+      const endMemory = process.memoryUsage().heapUsed;
+      const diffMB = (endMemory - startMemory) / (1024 * 1024);
+      // Retained heap growth under bounded capacity should remain under 50 MB
+      expect(diffMB).toBeLessThan(50);
+    } else {
+      const endMemory = process.memoryUsage().heapUsed;
+      const diffMB = (endMemory - startMemory) / (1024 * 1024);
+      // Uncollected ephemeral allocations in tight loop should remain bounded under 150 MB
+      expect(diffMB).toBeLessThan(150);
     }
-
-    const endMemory = process.memoryUsage().heapUsed;
-    const diffMB = (endMemory - startMemory) / (1024 * 1024);
-    // Heap growth should remain bounded under 80 MB
-    expect(diffMB).toBeLessThan(80);
   });
 
   it('SOAK-02: RateLimiter sliding window handles continuous 20,000-check burst without memory drift', () => {
