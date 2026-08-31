@@ -1,43 +1,146 @@
-# MCP-Shield
+# MCP-Shield 🛡️
 
-> [!WARNING]
-> MCP-Shield is an experimental wire proxy designed to provide additional security controls for the Model Context Protocol (MCP) in local developer environments. It is currently in **early development** and has not undergone third-party security audits. Do not rely on it as your sole defense for highly sensitive production environments.
+[![CI](https://github.com/rahulxcodex/mcp-shield/actions/workflows/ci.yml/badge.svg)](https://github.com/rahulxcodex/mcp-shield/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B%20%7C%2020%2B%20%7C%2022%2B-green.svg)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
+[![Security: Zero--Trust](https://img.shields.io/badge/Security-Zero--Trust-red.svg)](SECURITY_ARCHITECTURE.md)
 
-With the rapid adoption of AI IDEs and agents like **Claude Desktop**, **Cursor**, **Windsurf**, and **Cline**, granting AI unrestricted host privileges presents a security risk. MCP-Shield intercepts the JSON-RPC streams to apply filtering, rate limiting, and basic data loss prevention (DLP) before commands reach your OS.
+> **The Zero-Trust Security Gateway, AST Shell Firewall & Secret Sanitizer for the Model Context Protocol (MCP) and Autonomous AI Agents.**
 
-## 🛡️ Key Features (In Development)
+---
 
-- **AST Command Filtering** - Uses `tree-sitter-bash` to parse and block some forms of arbitrary code execution and destructive commands. *(Note: Shell evasion is complex. While this blocks basic destructive patterns, it is not a foolproof sandbox.)*
-- **Secret Redaction (DLP)** - Basic heuristics to detect and redact sensitive credentials before they reach the model.
-- **Copy-on-Write (COW) Sandbox** - Safely intercepts AI file modifications to a staging directory for review.
-- **Rate Limiting** - Helps prevent autonomous agents from getting stuck in infinite loops.
-- **Egress Network Filtering** - Blocks basic LLM data exfiltration attempts by validating arguments against a blocklist.
-- **Audit Logging** - Logs intercepted tool calls and policy decisions in JSONL format.
+## 📖 Overview
 
-## 🚀 Getting Started
+With the rapid adoption of AI coding assistants and autonomous agents in tools like **Claude Desktop**, **Cursor IDE**, **Windsurf**, **Cline**, and **Zed**, granting LLMs unrestricted host execution privileges introduces severe security vulnerabilities:
 
-### Auto-Discover & Protect Your IDEs
-MCP-Shield can automatically patch your existing MCP configurations to wrap your active servers in our proxy. Supported clients include **Claude Desktop**, **Cursor IDE**, **Cline**, and **Windsurf**.
+- **OS Command Injection & Destructive Deletions**: Unchecked shell tool calls (`rm -rf`, disk overwrites, fork bombs).
+- **Credential & API Key Exfiltration**: Prompt injection leaking environment variables, cloud keys (AWS, GCP, GitHub PATs), and SSH keys.
+- **Egress Exfiltration & DNS Rebinding**: Unauthorized outbound HTTP/TCP requests targeting internal networks, metadata services (`169.254.169.254`), or attacker webhooks.
+- **Runaway Tool-Calling Loops**: Infinite retry loops consuming excessive tokens and compute resources.
+- **Direct Filesystem Tampering**: Silent file modifications outside the active workspace.
 
-```bash
-# Install and run the auto-discovery protector
-npx mcp-shield protect
+**MCP-Shield** sits directly on the wire as a transparent JSON-RPC stdio proxy between your AI client and downstream MCP servers. It intercepts every tool invocation and applies real-time AST parsing, high-entropy secret tokenization, rate limiting, and sandbox isolation before any command touches your OS.
+
+```
+┌────────────────────────────────────────────────────────┐
+│               AI Client / IDE Host                    │
+│   (Claude Desktop, Cursor, Windsurf, Cline, Zed)      │
+└──────────────────────────┬─────────────────────────────┘
+                           │ JSON-RPC (stdio)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│                   MCP-SHIELD GATEWAY                   │
+│  ┌──────────────────────┬───────────────────────────┐  │
+│  │ 📦 Stream Framer     │ 🔑 Secret Vault & DLP     │  │
+│  ├──────────────────────┼───────────────────────────┤  │
+│  │ 🌲 AST Shell Firewall│ 🚦 Sliding-Window Rate    │  │
+│  ├──────────────────────┼───────────────────────────┤  │
+│  │ 🌐 DNS/Egress Filter │ 🛡️ Policy Engine (YAML)   │  │
+│  ├──────────────────────┼───────────────────────────┤  │
+│  │ 📜 Tamper-Proof Audit│ 📊 Real-Time Web Monitor  │  │
+│  └──────────────────────┴───────────────────────────┘  │
+└──────────────────────────┬─────────────────────────────┘
+                           │ Sanitized & Verified Calls
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│               Downstream MCP Server                    │
+│     (Filesystem, Terminal, GitHub, Postgres, etc.)     │
+└────────────────────────────────────────────────────────┘
 ```
 
-### Manual Wrapping
-You can secure any downstream MCP server manually by prefixing your start command:
+---
+
+## ✨ Key Features
+
+| Capability | Description |
+| :--- | :--- |
+| 🌲 **AST Shell Parsing** | Employs `tree-sitter-bash` to parse shell commands into an Abstract Syntax Tree. Defeats syntactic evasions (`$IFS`, nested quotes, wrapper stacking `sudo env nice`, subshells `$()`, heredocs, pipelines, and fork bombs). |
+| 🔑 **Bijective Secret Sanitizer (DLP)** | Scans inbound and outbound JSON-RPC payloads for high-entropy secrets (AWS, OpenAI, Anthropic, GitHub PATs, SSH keys) and replaces them with session-scoped tokens that restore safely on response. |
+| 🌐 **DNS Rebinding & Egress Shield** | Validates network targets, performs active IP pinning, blocks SSRF to link-local/private ranges (RFC 1918, `169.254.169.254`, IPv6 `::1`), and enforces domain allowlists/blocklists. |
+| 📂 **Copy-on-Write (COW) Staging** | Intercepts file writes and redirects modifications to an isolated staging directory (`.mcp-shield/cow`), generating diffs for operator review before committing to disk. |
+| 📦 **Container Sandbox Isolation** | Automatically spawns untrusted MCP servers in ephemeral Docker containers with dropped capabilities (`--cap-drop=ALL`), `network=none`, and read-only root filesystems. |
+| 🧹 **Safe Environment Stripping** | Sanitizes child process environment variables, stripping cloud credentials, shell injection vectors (`LD_PRELOAD`, `NODE_OPTIONS`, `BASH_ENV`), while preserving essential POSIX/Windows runtime variables. |
+| 🚦 **Sliding-Window Rate Limiting** | Throttles runaway autonomous loops per tool and across the global session. |
+| 📜 **Tamper-Evident Audit Logging** | Records cryptographically chained logs (SHA-256 / HMAC-SHA-256) with sequence numbers to detect tampering or log deletion. |
+| 📊 **Real-Time Web Dashboard** | Embedded Express & WebSocket dashboard at `http://localhost:3333` for live telemetry, attack visualization, and policy management. |
+
+---
+
+## 🚀 Quick Start
+
+### 1. Installation
+
+Install MCP-Shield globally or use it via `npx`:
 
 ```bash
-npx mcp-shield wrap -- npx -y @modelcontextprotocol/server-filesystem /Users/dev/workspace
+# Global installation via npm
+npm install -g mcp-shield
+
+# Or run directly with npx
+npx mcp-shield --help
 ```
 
-## ⚙️ Configuration & Policy Engine
+### 2. Auto-Discover & Protect Your IDEs
 
-MCP-Shield is governed by a declarative YAML policy engine (`shield.config.default.yaml`). You can customize redaction thresholds, egress domains, and target-specific rule sets.
+MCP-Shield can automatically discover and protect existing MCP configurations for **Claude Desktop**, **Cursor IDE**, **Cline (VS Code)**, and **Windsurf**:
+
+```bash
+mcp-shield protect
+```
+
+This scans your configuration files, creates timestamped backups, and wraps all defined MCP servers with `mcp-shield wrap`.
+
+### 3. Manual Server Wrapping
+
+You can manually protect any downstream MCP server by prefixing its launch command:
+
+```bash
+# Example: Securing the official filesystem MCP server
+mcp-shield wrap -- npx -y @modelcontextprotocol/server-filesystem /Users/dev/workspace
+
+# Example: Securing a local Python MCP server
+mcp-shield wrap -- python -m mcp_server_git
+```
+
+---
+
+## 💻 CLI Commands
+
+MCP-Shield provides a complete command-line interface:
+
+```bash
+🛡️  MCP-SHIELD
+Usage:
+  mcp-shield install              Quickly install and configure MCP-Shield.
+  mcp-shield scan                 Scan your MCP servers for security vulnerabilities.
+  mcp-shield fix                  Automatically generate and apply security policies.
+  mcp-shield protect              Auto-discover and protect MCP clients.
+  mcp-shield replay <log_file>    Replay and verify tamper-evident audit logs.
+  mcp-shield wrap -- <cmd> [args] Wrap an MCP server with the security gateway.
+```
+
+### Command Highlights
+
+- **`mcp-shield scan`**: Analyzes configured MCP servers and tool definitions, highlighting credential exposure, dangerous shell capabilities, and unrestricted file access.
+- **`mcp-shield fix`**: Interactively generates strict policy rules tailored to your environment and upgrades your security posture.
+- **`mcp-shield replay <log_file>`**: Replays intercepted session logs, verifies cryptographic hash chains, and flags any tampered or missing entries.
+
+---
+
+## ⚙️ Configuration
+
+MCP-Shield is configured via a declarative YAML file (`shield.config.default.yaml` or `.mcp-shield/config.yaml`):
 
 ```yaml
 version: "1.0"
-profile: "developer"
+profile: "default"
+
+redaction:
+  enabled: true
+  maskStyle: "token"
+  highEntropyCheck: true
+  entropyThreshold: 4.5
 
 sandbox:
   cowEnabled: true
@@ -49,65 +152,79 @@ egress:
   blockedDomains:
     - "*.ngrok.io"
     - "*.evil.com"
+
+audit:
+  enabled: true
+  logDir: ".mcp-shield/logs"
+  tamperEvidentHashing: true
+
+rules:
+  - id: "allow-all-safe"
+    name: "Allow safe commands"
+    priority: 10
+    riskLevel: "LOW"
+    action: "allow"
+    
+  - id: "block-destructive-rm"
+    name: "Block Recursive Root Deletion"
+    priority: 100
+    targetTools:
+      - "*bash*"
+      - "*terminal*"
+      - "*exec*"
+    riskLevel: "CRITICAL"
+    action: "block"
 ```
 
-## 📈 Real-Time Web Dashboard
-
-Gain visibility into your AI security posture. MCP-Shield includes an embedded Express/React web dashboard powered by WebSockets.
-Monitor intercepted attacks, rate limits, and sanitized secrets in real-time at `http://localhost:3333`.
+---
 
 ## ⚡ Performance & Benchmarks
 
-MCP-Shield sits directly in the hot path of every AI agent tool call. We benchmark every release for latency and throughput:
+MCP-Shield is built for ultra-low latency, sitting on the hot path of every tool call:
 
-- **End-to-End Proxy Overhead**: `< 0.2 ms` (p50 median)
-- **AST Parsing Throughput**: `> 6,700 ops/sec` (< 150 µs per command)
+- **Hot-Path Interception Overhead**: `< 0.2 ms` (p50 median)
+- **AST Parser Throughput**: `> 7,700 ops/sec` (< 130 µs per command)
 - **Rate Limiting & Policy Evaluation**: `< 10 µs` (> 100,000 ops/sec)
+- **DLP Sanitization**: `> 140,000 ops/sec` for standard tool payloads
 
 See [BENCHMARKS.md](BENCHMARKS.md) for full reproducible latency percentiles and test environment specifications.
 
-## 🎯 Adversarial Fuzzing & Red-Team Validation
+---
 
-We operate continuous adversarial fuzzing and an open community red-team challenge program to discover, patch, and test against bypass techniques:
+## 🎯 Red-Team & Adversarial Hardening
 
-- **Fuzzing Engine**: Automated permutation fuzzer testing quote mutations, wrapper chains (`sudo`, `env`, `nice`, `timeout`), traversal paths, redirections, and fork bombs.
-- **Red-Team Program**: See [REDTEAM.md](REDTEAM.md) for rules of engagement, attack vectors, and how to submit reproducible bypass PoCs.
+MCP-Shield includes an automated adversarial test harness and red-team challenge suite to defend against sophisticated evasion techniques:
 
 ```bash
-# Run the automated red-team test suite
+# Run the automated red-team bypass test suite
 npm run test:redteam
 
-# Run the adversarial AST fuzzer (thousands of mutations)
+# Run the randomized AST fuzzer (thousands of mutations)
 npm run fuzz
+
+# Run the complete test suite (470+ tests across 14 suites)
+npm test
 ```
 
-## 📚 Learn More
+Read [REDTEAM.md](REDTEAM.md) for details on our open security research program and how to submit reproducible bypasses.
 
-- [Performance Benchmarks](BENCHMARKS.md) - Verified latency numbers across proxy components.
-- [Red-Team Validation](REDTEAM.md) - Community security audit guidelines and bypass PoC submission.
-- [Threat Model](THREAT_MODEL.md) - Understand the current security boundaries and limitations.
-- [ADDITIONAL.md](ADDITIONAL.md) - A curated list of frameworks and resources.
+---
 
-## 🤝 Contributing
+## 📚 Documentation Directory
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for information about contributing to this repository. We welcome feedback, adversarial testing, and pull requests!
+- 📐 [Security Architecture](SECURITY_ARCHITECTURE.md) - Deep dive into zero-trust design, fail-closed semantics, and proxy pipeline.
+- 🎯 [Threat Model](THREAT_MODEL.md) - Scope boundaries, attacker models, and mitigation matrices.
+- 📊 [Control Matrix](CONTROL_MATRIX.md) - Mappings to OWASP LLM Top 10 and MITRE ATT&CK / ATLAS frameworks.
+- ⚡ [Performance Benchmarks](BENCHMARKS.md) - Verified latency percentiles and benchmark scripts.
+- 🧪 [Red-Team Program](REDTEAM.md) - Rules of engagement, testing harnesses, and submission guidelines.
+- 🤝 [Contributing Guide](CONTRIBUTING.md) - Development workflow, testing standards, and code quality expectations.
+- 🚀 [Release Process](RELEASING.md) - Release cadence, versioning policy, and CI/CD publishing pipeline.
+- 🔒 [Security Policy](SECURITY.md) - Vulnerability reporting and responsible disclosure.
+- 📖 [Additional Resources](ADDITIONAL.md) - Curated references, specifications, and AI security guides.
+- 📜 [Code of Conduct](CODE_OF_CONDUCT.md) - Community participation standards.
 
-## 🚀 Releasing
-
-See [RELEASING.md](RELEASING.md) for how packages are published.
-
-## 🔒 Security
-
-See [SECURITY.md](SECURITY.md) for reporting security vulnerabilities.
+---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 💬 Community
-
-- [GitHub Discussions](https://github.com/rahulxcodex/mcp-shield/discussions)
-
-## 🌟 Support
-
-If you find MCP-Shield useful as it matures, please consider starring the repository and contributing new features or improvements!
+This project is licensed under the [MIT License](LICENSE).

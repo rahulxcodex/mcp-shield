@@ -1,4 +1,4 @@
-# MCP-Shield Red-Team & Security Research Program
+# MCP-Shield Red-Team & Security Research Program 🎯
 
 > **Empowering the security community to audit, stress-test, and harden the AI Agent Gateway.**
 
@@ -18,13 +18,13 @@ Security tools live or die by their resilience under adversarial pressure. Rathe
 
 Researchers are encouraged to probe the following primary defensive components:
 
-| Component | Target File | Primary Attack Vectors |
-| :--- | :--- | :--- |
-| **AST Firewall** | [`src/security/ast-analyzer.ts`](src/security/ast-analyzer.ts) | Shell evasions (`$IFS`, quotes, backslashes), invocation wrappers (`sudo`, `env`, `nice`, `stdbuf`), compound statements, process substitutions, heredocs/herestrings, dangerous builtins, disk formatting, and DoS bombs. |
-| **Secret Sanitizer (DLP)** | [`src/security/sanitizer.ts`](src/security/sanitizer.ts) | High-entropy credential extraction, decoy honey-token access, token desynchronization, regex evasion, Unicode normalization tricks. |
-| **Policy Engine & Egress** | [`src/security/policy-engine.ts`](src/security/policy-engine.ts) | Wildcard domain bypasses, IPv4-mapped IPv6, punycode, path traversal in tool arguments (`/../`), schema spoofing. |
-| **Rate Limiter** | [`src/security/rate-limiter.ts`](src/security/rate-limiter.ts) | Tool naming case-sensitivity bypasses, burst loop evasion, timestamp overflow/skew. |
-| **COW Sandbox** | [`src/sandbox/cow-fs.ts`](src/sandbox/cow-fs.ts) | Staging path traversal, symlink resolution escapes, uncommitted diff tampering. |
+| Category ID | Defensive Component | Target File | Primary Attack Vectors |
+| :--- | :--- | :--- | :--- |
+| **RT-CAT-01** | **AST Shell Firewall** | [`src/security/ast-analyzer.ts`](src/security/ast-analyzer.ts) | Shell evasions (`$IFS`, nested quotes, backslashes), invocation wrappers (`sudo`, `env`, `nice`, `stdbuf`, `timeout`, `pkexec`), compound statements, process substitutions, heredocs/herestrings, dangerous builtins, disk formatting (`dd`, `mkfs`), dynamic variable execution (`$VAR`), and DoS fork bombs. |
+| **RT-CAT-02** | **Secret Sanitizer (DLP)** | [`src/security/sanitizer.ts`](src/security/sanitizer.ts)<br>[`src/security/vault.ts`](src/security/vault.ts) | High-entropy credential extraction, decoy honey-token access, token desynchronization, regex evasion, base64/hex encoding tricks, Unicode normalization tricks. |
+| **RT-CAT-03** | **Policy Engine & Egress** | [`src/security/policy-engine.ts`](src/security/policy-engine.ts)<br>[`src/security/network-proxy.ts`](src/security/network-proxy.ts) | DNS rebinding, wildcard domain bypasses, IPv4-mapped IPv6, SSRF against link-local (`169.254.169.254`), path traversal in tool arguments (`/../`), schema spoofing. |
+| **RT-CAT-04** | **Rate Limiter** | [`src/security/rate-limiter.ts`](src/security/rate-limiter.ts) | Tool naming case-sensitivity bypasses, burst loop evasion, timestamp overflow/skew, concurrency race conditions. |
+| **RT-CAT-05** | **Sandbox & COW FS** | [`src/sandbox/cow-fs.ts`](src/sandbox/cow-fs.ts)<br>[`src/sandbox/container-sandbox.ts`](src/sandbox/container-sandbox.ts) | Staging path traversal, symlink resolution escapes, uncommitted diff tampering, container capability escalation. |
 
 ---
 
@@ -52,28 +52,32 @@ npm test
 ## 📝 Submitting a Bypass / Vulnerability
 
 ### Step 1: Prepare a Minimal Reproducible PoC
-Create a standalone snippet or test case following the format in `tests/redteam/bypasses.test.ts`:
+
+Create a standalone test case following the format in [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts):
 
 ```typescript
-it('RT-XXXX: [Short Title of Bypass Technique]', () => {
-  const payload = '...';
-  const result = analyzer.analyzeCommand(payload);
-  // Demonstrate that the evasion bypasses current defenses or crashes the gateway
+it('RT-0109: [Short Title of Bypass Technique]', () => {
+  const payload = 'your_evasion_command_here';
+  const result = astAnalyzer.analyzeCommand(payload);
+  
+  // A successful bypass demonstrates that the evasion passes analysis
   expect(result.isSafe).toBe(true); // Demonstrates bypass
 });
 ```
 
 ### Step 2: Responsible Disclosure
-- For non-critical bug reports or test contributions, open a PR adding the test to `tests/redteam/`.
-- For critical bypasses (e.g., remote code execution on host, complete sandbox escape, zero-day DLP extraction), report privately to **`security@mcp-shield.local`** or open a private GitHub Security Advisory in accordance with [SECURITY.md](SECURITY.md).
+
+- **Non-Critical & Red-Team Tests**: Open a Pull Request adding the test case to `tests/redteam/bypasses.test.ts`.
+- **Critical Bypasses** (e.g., remote code execution on host, complete sandbox escape, zero-day DLP extraction): Report privately to **`security@example.com`** or open a private GitHub Security Advisory in accordance with [SECURITY.md](SECURITY.md).
 
 ---
 
 ## 🏆 Hall of Fame & Acknowledgments
 
 Contributors who submit novel bypasses or hardening improvements will be permanently credited in:
+
 - The [GitHub Release Notes](https://github.com/rahulxcodex/mcp-shield/releases)
-- The Security Hall of Fame section in `SECURITY.md`
-- The `tests/redteam/bypasses.test.ts` test headers
+- The Security Hall of Fame section in [SECURITY.md](SECURITY.md)
+- The [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts) test headers
 
 Thank you for helping keep AI developer environments secure!

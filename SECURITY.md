@@ -1,33 +1,76 @@
-# Security Policy
+# Security Policy 🔒
 
-## Supported Versions
+The MCP-Shield team takes the security of developer environments and autonomous AI agent workflows very seriously. We appreciate the responsible disclosure of any vulnerabilities found in MCP-Shield.
 
-Currently, only the `main` branch and the latest published stable release (`1.x`) are actively supported for security updates.
+---
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+## 🛡️ Supported Versions
 
-## Reporting a Vulnerability
+We actively provide security patches for the following versions:
 
-We take the security of MCP-Shield very seriously. If you discover a vulnerability, please do NOT open a public issue.
+| Version Branch | Supported | Security Patch Cadence |
+| :--- | :--- | :--- |
+| **`1.x.x`** | :white_check_mark: Supported | Active / Immediate Hotfixes |
+| **`< 1.0.0`** | :x: Unsupported | End-of-Life |
 
-Instead, please email your findings to `security@example.com` or use the GitHub Security Advisory "Report a Vulnerability" feature on this repository.
+---
 
-### What to include in your report
+## 🚨 Reporting a Vulnerability
 
-- A descriptive summary of the vulnerability.
-- Steps to reproduce the issue (including any PoC scripts or configurations).
-- The potential impact (e.g., bypass of AST rules, sandbox escape).
-- Your proposed remediation, if you have one.
+If you discover a security vulnerability, bypass, or privilege escalation in MCP-Shield, **please do NOT report it in a public GitHub issue**.
 
-### Response Timeline
+### Preferred Reporting Channels
 
-- We will acknowledge receipt of your vulnerability report within **48 hours**.
-- We will provide a status update or a remediation plan within **7 days**.
-- Once a fix is verified, we will coordinate a public disclosure (CVE assignment if applicable) and credit you for the discovery.
+1. **GitHub Private Security Advisory**: Navigate to the repository's **Security** tab and select **"Report a vulnerability"**.
+2. **Security Email**: Send an encrypted or direct email to **`security@example.com`**.
 
-## Threat Model
+### Information to Include
 
-For details on what is explicitly considered in-scope vs out-of-scope for the MCP-Shield security boundary, please read our [Threat Model](./THREAT_MODEL.md).
+To help us triage and resolve the issue quickly, please provide:
+
+- **Vulnerability Category**: (e.g., AST command evasion, DLP secret extraction, DNS rebinding, COW path escape, rate-limiter bypass).
+- **Step-by-Step Reproduction**: Detailed steps, command invocations, or a standalone test case matching [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts).
+- **Impact Assessment**: What an attacker or compromised agent can achieve (e.g., arbitrary host command execution, credential theft).
+- **Environment Details**: OS, Node.js version, and MCP client used (Claude Desktop, Cursor, Cline, Windsurf, etc.).
+- **Proposed Mitigation**: If you have an idea for a patch, we welcome your feedback.
+
+---
+
+## ⏱️ Response Timelines & SLA
+
+| Phase | Target Timeline | Action |
+| :--- | :--- | :--- |
+| **Initial Acknowledgment** | **< 48 hours** | We confirm receipt of your report and assign a maintainer. |
+| **Triage & Reproducibility** | **< 5 business days** | We reproduce the issue and assess its CVSS severity score. |
+| **Remediation & Patch** | **< 14 business days** | We develop and verify a fix in a private security fork. |
+| **Coordinated Disclosure** | **Mutually Agreed** | We publish the release and credit the researcher. |
+
+---
+
+## 🔍 Severity Rating Matrix
+
+We assess reports against the Common Vulnerability Scoring System (CVSS v3.1):
+
+- **CRITICAL (CVSS 9.0 - 10.0)**: Direct host command execution without prompt, arbitrary file overwrites bypassing COW, or full credential dump.
+- **HIGH (CVSS 7.0 - 8.9)**: Partial shell evasion bypasses, SSRF to cloud metadata endpoints, or sandbox escapes.
+- **MEDIUM (CVSS 4.0 - 6.9)**: Rate-limiter bypasses, false-positive filter evasions, or denial-of-service via malformed JSON-RPC payloads.
+- **LOW (CVSS 0.1 - 3.9)**: Minor logging inconsistencies or non-exploitable edge cases.
+
+---
+
+## 🎯 Threat Model & Architecture References
+
+For detailed specifications on what is considered in-scope vs out-of-scope for the MCP-Shield security boundary:
+
+- 🎯 [Threat Model](THREAT_MODEL.md)
+- 📐 [Security Architecture](SECURITY_ARCHITECTURE.md)
+- 📊 [Control Matrix](CONTROL_MATRIX.md)
+- 🧪 [Red-Team Validation Program](REDTEAM.md)
+
+---
+
+## 🏆 Security Hall of Fame
+
+We gratefully recognize and credit the security researchers and community contributors who help harden MCP-Shield:
+
+- *Community contributors who responsibly disclose vulnerabilities will be permanently listed here and in our release notes.*
