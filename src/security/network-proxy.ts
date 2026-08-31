@@ -38,19 +38,22 @@ export class NetworkEgressProxy {
 
   private async isAllowed(hostname: string): Promise<string | null> {
     try {
-      // Resolve IP to prevent DNS rebinding
-      const { address } = await lookup(hostname);
+      // Strip brackets if IPv6 literal
+      const cleanHostname = hostname.replace(/^\[|\]$/g, '');
+
+      // Resolve IP to prevent DNS rebinding TOCTOU
+      const { address } = await lookup(cleanHostname);
       
-      // We can use a mocked args object to pass to checkEgress
+      // Check egress rules against both resolved IP and original hostname
       const egressCheck = this.policyEngine.checkEgress({ url: `http://${address}` });
       if (egressCheck.isBlocked) return null;
 
-      const domainCheck = this.policyEngine.checkEgress({ url: `http://${hostname}` });
+      const domainCheck = this.policyEngine.checkEgress({ url: `http://${cleanHostname}` });
       if (domainCheck.isBlocked) return null;
 
       return address;
     } catch {
-      return null; // Block if DNS fails
+      return null; // Fail closed if DNS resolution fails
     }
   }
 
@@ -70,16 +73,16 @@ export class NetworkEgressProxy {
         return;
       }
 
+      // Pin strictly to resolved IP to prevent DNS rebinding TOCTOU
       const options = {
         hostname: resolvedIp,
         port: url.port || 80,
         path: url.pathname + url.search,
         method: req.method,
-        headers: req.headers
+        headers: { ...req.headers }
       };
       
-      // Ensure the Host header is explicitly set to the original hostname
-      // to preserve virtual hosting and SNI behaviors downstream if applicable.
+      // Preserve original Host header for virtual hosting and downstream routing
       options.headers.host = url.host;
 
       const proxyReq = http.request(options, (proxyRes) => {
@@ -87,7 +90,7 @@ export class NetworkEgressProxy {
         proxyRes.pipe(res, { end: true });
       });
 
-      proxyReq.on('error', (err) => {
+      proxyReq.on('error', () => {
         res.writeHead(502);
         res.end('Bad Gateway');
       });
@@ -105,24 +108,28 @@ export class NetworkEgressProxy {
       return;
     }
 
-    const [hostname, port] = req.url.split(':');
-    const resolvedIp = await this.isAllowed(hostname);
+    const [rawHost, rawPort] = req.url.split(':');
+    const targetPort = parseInt(rawPort, 10) || 443;
+    const resolvedIp = await this.isAllowed(rawHost);
 
     if (!resolvedIp) {
       clientSocket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
       return;
     }
 
-    const serverSocket = net.connect(parseInt(port) || 443, resolvedIp, () => {
+    // Connect strictly to resolved IP address (pinned)
+    const serverSocket = net.connect({ host: resolvedIp, port: targetPort }, () => {
       clientSocket.write('HTTP/1.1 200 Connection Established\r\n' +
                          'Proxy-agent: MCP-Shield\r\n\r\n');
-      serverSocket.write(head);
+      if (head && head.length > 0) {
+        serverSocket.write(head);
+      }
       serverSocket.pipe(clientSocket);
       clientSocket.pipe(serverSocket);
     });
 
-    serverSocket.on('error', (err) => {
-      clientSocket.end(`HTTP/1.1 502 Bad Gateway\r\n\r\n`);
+    serverSocket.on('error', () => {
+      clientSocket.end('HTTP/1.1 502 Bad Gateway\r\n\r\n');
     });
 
     clientSocket.on('error', () => {

@@ -87,6 +87,12 @@ To maintain credibility and avoid overpromising, MCP-Shield defines clear defens
    - MCP-Shield is an execution and data gateway enforcing deterministic syntactic rules, DLP redaction, and sandbox boundaries. It is not an LLM intent classifier and does not evaluate whether benign text is persuasive or manipulative.
 6. **Windows Native PowerShell AST Grammar Parsing**:
    - Native C AST parsing is strictly implemented for POSIX shell grammar (`tree-sitter-bash`). On Windows, cmd.exe and PowerShell arguments are processed via lexical tokenization and switch parsers (`/s`, `/q`, `-Recurse`) rather than a full native PowerShell AST compiler.
+7. **Environment-Variable Egress Enforcement Boundary**:
+   - Network egress filtering operates as an environment-level proxy shim (`HTTP_PROXY` / `HTTPS_PROXY`). It provides domain policy and DNS-rebinding protection for standard HTTP/HTTPS SDKs. Downstream tools initiating raw TCP sockets or deliberately ignoring proxy environment variables bypass this shim unless Docker container network isolation (`network=none`) is enabled.
+8. **In-Process Vault Encryption Key Storage**:
+   - `SecretVault` encryption keys are generated in process memory (`crypto.randomBytes(32)`). This protects credentials from leaking into LLM prompt contexts and wire transcripts, but does not protect against local root attackers with host process memory access (e.g. `ptrace` or debugger attachments).
+9. **AST Filter Nature (Structural Pattern Engine vs. Formal Sandbox)**:
+   - The AST analyzer inspects syntax trees to unwind known execution wrappers and block dangerous primitives. It is a defense-in-depth syntactic filter, not an operating-system sandbox; full process containment requires the optional container sandbox.
 
 ---
 

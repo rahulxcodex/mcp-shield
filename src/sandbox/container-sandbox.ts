@@ -36,6 +36,10 @@ export class ContainerSandbox {
     };
   }
 
+  public isEnabled(): boolean {
+    return this.options.enabled;
+  }
+
   public isAvailable(): boolean {
     try {
       execSync('docker --version', { stdio: 'ignore' });

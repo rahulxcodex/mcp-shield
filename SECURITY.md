@@ -27,6 +27,30 @@ If you discover a security vulnerability, bypass, or privilege escalation in MCP
 
 ---
 
+## ⏱️ Incident Response Plan & Remediation SLAs
+
+To provide predictable, enterprise-grade handling of reported vulnerabilities, MCP-Shield follows a strict response cadence:
+
+| Phase | Target SLA | Actions Taken |
+| :--- | :--- | :--- |
+| **1. Initial Acknowledgment** | **< 48 hours** | Confirm report receipt, assign dedicated triage lead, establish private advisory channel. |
+| **2. Triage & Reproduction** | **< 72 hours** | Reproduce PoC against test harnesses, determine severity (CVSS v3.1), evaluate blast radius. |
+| **3. Patch Development** | **< 7 calendar days** | Develop candidate fix, create automated regression test in `tests/security-corpus/`, run full fuzz suite. |
+| **4. Release & Advisory** | **Coordinated Disclosure** | Issue hotfix release (e.g. v1.x.y), assign tracking ID / CVE via GitHub Advisories, credit reporter in Hall of Fame. |
+
+### Emergency Rollback & Mitigation Instructions
+If a zero-day bypass is discovered before a patch is published, operators can immediately enforce container sandbox isolation with complete network cutoff:
+```yaml
+# shield.config.yaml
+sandbox:
+  container:
+    enabled: true
+    network: "none"
+```
+Or execute manual unwrapping via `mcp-shield unwrap`.
+
+---
+
 ## 📋 Documented Security Advisories & CVE Writeups
 
 Real scar tissue and rigorous remediation are what separate enterprise-grade security tooling from theoretical prototypes. Below are published security advisories and CVE-style writeups documenting historical bypasses, root cause analyses, and verified patches.

@@ -399,6 +399,16 @@ ${red}BLOCKED${reset}
       const containerSandbox = new ContainerSandbox(containerConfig || {});
       const { cmd, args } = containerSandbox.spawnProcess(this.targetCmd, this.targetArgs);
 
+      if (containerSandbox.isEnabled()) {
+        try {
+          process.stderr.write('[MCP-SHIELD] 🛡️  Container Sandbox Active: Running in ephemeral Docker container (--cap-drop=ALL, network=none).\n');
+        } catch {}
+      } else {
+        try {
+          process.stderr.write('[MCP-SHIELD] ℹ️  Host Execution Mode: Container isolation is disabled (default). Enforcing AST command firewall and DLP secret sanitization on stdio stream.\n');
+        } catch {}
+      }
+
       const childEnv = ProxyServer.buildSafeEnv();
       if (proxyPort > 0) {
         childEnv['HTTP_PROXY'] = `http://127.0.0.1:${proxyPort}`;
