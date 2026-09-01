@@ -1,5 +1,5 @@
 {
-  "name": "mcp-shield",
+  "name": "mcpshld",
   "version": "1.0.5",
   "description": "The Zero-Trust Security Gateway, AST Firewall & Secret Sanitizer for Model Context Protocol (MCP) and AI Agents.",
   "main": "dist/index.js",
@@ -57,6 +57,7 @@
     "express": "^5.2.1",
     "ink": "^7.1.1",
     "js-yaml": "^5.4.1",
+    "mcpshld": "^1.0.5",
     "react": "^19.2.8",
     "tree-sitter": "0.25.1",
     "tree-sitter-bash": "0.25.1",
