@@ -43,12 +43,12 @@ export async function POST(request: Request) {
     // Lookup API key by prefix
     const { data: apiKeyData, error: apiError } = await supabase
       .from('api_keys')
-      .select('key, project_id')
+      .select('key_hash, project_id')
       .eq('key_prefix', keyPrefix)
       .single();
 
     // Fallback for development if api_keys table is not seeded
-    const apiKey = apiKeyData?.key || process.env.MCP_SHIELD_SHARED_KEY || (keyPrefix === 'dev-prefix-1' ? 'dev-secret-key-for-testing' : null);
+    const apiKey = apiKeyData?.key_hash || process.env.MCP_SHIELD_SHARED_KEY || (keyPrefix === 'dev-prefix-1' ? 'dev-secret-key-for-testing' : null);
 
     if (!apiKey) {
       return NextResponse.json({ error: 'Invalid API Key' }, { status: 401 });
@@ -70,9 +70,6 @@ export async function POST(request: Request) {
 
     const eventsToInsert = events.map((event: any) => ({
       project_id: projectId,
-      device_hostname: device?.hostname,
-      device_platform: device?.platform,
-      device_arch: device?.arch,
       session_id: event.sessionId,
       event_type: event.eventType,
       detector: event.detector,
