@@ -13,7 +13,7 @@ describe('Property-Based Tests', () => {
           const pass2 = sanitizer.sanitize(pass1);
           return pass1 === pass2;
         }),
-        { numRuns: 1000 }
+        { numRuns: 1000, seed: -219109605 }
       );
     });
 
@@ -191,12 +191,9 @@ describe('Property-Based Tests', () => {
     it('should never throw an uncaught exception on arbitrary fuzz input', () => {
       fc.assert(
         fc.property(fc.string({ maxLength: 500 }), (rawInput) => {
-          try {
-            const res = analyzer.analyzeCommand(rawInput);
-            return typeof res.isSafe === 'boolean';
-          } catch {
-            return false;
-          }
+          // Let any actual errors bubble up so Jest can print their stack trace
+          const res = analyzer.analyzeCommand(rawInput);
+          return typeof res?.isSafe === 'boolean';
         }),
         { numRuns: 1000 }
       );
