@@ -13,6 +13,8 @@ export * from './core/proxy';
 export * from './security/policy-engine';
 export * from './security/sanitizer';
 export * from './security/rate-limiter';
+export * from './security/canary';
+export * from './security/jit-elevation';
 export * from './cloud/telemetry';
 export * from './dashboard/server';
 

@@ -8,35 +8,40 @@ MCP Shield provides zero-trust agentic security, AST shell command firewalls, an
 
 | Feature Category | **Community (Open Source)** | **Team / Pro** | **Enterprise Grid** |
 | :--- | :--- | :--- | :--- |
-| **Target Audience** | Individual Developers & Open Source Researchers | Small Teams & Fast-Moving Startups (up to 50 seats) | Mid-Market & Fortune 500 Enterprises (50–10,000+ seats) |
+| **Target Audience** | Individual Developers & Open Source Researchers | Fast-Moving Startups & Teams (up to 50 seats) | Mid-Market & Fortune 500 Enterprises (50–10,000+ seats) |
 | **Pricing Model** | **Free (MIT License)** | **$39 / developer / month** (billed annually) | **Custom Annual Contract** (Starting at $50,000 ACV) |
-| **Deployment Model** | Local Endpoint CLI | Cloud SaaS Control Plane + Local Agent | Cloud SaaS, Dedicated Single-Tenant VPC, or On-Prem / Air-Gapped |
-| **Core AST Firewall** | ✅ Full POSIX/Windows Tree-Sitter AST Analysis | ✅ Full POSIX/Windows Tree-Sitter AST Analysis | ✅ Full POSIX/Windows Tree-Sitter AST Analysis + Custom Rules |
-| **DLP & Secret Redaction** | ✅ Regex & High-Entropy Detection (Local Masking) | ✅ Regex, High-Entropy & Custom Team Patterns | ✅ Bi-directional Vault-Backed Redaction + Zero-Knowledge Enclaves |
+| **Deployment Model** | Local Endpoint CLI | Multi-Tenant Cloud Control Plane + Local Agent | Multi-Tenant Cloud, Dedicated Single-Tenant VPC, or Air-Gapped K8s |
+| **Core AST Firewall** | ✅ Full POSIX/Windows Tree-Sitter AST Analysis | ✅ Full POSIX/Windows Tree-Sitter AST Analysis | ✅ Full Tree-Sitter AST Analysis + Custom AST Grammar Extensions |
+| **DLP & Data Redaction** | ✅ Regex & High-Entropy Detection (Local Masking) | ✅ Regex, High-Entropy & Custom Team Patterns | ✅ **Format-Preserving Encryption (FPE)** + Vault-Backed De-tokenization |
+| **JIT Tool Elevation** | ❌ None | ⚠️ Basic Manual CLI Prompts | ✅ **Interactive Human-in-the-Loop (Slack, Teams, PagerDuty, Webhooks)** |
+| **Honeypot & Canary Defense**| ❌ None | ❌ None | ✅ **Canary MCP Endpoints & Cryptographic Watermark Tripwires** |
+| **Rate Limiting** | Basic RPS Limiter | Configurable RPS Limiter | ✅ **Semantic & Complexity Rate Limiting** (Token Velocity & AST Depth) |
 | **Evaluation Modes** | Fail-Closed Enforce Only | Fail-Closed Enforce + Observe / Audit Mode | Enforce, Observe/Audit, Shadow Pilot, & Per-Team Granular Rules |
 | **Policy Distribution** | Local YAML Config Files (`shield.config.yaml`) | Web Dashboard & Team Policy Sync | Central Fleet Policy Push, Immutable GitOps & Tamper-Proof Signing |
-| **Audit & Logging** | Local File Logs | Central Web Activity Log (30-day retention) | Real-time SIEM Export (Splunk, Datadog, Sentinel, Elastic) + 365-day retention |
-| **Identity & Access** | None | Team SSO (Google Workspace, GitHub) | Enterprise SAML 2.0 / OIDC (Okta, Azure AD, Ping) + RBAC / SCIM |
-| **Compliance & Reporting**| None | Basic Threat Statistics | SOC 2 Type II, ISO 27001, HIPAA & NIST AI RMF Automated Compliance Reports |
-| **Support & SLAs** | Community Discord & GitHub Issues | Business Hours Email Support (<8 hr SLA) | **24/7/365 Dedicated P1 Support (<15 min SLA)** + Dedicated CSM |
+| **Audit & SIEM Export** | Local File Logs | Central Web Activity Log (30-day retention) | Real-time SIEM Export (Splunk HEC, Datadog, Sentinel, S3) + 365-day retention |
+| **Identity & Access** | None | Team SSO (Google Workspace, GitHub) | **Enterprise SAML 2.0 / OIDC (Okta, Azure AD, Ping) + RBAC / SCIM 2.0** |
+| **Compliance & Reporting**| None | Basic Threat Statistics | SOC 2 Type II, ISO 27001, HIPAA & NIST AI RMF Automated Evidence Packs |
+| **Support & SLAs** | Community Discord & GitHub Issues | Business Hours Email Support (<8 hr SLA) | **24/7/365 Dedicated P1 Support (<15 min SLA)** + Dedicated CSM & Architect |
 
 ---
 
 ## 🏢 Enterprise Grid Tier Deep-Dive
 
-### 1. Deployment Flexibility
-* **Multi-Tenant Secure Cloud:** Fast onboarding with isolated customer tenant keys and KMS encryption at rest.
-* **Dedicated Single-Tenant VPC:** Hosted on AWS, GCP, or Azure in the customer's region of choice with dedicated control plane compute.
-* **On-Premise / Air-Gapped Kubernetes:** Full Helm chart deployment into isolated enterprise Kubernetes clusters without external internet egress dependencies.
+### 1. Deployment Flexibility & Isolation Models
+* **Enterprise Multi-Tenant Cloud:** Dedicated encryption keys (CMEK) and KMS tenant isolation with 99.99% availability.
+* **Dedicated Single-Tenant VPC:** Hosted on AWS, GCP, or Azure in the customer's region of choice with isolated control plane compute and private networking.
+* **On-Premise / Air-Gapped Kubernetes:** Packaged Helm chart distribution for isolated enterprise Kubernetes clusters without external internet egress requirements.
 
-### 2. Centralized Fleet Management & Governance
-* **Single-Pane-of-Glass Console:** Real-time visibility into all active agent connections, tool executions, and intercepted attacks across the entire developer workforce.
-* **Policy Hierarchies & Inheritance:** Define organizational security baselines (e.g., global block on `rm -rf /`, credentials redaction) while allowing DevOps and engineering leads to define granular team-level allowances.
-* **Immutable Audit Trail:** Cryptographically signed, append-only logs for tamper-evident compliance verification.
+### 2. Advanced Zero-Trust Agent Security
+* **Format-Preserving Encryption (FPE - FF1/AES-256):** Replaces sensitive credentials with syntactically valid synthetic surrogates, preventing LLM context leakage while maintaining unbroken downstream tool execution.
+* **Dynamic Just-in-Time (JIT) Tool Elevation:** High-privilege tool calls trigger interactive Slack/Teams approval alerts, granting time-bounded cryptographic execution leases.
+* **Honeypot Canary Endpoints & Tripwire Watermarking:** Injects decoy tools into the MCP manifest and canary tokens into environment variables to instantly catch and quarantine hijacked agent sessions.
+* **Semantic Rate Limiting:** Throttles runaway recursive loops and computational cascades based on AST cyclomatic complexity and semantic token velocity.
 
-### 3. Custom AST Rule Engine & Proprietary Integrations
-* Custom Tree-Sitter AST grammar extensions for internal CLI tools and propriety internal infrastructure commands.
-* Integration with internal enterprise HashiCorp Vault, CyberArk, and AWS Secrets Manager for seamless runtime token injection.
+### 3. Centralized Fleet Management & GitOps Governance
+* **Single-Pane-of-Glass Console:** Real-time visibility into all active agent connections, tool executions, and intercepted attacks across the entire developer fleet.
+* **Hierarchical Policy Management:** Define organizational security baselines while enabling team leads to configure project-specific boundaries.
+* **Tamper-Evident Audit Trails:** Cryptographically signed, append-only logs for auditor verification.
 
 ---
 
@@ -70,7 +75,7 @@ MCP Shield provides zero-trust agentic security, AST shell command firewalls, an
 ## 💬 Frequently Asked Questions (Procurement & Security)
 
 ### Q: Does MCP Shield send our proprietary source code to your cloud?
-**No.** The MCP Shield Data Plane (AST engine, regex DLP, and command evaluation) executes **100% locally on the developer's machine or within your private VPC**. Only anonymized policy telemetry metadata and security event summaries are transmitted to the Central Control Plane.
+**No.** The MCP Shield Data Plane (AST engine, regex/FPE DLP, and command evaluation) executes **100% locally on the developer's machine or within your private VPC**. Only anonymized policy telemetry metadata and security event summaries are transmitted to the Central Control Plane.
 
 ### Q: What happens if the Central Control Plane is unreachable?
 MCP Shield operates in **local caching mode**. The local proxy continues enforcing the last-known signed security policy offline, buffering non-critical audit telemetry until network connectivity is restored.

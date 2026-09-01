@@ -3,6 +3,8 @@ import { ASTAnalyzer } from '../src/security/ast-analyzer';
 import { SecretSanitizer } from '../src/security/sanitizer';
 import { RateLimiter } from '../src/security/rate-limiter';
 import { PolicyEngine } from '../src/security/policy-engine';
+import { FormatPreservingEncryptor } from '../src/security/fpe';
+import { CanaryManager } from '../src/security/canary';
 
 interface GateCheck {
   component: string;
@@ -25,13 +27,15 @@ function measureMedianUs(fn: () => void, iterations: number = 2000, warmup: numb
 
 export function runPerformanceGate(): boolean {
   console.log('\n================================================================================');
-  console.log('⚡ MCP-SHIELD CI PERFORMANCE REGRESSION GATE');
+  console.log('⚡ MCP-SHIELD CI PERFORMANCE REGRESSION GATE (Enterprise Phase 1-3)');
   console.log('================================================================================\n');
 
   const ast = new ASTAnalyzer();
   const sanitizer = new SecretSanitizer();
   const rateLimiter = new RateLimiter(50000, 60000);
   const policyEngine = new PolicyEngine();
+  const fpe = new FormatPreservingEncryptor();
+  const canary = new CanaryManager();
 
   const sample1Kb = JSON.stringify({
     tool: 'execute_command',
@@ -73,7 +77,29 @@ export function runPerformanceGate(): boolean {
     passed: sanitizerP50 <= 300
   });
 
-  // 4. Rate Limiter Check
+  // 4. Format-Preserving Encryption (FPE Token Masking)
+  const fpeP50 = measureMedianUs(() => {
+    fpe.encryptAlphanumericToken('sk-proj-1234567890abcdef1234567890abcdef1234567890');
+  });
+  checks.push({
+    component: 'FPE: Format-Preserving Token Masking',
+    measuredLatencyUs: fpeP50,
+    maxAllowedUs: 150, // 150 µs ceiling
+    passed: fpeP50 <= 150
+  });
+
+  // 5. Canary Honeypot Tool Lookup & Tripwire
+  const canaryP50 = measureMedianUs(() => {
+    canary.isCanaryTool('shield_canary_system_vault_access');
+  });
+  checks.push({
+    component: 'Canary: Honeypot Tool Interception',
+    measuredLatencyUs: canaryP50,
+    maxAllowedUs: 50, // 50 µs ceiling
+    passed: canaryP50 <= 50
+  });
+
+  // 6. Rate Limiter Check
   const rateLimitP50 = measureMedianUs(() => {
     rateLimiter.checkLimit('test_tool');
   });
@@ -84,7 +110,7 @@ export function runPerformanceGate(): boolean {
     passed: rateLimitP50 <= 50
   });
 
-  // 5. Policy Engine Evaluation
+  // 7. Policy Engine Evaluation
   const policyP50 = measureMedianUs(() => {
     policyEngine.evaluate({
       toolName: 'read_file',

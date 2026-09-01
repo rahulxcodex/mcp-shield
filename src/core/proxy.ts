@@ -11,6 +11,8 @@ import { EvaluationContext, Evidence } from '../security/policy-engine';
 import { ConfigLoader } from '../security/config';
 import { NetworkEgressProxy } from '../security/network-proxy';
 import { CapabilityInferencer } from '../security/capabilities';
+import { CanaryManager } from '../security/canary';
+import { JITElevationManager } from '../security/jit-elevation';
 
 export interface Lifecycle {
   start(): Promise<number>;
@@ -38,6 +40,8 @@ export class ProxyServer implements Lifecycle {
   private dashboard: DashboardServer | null = null;
   private dispatcher: RequestDispatcher;
   private networkEgressProxy: NetworkEgressProxy;
+  public readonly canaryManager = new CanaryManager();
+  public readonly jitManager = new JITElevationManager();
 
   constructor(
     private targetCmd: string,
@@ -88,6 +92,7 @@ export class ProxyServer implements Lifecycle {
         
         // Intercept tools/list response
         if (message.id !== undefined && message.result && message.result.tools) {
+           message.result.tools = this.canaryManager.injectCanariesIntoToolsList(message.result.tools);
            for (const tool of message.result.tools) {
               try {
                  this.session.registerTool(tool.name, tool.description || '', tool.inputSchema || {});
@@ -157,9 +162,14 @@ export class ProxyServer implements Lifecycle {
 
         const evidence: Evidence[] = [];
 
-        // -1. Rate Limit Check (Runaway loop prevention)
-        if (!this.session.rateLimiter.checkLimit(toolName)) {
-           evidence.push({ detector: 'rate-limiter', finding: `RATE_LIMIT_EXCEEDED: Runaway loop detected for tool '${toolName}'.`, risk: 'CRITICAL' });
+        // -2. Canary / Honeypot Tool Tripwire Check
+        if (this.canaryManager.isCanaryTool(toolName)) {
+           evidence.push({ detector: 'canary-honeypot', finding: `CANARY_HONEYPOT_ACCESSED: Agent attempted to invoke honeypot tool '${toolName}'.`, risk: 'CRITICAL' });
+        }
+
+        // -1. Rate Limit & Semantic Complexity Check (Runaway loop prevention)
+        if (!this.session.rateLimiter.checkLimit(toolName, rawArgs)) {
+           evidence.push({ detector: 'rate-limiter', finding: `RATE_LIMIT_EXCEEDED: Runaway loop or semantic complexity budget exceeded for tool '${toolName}'.`, risk: 'CRITICAL' });
         }
 
         // 0. Honey-Token DLP Check (Evaluated against RawSecurityInput)
@@ -271,17 +281,30 @@ ${red}BLOCKED${reset}
               }
            }
         } else if (action === 'prompt') {
-           const result = await PromptBridge.ask(
-              `Intercepted ${toolName}`,
-              `Tool: ${toolName}\nArgs: ${JSON.stringify(sanitizedArgs, null, 2)}`,
-              'HIGH'
-           );
-           if (result.action !== 'approve') {
-              this.logAndBroadcast({ type: 'user_denied', toolName, ruleId: securityResult.ruleId });
-              this.sendErrorToHost(message.id, -32000, `USER DENIED: Execution rejected by human operator.`);
-              return;
+           const jitStatus = this.jitManager.checkAndConsumeElevation(toolName);
+           if (jitStatus.elevated) {
+              this.logAndBroadcast({
+                type: 'jit_elevation_consumed',
+                toolName,
+                leaseId: jitStatus.lease?.leaseId,
+                remainingExecutions: jitStatus.lease?.remainingExecutions
+              });
+              try {
+                process.stderr.write(`\x1b[32m[MCP-SHIELD JIT] Tool '${toolName}' executed under active JIT elevation lease (${jitStatus.lease?.leaseId}).\x1b[0m\n`);
+              } catch {}
+           } else {
+              const result = await PromptBridge.ask(
+                 `Intercepted ${toolName}`,
+                 `Tool: ${toolName}\nArgs: ${JSON.stringify(sanitizedArgs, null, 2)}`,
+                 'HIGH'
+              );
+              if (result.action !== 'approve') {
+                 this.logAndBroadcast({ type: 'user_denied', toolName, ruleId: securityResult.ruleId });
+                 this.sendErrorToHost(message.id, -32000, `USER DENIED: Execution rejected by human operator.`);
+                 return;
+              }
+              this.logAndBroadcast({ type: 'user_allowed', toolName, ruleId: securityResult.ruleId });
            }
-           this.logAndBroadcast({ type: 'user_allowed', toolName, ruleId: securityResult.ruleId });
         } else if (action === 'sandbox') {
            const targetPath = rawArgs.path || rawArgs.file || rawArgs.filename || rawArgs.filepath || rawArgs.target;
            const content = rawArgs.content || rawArgs.text || rawArgs.data;

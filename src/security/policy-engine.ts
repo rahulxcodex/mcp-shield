@@ -285,8 +285,9 @@ export class PolicyEngine {
     // PHASE 1: CRITICAL DETECTORS
     const criticalEvidence = context.evidence.find(e => e.risk === 'CRITICAL');
     if (criticalEvidence) {
+      const isQuarantine = criticalEvidence.finding.includes('HONEY_TOKEN') || criticalEvidence.finding.includes('CANARY');
       return {
-        decision: criticalEvidence.finding.includes('HONEY_TOKEN') ? 'quarantine' : 'block',
+        decision: isQuarantine ? 'quarantine' : 'block',
         detector: criticalEvidence.detector,
         reasonCode: criticalEvidence.finding
       };

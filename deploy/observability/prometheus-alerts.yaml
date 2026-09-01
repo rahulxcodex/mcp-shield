@@ -1,0 +1,54 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mcp-shield-alerts
+  labels:
+    role: alert-rules
+    app.kubernetes.io/name: mcp-shield
+spec:
+  groups:
+    - name: MCPShieldSecurityAlerts
+      rules:
+        # P1 / Critical: Honeypot or Canary Tripwire Triggered
+        - alert: MCPShieldHoneypotTrapTriggered
+          expr: sum(increase(mcp_shield_honeypot_triggers_total[1m])) > 0
+          for: 0m
+          labels:
+            severity: critical
+            tier: secops
+          annotations:
+            summary: "🚨 AI Agent Prompt Hijack Detected via Honeypot Canary"
+            description: "An AI agent attempted to invoke a canary decoy tool. Possible prompt injection or agent compromise in namespace {{ $labels.namespace }}."
+
+        # P2 / High: Attack Violation Spike
+        - alert: MCPShieldSecurityViolationsSpike
+          expr: sum(rate(mcp_shield_security_violations_total[5m])) > 5
+          for: 2m
+          labels:
+            severity: warning
+            tier: secops
+          annotations:
+            summary: "Elevated Security Violation Rate on MCP Shield Gateway"
+            description: "Over 5 security violations per second blocked over the last 5 minutes on instance {{ $labels.instance }}."
+
+        # P2 / Warning: Latency SLA Breach (p99 > 15ms)
+        - alert: MCPShieldLatencySLABreached
+          expr: histogram_quantile(0.99, sum(rate(mcp_shield_request_duration_seconds_bucket[5m])) by (le)) * 1000 > 15
+          for: 3m
+          labels:
+            severity: warning
+            tier: sre
+          annotations:
+            summary: "MCP Shield p99 latency exceeds 15ms SLA"
+            description: "Proxy evaluation overhead p99 is currently {{ $value }}ms (SLA is <5ms, alert threshold >15ms)."
+
+        # P3 / Warning: Semantic Rate Limit Exhaustion
+        - alert: MCPShieldTenantRateLimitExhausted
+          expr: sum by (tenant_id) (rate(mcp_shield_rate_limit_drops_total[5m])) > 1
+          for: 1m
+          labels:
+            severity: warning
+            tier: sre
+          annotations:
+            summary: "Tenant Semantic Token Budget Exhausted"
+            description: "Tenant {{ $labels.tenant_id }} has exceeded token/complexity rate limits and requests are being throttled."

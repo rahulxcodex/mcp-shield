@@ -1,0 +1,72 @@
+{{- if .Values.honeypot.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-shield.fullname" . }}-honeypot
+  labels:
+    {{- include "mcp-shield.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canary-honeypot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mcp-shield.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: canary-honeypot
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-shield.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: canary-honeypot
+    spec:
+      containers:
+        - name: honeypot
+          image: node:20-alpine
+          command: ["node", "-e"]
+          args:
+            - |
+              const http = require('http');
+              const server = http.createServer((req, res) => {
+                let body = '';
+                req.on('data', chunk => body += chunk);
+                req.on('end', () => {
+                  console.error('🚨 [HONEYPOT HIT] Tripwire triggered on canary endpoint:', body);
+                  res.writeHead(403, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({
+                    error: {
+                      code: -32001,
+                      message: 'Tripwire Alert: Canary endpoint hit.',
+                      data: { tripwire: 'CANARY_HONEYPOT_HIT' }
+                    }
+                  }));
+                });
+              });
+              server.listen(9090, () => console.log('Honeypot Canary running on 9090'));
+          ports:
+            - name: honeypot
+              containerPort: 9090
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mcp-shield.fullname" . }}-honeypot
+  labels:
+    {{- include "mcp-shield.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canary-honeypot
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+      name: honeypot
+  selector:
+    {{- include "mcp-shield.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: canary-honeypot
+{{- end }}

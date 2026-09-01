@@ -1,4 +1,4 @@
-# Default values for mcp-shield Helm chart.
+# Default values for mcp-shield Helm chart (Phase 2 & 3 GA Enterprise Release).
 # Declare variables to be passed into your templates.
 
 replicaCount: 2
@@ -6,7 +6,6 @@ replicaCount: 2
 image:
   repository: rahulxcodex/mcp-shield
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
   tag: "1.0.0"
 
 imagePullSecrets: []
@@ -18,6 +17,47 @@ deploymentMode: gateway
 
 # Enforcement Lifecycle: 'observe' (shadow/audit mode) or 'enforce' (strict fail-closed)
 enforcementMode: enforce
+
+# Enterprise Multi-Tenancy & Fleet Management
+multiTenancy:
+  enabled: true
+  tenantHeader: "X-MCP-Shield-Tenant-ID"
+  defaultTenant: "default-enterprise"
+  isolationPolicy: "strict-namespace"
+
+# Enterprise Single Sign-On (SSO) & OIDC Auth Integration
+sso:
+  enabled: false
+  provider: "oidc"
+  issuerUrl: "https://auth.enterprise.com/oauth2/v1"
+  clientId: "mcp-shield-gateway"
+  clientSecretSecretName: "mcp-shield-sso-secret"
+  roleClaim: "groups"
+  adminGroup: "secops-admins"
+  auditorGroup: "compliance-auditors"
+
+# Semantic Rate Limiting (Auditor Recommendation #3)
+semanticRateLimiting:
+  enabled: true
+  strategy: "token-complexity" # Options: 'token-complexity', 'rps', 'hybrid'
+  tokenBudgetPerMinute: 500000
+  maxComplexityScorePerCall: 100
+  burstMultiplier: 1.5
+
+# Canary & Honeypot Decoy Endpoints (Auditor Recommendation #4)
+honeypot:
+  enabled: true
+  canaryService: "mcp-shield-honeypot"
+  trapAction: "quarantine-session-and-alert"
+  alertWebhook: "https://security-alerts.enterprise.internal/tripwire"
+
+# HashiCorp Vault / External Secrets Operator Integration
+externalSecrets:
+  enabled: false
+  secretStoreRef:
+    name: "vault-backend"
+    kind: "ClusterSecretStore"
+  targetSecretName: "mcp-shield-runtime-secrets"
 
 serviceAccount:
   create: true
@@ -51,14 +91,20 @@ service:
 
 ingress:
   enabled: false
-  className: ""
-  annotations: {}
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
   hosts:
-    - host: mcp-shield.local
+    - host: shield.enterprise.internal
       paths:
         - path: /
-          pathType: ImplementationSpecific
-  tls: []
+          pathType: Prefix
+  tls:
+    - secretName: mcp-shield-tls
+      hosts:
+        - shield.enterprise.internal
 
 resources:
   limits:
@@ -93,7 +139,7 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# MCP Shield Configuration
+# MCP Shield Policy & Engine Configuration
 config:
   logLevel: info
   telemetryEnabled: true
@@ -102,6 +148,7 @@ config:
     maskStyle: token
     highEntropyCheck: true
     entropyThreshold: 4.5
+    fpeEnabled: true # Format-Preserving Encryption
   sandbox:
     cowEnabled: true
     cowStagingDir: /tmp/mcp-shield/cow

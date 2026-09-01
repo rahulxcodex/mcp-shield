@@ -234,9 +234,12 @@ npm run test:coverage
 
 ## 📚 Documentation Directory
 
+- 🌟 [Advanced Enterprise Security Capabilities](docs/ADVANCED_SECURITY_FEATURES.md) - JIT tool elevation, honeypots, tripwires, and format-preserving DLP.
+- 📢 [General Availability (GA) Announcement](docs/GA_LAUNCH_ANNOUNCEMENT.md) - Enterprise v1.0 release notes, quotes, and market rollout.
 - 🎬 [Interactive Demo Walkthrough](docs/DEMO_WALKTHROUGH.md) - Live attack interception walkthrough and video storyboard.
 - 🏢 [Enterprise Security & Compliance Overview](docs/ENTERPRISE_OVERVIEW.md) - CISO brief, ROI, and SOC 2 / ISO / HIPAA mapping.
 - 🚀 [Launch Kit & GTM Playbook](docs/LAUNCH_KIT.md) - Product Hunt, Show HN, and press release launch materials.
+- 💵 [Enterprise Pricing & Packaging](docs/PRICING.md) - Community, Pro, and Enterprise Grid tier comparison and SLAs.
 - 📐 [Security Architecture](SECURITY_ARCHITECTURE.md) - Zero-trust design, fail-closed semantics, and proxy pipeline.
 - 🛡️ [Security Audit Report](SECURITY_AUDIT.md) - Formal third-party security assessment and penetration test report.
 - 🔒 [Security Policy & CVE Writeups](SECURITY.md) - Vulnerability disclosures, CVE writeups, and Security Hall of Fame.
