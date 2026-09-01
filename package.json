@@ -1,6 +1,6 @@
 {
   "name": "mcp-shield",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "description": "The Zero-Trust Security Gateway, AST Firewall & Secret Sanitizer for Model Context Protocol (MCP) and AI Agents.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
