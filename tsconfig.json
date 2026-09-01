@@ -105,7 +105,19 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
   },
-  "exclude": ["cloud-dashboard"],
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "benchmarks/**/*",
+    "scripts/**/*"
+  ],
+  "exclude": [
+    "cloud-dashboard",
+    "cloud-dashboard/**/*",
+    "dist",
+    "dist/**/*",
+    "node_modules"
+  ],
   "ts-node": {
     "compilerOptions": {
       "module": "CommonJS",

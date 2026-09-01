@@ -232,17 +232,44 @@ ${red}BLOCKED${reset}
            try { process.stderr.write(msg + '\n'); } catch {}
         };
 
-        if (action === 'quarantine') {
-           printMarketingBlock(toolName, rawArgs, 'CRITICAL', securityResult.reasonCode);
-           this.logAndBroadcast({ type: 'quarantine', toolName, reason: securityResult.reasonCode });
-           this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: ${securityResult.reasonCode}`);
-           if (this.child) { this.child.kill('SIGKILL'); }
-           return;
-        } else if (action === 'block') {
-           printMarketingBlock(toolName, rawArgs, 'HIGH', securityResult.reasonCode);
-           this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: securityResult.ruleId, reason: securityResult.reasonCode });
-           this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: ${securityResult.reasonCode}`);
-           return;
+        const mode = this.session.policyEngine.getMode();
+        const isAuditMode = mode === 'audit';
+        const isWarnMode = mode === 'warn';
+
+        if (action === 'quarantine' || action === 'block') {
+           if (isAuditMode) {
+              this.logAndBroadcast({
+                 type: 'policy_audit_violation',
+                 action: 'audit',
+                 simulatedAction: action,
+                 wouldBlock: true,
+                 toolName,
+                 ruleId: securityResult.ruleId,
+                 reason: securityResult.reasonCode,
+                 payload: sanitizedArgs
+              });
+              try {
+                process.stderr.write(`\x1b[33m[MCP-SHIELD AUDIT] Tool '${toolName}' flagged by security policy (${securityResult.reasonCode}). Action would be ${action.toUpperCase()} in enforce mode.\x1b[0m\n`);
+              } catch {}
+           } else if (isWarnMode) {
+              this.logAndBroadcast({ type: 'policy_warn', toolName, ruleId: securityResult.ruleId, reason: securityResult.reasonCode });
+              try {
+                process.stderr.write(`\x1b[33m[MCP-SHIELD WARN] Tool '${toolName}' warning: ${securityResult.reasonCode}\x1b[0m\n`);
+              } catch {}
+           } else {
+              if (action === 'quarantine') {
+                 printMarketingBlock(toolName, rawArgs, 'CRITICAL', securityResult.reasonCode);
+                 this.logAndBroadcast({ type: 'quarantine', toolName, reason: securityResult.reasonCode });
+                 this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: ${securityResult.reasonCode}`);
+                 if (this.child) { this.child.kill('SIGKILL'); }
+                 return;
+              } else {
+                 printMarketingBlock(toolName, rawArgs, 'HIGH', securityResult.reasonCode);
+                 this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: securityResult.ruleId, reason: securityResult.reasonCode });
+                 this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: ${securityResult.reasonCode}`);
+                 return;
+              }
+           }
         } else if (action === 'prompt') {
            const result = await PromptBridge.ask(
               `Intercepted ${toolName}`,
@@ -326,8 +353,9 @@ ${red}BLOCKED${reset}
       }
     } catch (err: any) {
       this.logAndBroadcast({ type: 'internal_error', reason: err.message });
-      if (message && message.id) {
-        this.sendErrorToHost(message.id, -32603, `Internal Security Gateway Error: ${err.message}`);
+      const onError = this.session?.policyEngine?.getOnError() || 'block';
+      if (onError === 'block' && message && message.id) {
+        this.sendErrorToHost(message.id, -32603, `Internal Security Gateway Error (Fail-Closed): ${err.message}`);
       }
     }
   }
@@ -346,7 +374,7 @@ ${red}BLOCKED${reset}
      } catch {}
   }
 
-  public static buildSafeEnv(sourceEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  public static buildSafeEnv(sourceEnv: any = process.env): any {
      const safeEnvAllowlist = [
        'PATH', 'PATHEXT', 'SHELL', 'PWD',
        'HOME', 'USER', 'LOGNAME', 'USERNAME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH',
@@ -364,7 +392,7 @@ ${red}BLOCKED${reset}
      const blockedInjectionPattern = /^(LD_|DYLD_|NODE_OPTIONS|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT|PROMPT_COMMAND)/i;
      const sensitiveKeyPattern = /(KEY|SECRET|TOKEN|PASSWORD|AUTH|CREDENTIAL|PRIVATE)/i;
 
-     const safeEnv: NodeJS.ProcessEnv = {
+     const safeEnv: any = {
        PYTHONUNBUFFERED: '1',
        PYTHONIOENCODING: 'utf-8'
      };

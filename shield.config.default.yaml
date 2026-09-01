@@ -1,5 +1,14 @@
 version: "1.0"
 profile: default
+mode: enforce # Options: 'enforce' (active blocking), 'audit' (shadow dry-run), 'warn' (alert only)
+onError: block # Fail-closed invariant on internal exceptions: 'block' or 'bypass'
+
+compliance:
+  preset: enterprise-standard # Options: 'enterprise-standard', 'hipaa-strict', 'gdpr-strict'
+  redactPii: true # GDPR Article 25 Privacy by Design
+  redactPhi: true # HIPAA § 164.312 Safe Harbor 18 Identifiers
+  zeroDataRetention: false # When true, drops payload bodies from memory post-evaluation
+  auditRetentionDays: 365 # SOC 2 CC7.2 compliance requirement
 
 redaction:
   enabled: true
@@ -23,6 +32,7 @@ egress:
   blockedDomains:
     - "*.ngrok.io"
     - "*.evil.com"
+    - "*evil-c2-server.com*"
 
 audit:
   enabled: true

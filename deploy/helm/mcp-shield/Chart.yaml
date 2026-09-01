@@ -1,0 +1,16 @@
+apiVersion: v2
+name: mcp-shield
+description: Enterprise Zero-Trust Security Gateway & Proxy for Model Context Protocol (MCP)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - mcp
+  - security
+  - zero-trust
+  - ai-safety
+  - gateway
+  - proxy
+maintainers:
+  - name: MCP Shield Team
+    email: security@mcp-shield.dev

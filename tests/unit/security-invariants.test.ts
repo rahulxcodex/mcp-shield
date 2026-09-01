@@ -14,6 +14,10 @@ describe('MCP-Shield Core Security Invariants', () => {
     fs.mkdirSync(testWorkspace, { recursive: true });
   });
 
+  beforeEach(() => {
+    fs.mkdirSync(testWorkspace, { recursive: true });
+  });
+
   afterAll(() => {
     try {
       fs.rmSync(testWorkspace, { recursive: true, force: true });

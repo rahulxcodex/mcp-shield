@@ -27,6 +27,8 @@ export type PolicyRule = z.infer<typeof PolicyRuleSchema>;
 export const ShieldConfigSchema = z.object({
   version: z.string(),
   profile: z.string(),
+  mode: z.enum(['enforce', 'audit', 'warn']).default('enforce').optional(),
+  onError: z.enum(['block', 'bypass']).default('block').optional(),
   redaction: z.object({
     enabled: z.boolean(),
     maskStyle: z.string(),
@@ -55,6 +57,7 @@ export const ShieldConfigSchema = z.object({
     logDir: z.string(),
     tamperEvidentHashing: z.boolean(),
     remoteSinkUrl: z.string().optional(),
+    siemFormat: z.enum(['json', 'syslog', 'cef']).default('json').optional(),
   }),
 });
 export type ShieldConfig = z.infer<typeof ShieldConfigSchema>;
@@ -179,6 +182,14 @@ export class PolicyEngine {
 
   public getConfig(): ShieldConfig {
     return this.config;
+  }
+
+  public getMode(): 'enforce' | 'audit' | 'warn' {
+    return this.config.mode || 'enforce';
+  }
+
+  public getOnError(): 'block' | 'bypass' {
+    return this.config.onError || 'block';
   }
 
   public checkEgress(args: Record<string, any>): { isBlocked: boolean; domain?: string; reason?: string } {

@@ -6,6 +6,7 @@ import { ScanCommand } from './cli/commands/scan';
 import { FixCommand } from './cli/commands/fix';
 import { StatsCommand } from './cli/commands/stats';
 import { LinkCommand } from './cli/commands/link';
+import { DemoCommand } from './cli/commands/demo';
 import { DashboardServer } from './dashboard/server';
 
 export * from './core/proxy';
@@ -18,7 +19,9 @@ export * from './dashboard/server';
 const args = process.argv.slice(2);
 const command = args[0];
 
-if (command === 'protect') {
+if (command === 'demo') {
+  DemoCommand.run(args.slice(1));
+} else if (command === 'protect') {
   ProtectCommand.run();
   process.exit(0);
 } else if (command === 'replay') {
@@ -62,6 +65,7 @@ if (command === 'protect') {
   console.log(`
 🛡️  MCP-SHIELD
 Usage:
+  mcp-shield demo [--dashboard]   Run interactive attack simulation & security demo.
   mcp-shield install              Quickly install and configure MCP-Shield.
   mcp-shield scan                 Scan your MCP servers for security vulnerabilities.
   mcp-shield fix                  Automatically generate and apply security policies.

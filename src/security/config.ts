@@ -17,6 +17,8 @@ export class ConfigLoader {
     return {
       version: '1.1',
       profile: 'hardened',
+      mode: 'enforce',
+      onError: 'block',
       redaction: { enabled: true, maskStyle: 'hash', highEntropyCheck: true, entropyThreshold: 4.0 },
       sandbox: { cowEnabled: true, cowStagingDir: '.mcp-shield/cow', autoCommitOnApproval: false },
       egress: { 

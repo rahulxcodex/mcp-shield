@@ -158,12 +158,16 @@ npm install -g mcp-shield
 npx mcp-shield --help
 ```
 
-### 2. Auto-Discover & Protect Your IDEs
+### 2. Auto-Discover & Protect Your IDEs (Dual-Mode)
 
 MCP-Shield automatically discovers, validates schemas, and protects MCP configurations for **Claude Desktop**, **Cursor IDE**, **Cline (VS Code)**, and **Windsurf**:
 
 ```bash
+# 🛡️ Mode 1: Active Enforcement (Default - Fail-Closed Zero-Trust)
 mcp-shield protect
+
+# 👻 Mode 2: Shadow / Discovery Mode (Enterprise POC & Risk Auditing)
+mcp-shield protect --mode=shadow
 ```
 
 This validates client configuration schemas, creates timestamped backups, and wraps all defined MCP servers idempotently with `mcp-shield wrap`.
@@ -230,6 +234,9 @@ npm run test:coverage
 
 ## 📚 Documentation Directory
 
+- 🎬 [Interactive Demo Walkthrough](docs/DEMO_WALKTHROUGH.md) - Live attack interception walkthrough and video storyboard.
+- 🏢 [Enterprise Security & Compliance Overview](docs/ENTERPRISE_OVERVIEW.md) - CISO brief, ROI, and SOC 2 / ISO / HIPAA mapping.
+- 🚀 [Launch Kit & GTM Playbook](docs/LAUNCH_KIT.md) - Product Hunt, Show HN, and press release launch materials.
 - 📐 [Security Architecture](SECURITY_ARCHITECTURE.md) - Zero-trust design, fail-closed semantics, and proxy pipeline.
 - 🛡️ [Security Audit Report](SECURITY_AUDIT.md) - Formal third-party security assessment and penetration test report.
 - 🔒 [Security Policy & CVE Writeups](SECURITY.md) - Vulnerability disclosures, CVE writeups, and Security Hall of Fame.
