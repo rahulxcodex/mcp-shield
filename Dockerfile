@@ -19,7 +19,7 @@ WORKDIR /app
 RUN apk add --no-cache tini
 
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/bin ./bin

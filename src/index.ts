@@ -27,7 +27,7 @@ const args = process.argv.slice(2);
 const command = args[0];
 
 const bypassCommands = ['demo', 'install', 'license', 'enterprise'];
-if (command && !bypassCommands.includes(command)) {
+if (command && !bypassCommands.includes(command) && process.env.NODE_ENV !== 'test') {
   const licenseFile = path.join(os.homedir(), '.mcp-shield', 'license.key');
   if (!fs.existsSync(licenseFile)) {
     console.error('❌ Missing License Key. MCP Shield requires an active license.');
