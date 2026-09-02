@@ -10,6 +10,7 @@
   "files": [
     "dist",
     "bin",
+    "cloud-dashboard",
     "shield.config.default.yaml",
     "LICENSE",
     "README.md",

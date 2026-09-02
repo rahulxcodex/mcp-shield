@@ -63,6 +63,9 @@ if (command === 'demo') {
     console.error('Fatal proxy error:', err);
     process.exit(1);
   });
+} else if (command === 'enterprise') {
+  // Launch the Next.js Enterprise Control Plane
+  require('./cli/commands/dashboard').dashboardCmd.parse(['node', 'mcp-shield', 'dashboard', ...args.slice(1)]);
 } else if (process.env.npm_lifecycle_event || require.main === module) {
   console.log(`
 🛡️  MCP-SHIELD
@@ -74,6 +77,7 @@ Usage:
   mcp-shield protect              Auto-discover and protect MCP clients.
   mcp-shield link --key <key>     Pair this agent instance with your Cloud Dashboard.
   mcp-shield dashboard            Launch local real-time security dashboard.
+  mcp-shield enterprise           Launch the full Next.js Enterprise Control Plane on-premise.
   mcp-shield stats [log_file]     View shareable security activity & blocked attacks report.
   mcp-shield replay <log_file>    Replay and verify tamper-evident audit logs.
   mcp-shield wrap -- <cmd> [args] Wrap an MCP server with the security gateway.
