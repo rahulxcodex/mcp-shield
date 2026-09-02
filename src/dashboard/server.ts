@@ -2,6 +2,7 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import * as http from 'http';
 import * as crypto from 'crypto';
+import { getDashboardHtml } from './html-template';
 
 export class DashboardServer {
   private app = express();
@@ -24,53 +25,11 @@ export class DashboardServer {
     });
 
     this.app.get('/', (req, res) => {
-      res.send(`
-        <html>
-        <head><title>MCP-Shield Dashboard</title></head>
-        <body style="font-family: sans-serif; background: #1e1e1e; color: #fff; padding: 20px;">
-          <h1>🛡️ MCP-Shield Live Audit</h1>
-          <div id="logs" style="background: #000; padding: 10px; border-radius: 5px; height: 500px; overflow-y: auto; font-family: monospace;"></div>
-          <script>
-            const host = window.location.host;
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-            const token = new URLSearchParams(window.location.search).get('token');
-            const ws = new WebSocket(wsProtocol + host + '/?token=' + token);
-            const logs = document.getElementById('logs');
-            ws.onmessage = (event) => {
-              const data = JSON.parse(event.data);
-              const div = document.createElement('div');
-              div.style.padding = '5px';
-              div.style.borderBottom = '1px solid #333';
-              
-              let color = '#0f0';
-              if (data.type.includes('blocked') || data.type.includes('exceeded') || data.type.includes('quarantine')) {
-                color = '#f00';
-              }
-              
-              const escapeHtml = (unsafe) => {
-                return (unsafe || '').toString()
-                     .replace(/&/g, "&amp;")
-                     .replace(/</g, "&lt;")
-                     .replace(/>/g, "&gt;")
-                     .replace(/"/g, "&quot;")
-                     .replace(/'/g, "&#039;");
-              };
-              
-              const safeToolName = escapeHtml(data.toolName);
-              const safeReason = escapeHtml(data.reason);
-              const safeType = escapeHtml(data.type).toUpperCase();
-              const safeTimestamp = escapeHtml(data.timestamp);
-              
-              div.innerHTML = \`<span style="color: \${color}">[\${safeTimestamp}] \${safeType}</span> \${safeToolName ? 'Tool: ' + safeToolName : ''} \${safeReason ? '<br/>Reason: ' + safeReason : ''}\`;
-              logs.prepend(div);
-            };
-          </script>
-        </body>
-        </html>
-      `);
+      res.setHeader('Content-Type', 'text/html');
+      res.send(getDashboardHtml(this.authToken, this.getPort()));
     });
 
-    // Enforce Origin Check against Cross-Site WebSocket Hijacking (CSWSH) and Token Auth
+    // Cross-Site WebSocket Hijacking Protection & Token Auth
     this.wss.on('connection', (ws, req) => {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       if (url.searchParams.get('token') !== this.authToken) {
@@ -100,49 +59,44 @@ export class DashboardServer {
     return this.actualPort || this.port;
   }
 
-  public start() {
-    this.server.on('error', (err: any) => {
-      console.error(`[MCP-SHIELD] Dashboard server error: ${err.message}`);
-    });
+  public getAuthToken(): string {
+    return this.authToken;
+  }
 
-    this.wss.on('error', (err: any) => {
-      console.error(`[MCP-SHIELD] WebSocket server error: ${err.message}`);
-    });
+  public getUrl(): string {
+    return `http://localhost:${this.getPort()}/?token=${this.authToken}`;
+  }
 
-    try {
-      this.server.listen(this.port, '127.0.0.1', () => {
-        const addr = this.server.address();
-        if (addr && typeof addr === 'object') {
-          this.actualPort = addr.port;
+  public start(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      this.server.listen(this.port, () => {
+        const address = this.server.address();
+        if (address && typeof address === 'object') {
+          this.actualPort = address.port;
         }
-        console.error(`[MCP-SHIELD] Real-time Dashboard running at http://127.0.0.1:${this.getPort()}/?token=${this.authToken}`);
+        resolve(this.actualPort);
       });
-    } catch (e: any) {
-      console.error(`[MCP-SHIELD] Dashboard failed to listen: ${e.message}`);
-    }
+      this.server.on('error', reject);
+    });
   }
 
-  public broadcast(event: any) {
-    const payload = { timestamp: new Date().toISOString(), ...event };
-    const message = JSON.stringify(payload);
+  public broadcast(event: any): void {
+    const payload = JSON.stringify({ ...event, timestamp: new Date().toISOString() });
     for (const client of this.clients) {
-      if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 64 * 1024) {
-        client.send(message);
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
       }
     }
   }
 
-  public stop(): void {
-    for (const client of this.clients) {
-      try { client.close(); } catch {}
-    }
-    this.clients.clear();
-    try { this.wss.close(); } catch {}
-    try {
-      if (typeof (this.server as any).closeAllConnections === 'function') {
-        (this.server as any).closeAllConnections();
+  public stop(): Promise<void> {
+    return new Promise((resolve) => {
+      for (const client of this.clients) {
+        client.close();
       }
-      this.server.close();
-    } catch {}
+      this.wss.close(() => {
+        this.server.close(() => resolve());
+      });
+    });
   }
 }

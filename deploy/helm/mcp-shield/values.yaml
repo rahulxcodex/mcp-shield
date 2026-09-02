@@ -1,0 +1,170 @@
+# Default values for mcp-shield Helm chart (Phase 2 & 3 GA Enterprise Release).
+# Declare variables to be passed into your templates.
+
+replicaCount: 2
+
+image:
+  repository: rahulxcodex/mcp-shield
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Deployment Topology: 'gateway' (centralized proxy service) or 'sidecar'
+deploymentMode: gateway
+
+# Enforcement Lifecycle: 'observe' (shadow/audit mode) or 'enforce' (strict fail-closed)
+enforcementMode: enforce
+
+# Enterprise Multi-Tenancy & Fleet Management
+multiTenancy:
+  enabled: true
+  tenantHeader: "X-MCP-Shield-Tenant-ID"
+  defaultTenant: "default-enterprise"
+  isolationPolicy: "strict-namespace"
+
+# Enterprise Single Sign-On (SSO) & OIDC Auth Integration
+sso:
+  enabled: false
+  provider: "oidc"
+  issuerUrl: "https://auth.enterprise.com/oauth2/v1"
+  clientId: "mcp-shield-gateway"
+  clientSecretSecretName: "mcp-shield-sso-secret"
+  roleClaim: "groups"
+  adminGroup: "secops-admins"
+  auditorGroup: "compliance-auditors"
+
+# Semantic Rate Limiting (Auditor Recommendation #3)
+semanticRateLimiting:
+  enabled: true
+  strategy: "token-complexity" # Options: 'token-complexity', 'rps', 'hybrid'
+  tokenBudgetPerMinute: 500000
+  maxComplexityScorePerCall: 100
+  burstMultiplier: 1.5
+
+# Canary & Honeypot Decoy Endpoints (Auditor Recommendation #4)
+honeypot:
+  enabled: true
+  canaryService: "mcp-shield-honeypot"
+  trapAction: "quarantine-session-and-alert"
+  alertWebhook: "https://security-alerts.enterprise.internal/tripwire"
+
+# HashiCorp Vault / External Secrets Operator Integration
+externalSecrets:
+  enabled: false
+  secretStoreRef:
+    name: "vault-backend"
+    kind: "ClusterSecretStore"
+  targetSecretName: "mcp-shield-runtime-secrets"
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "3333"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 3333
+  targetPort: 3333
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+  hosts:
+    - host: shield.enterprise.internal
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mcp-shield-tls
+      hosts:
+        - shield.enterprise.internal
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  allowExternalEgress: false
+
+serviceMonitor:
+  enabled: false
+  interval: 15s
+  scrapeTimeout: 10s
+  labels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# MCP Shield Policy & Engine Configuration
+config:
+  logLevel: info
+  telemetryEnabled: true
+  redaction:
+    enabled: true
+    maskStyle: token
+    highEntropyCheck: true
+    entropyThreshold: 4.5
+    fpeEnabled: true # Format-Preserving Encryption
+  sandbox:
+    cowEnabled: true
+    cowStagingDir: /tmp/mcp-shield/cow
+    autoCommitOnApproval: true
+    readOnlyWorkspace: false
+  egress:
+    enabled: true
+    allowMode: allow
+    allowPrivateNetworks: false
+    blockLoopback: true
+    blockLinkLocal: true
+    blockMetadataEndpoints: true
+    blockedDomains:
+      - "*.ngrok.io"
+      - "*.evil.com"
+  audit:
+    enabled: true
+    logDir: /tmp/mcp-shield/logs
+    tamperEvidentHashing: true

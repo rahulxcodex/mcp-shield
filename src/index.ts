@@ -5,11 +5,45 @@ import { InstallCommand } from './cli/commands/install';
 import { ScanCommand } from './cli/commands/scan';
 import { FixCommand } from './cli/commands/fix';
 import { StatsCommand } from './cli/commands/stats';
+import { LinkCommand } from './cli/commands/link';
+import { DemoCommand } from './cli/commands/demo';
+import { DashboardServer } from './dashboard/server';
+import { LicenseCommand } from './cli/commands/license';
+import { LicenseManager } from './security/license-manager';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+
+export * from './core/proxy';
+export * from './security/policy-engine';
+export * from './security/sanitizer';
+export * from './security/rate-limiter';
+export * from './security/canary';
+export * from './security/jit-elevation';
+export * from './cloud/telemetry';
+export * from './dashboard/server';
 
 const args = process.argv.slice(2);
 const command = args[0];
 
-if (command === 'protect') {
+const bypassCommands = ['demo', 'install', 'license', 'enterprise'];
+if (command && !bypassCommands.includes(command) && process.env.NODE_ENV !== 'test') {
+  const licenseFile = path.join(os.homedir(), '.mcp-shield', 'license.key');
+  if (!fs.existsSync(licenseFile)) {
+    console.error('❌ Missing License Key. MCP Shield requires an active license.');
+    console.error('Please obtain a key from your enterprise control plane and run:');
+    console.error('  mcp-shield license <key>');
+    process.exit(1);
+  }
+  const licenseManager = new LicenseManager();
+  licenseManager.verifyLicense(fs.readFileSync(licenseFile, 'utf8').trim());
+}
+
+if (command === 'demo') {
+  DemoCommand.run(args.slice(1));
+} else if (command === 'license') {
+  LicenseCommand.run(args[1]);
+} else if (command === 'protect') {
   ProtectCommand.run();
   process.exit(0);
 } else if (command === 'replay') {
@@ -24,6 +58,16 @@ if (command === 'protect') {
   ScanCommand.run();
 } else if (command === 'fix') {
   FixCommand.run();
+} else if (command === 'link') {
+  LinkCommand.run(args.slice(1)).then(() => process.exit(0)).catch(() => process.exit(1));
+} else if (command === 'dashboard') {
+  const server = new DashboardServer(3333);
+  server.start().then(port => {
+    console.log(`🛡️  MCP-Shield Dashboard active at: ${server.getUrl()}`);
+  }).catch(err => {
+    console.error('Failed to start dashboard:', err);
+    process.exit(1);
+  });
 } else if (command === 'wrap' && args[1] === '--') {
   const targetCmd = args[2];
   const targetArgs = args.slice(3);
@@ -39,14 +83,22 @@ if (command === 'protect') {
     console.error('Fatal proxy error:', err);
     process.exit(1);
   });
-} else {
+} else if (command === 'enterprise') {
+  // Launch the Next.js Enterprise Control Plane
+  require('./cli/commands/dashboard').dashboardCmd.parse(['node', 'mcp-shield', 'dashboard', ...args.slice(1)]);
+} else if (process.env.npm_lifecycle_event || require.main === module) {
   console.log(`
 🛡️  MCP-SHIELD
 Usage:
+  mcp-shield demo [--dashboard]   Run interactive attack simulation & security demo.
   mcp-shield install              Quickly install and configure MCP-Shield.
+  mcp-shield license <key>        Activate your MCP Shield enterprise license.
   mcp-shield scan                 Scan your MCP servers for security vulnerabilities.
   mcp-shield fix                  Automatically generate and apply security policies.
   mcp-shield protect              Auto-discover and protect MCP clients.
+  mcp-shield link --key <key>     Pair this agent instance with your Cloud Dashboard.
+  mcp-shield dashboard            Launch local real-time security dashboard.
+  mcp-shield enterprise           Launch the full Next.js Enterprise Control Plane on-premise.
   mcp-shield stats [log_file]     View shareable security activity & blocked attacks report.
   mcp-shield replay <log_file>    Replay and verify tamper-evident audit logs.
   mcp-shield wrap -- <cmd> [args] Wrap an MCP server with the security gateway.

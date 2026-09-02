@@ -125,7 +125,11 @@ export class ASTAnalyzer {
           return bashResult;
         }
       }
-    } catch {}
+    } catch (err: any) {
+      // Security P0: Fail-closed invariant on parser exceptions.
+      // Ambiguous or malformed inputs that crash the parser must be quarantined.
+      return { isSafe: false, reason: `Parser failure/exception (Fail-Closed): ${err?.message || 'Unknown syntax error'}` };
+    }
 
     // 4. PowerShell Semantic & AST analysis layer
     const psResult = this.psAnalyzer.analyzeCommand(command);

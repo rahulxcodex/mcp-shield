@@ -27,6 +27,8 @@ export type PolicyRule = z.infer<typeof PolicyRuleSchema>;
 export const ShieldConfigSchema = z.object({
   version: z.string(),
   profile: z.string(),
+  mode: z.enum(['enforce', 'audit', 'warn']).default('enforce').optional(),
+  onError: z.enum(['block', 'bypass']).default('block').optional(),
   redaction: z.object({
     enabled: z.boolean(),
     maskStyle: z.string(),
@@ -55,6 +57,7 @@ export const ShieldConfigSchema = z.object({
     logDir: z.string(),
     tamperEvidentHashing: z.boolean(),
     remoteSinkUrl: z.string().optional(),
+    siemFormat: z.enum(['json', 'syslog', 'cef']).default('json').optional(),
   }),
 });
 export type ShieldConfig = z.infer<typeof ShieldConfigSchema>;
@@ -181,6 +184,14 @@ export class PolicyEngine {
     return this.config;
   }
 
+  public getMode(): 'enforce' | 'audit' | 'warn' {
+    return this.config.mode || 'enforce';
+  }
+
+  public getOnError(): 'block' | 'bypass' {
+    return this.config.onError || 'block';
+  }
+
   public checkEgress(args: Record<string, any>): { isBlocked: boolean; domain?: string; reason?: string } {
     return PolicyEngine.checkEgress(args, this.getConfig());
   }
@@ -274,8 +285,9 @@ export class PolicyEngine {
     // PHASE 1: CRITICAL DETECTORS
     const criticalEvidence = context.evidence.find(e => e.risk === 'CRITICAL');
     if (criticalEvidence) {
+      const isQuarantine = criticalEvidence.finding.includes('HONEY_TOKEN') || criticalEvidence.finding.includes('CANARY');
       return {
-        decision: criticalEvidence.finding.includes('HONEY_TOKEN') ? 'quarantine' : 'block',
+        decision: isQuarantine ? 'quarantine' : 'block',
         detector: criticalEvidence.detector,
         reasonCode: criticalEvidence.finding
       };

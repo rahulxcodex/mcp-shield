@@ -1,6 +1,6 @@
 {
-  "name": "mcp-shield",
-  "version": "1.0.0",
+  "name": "mcpshld",
+  "version": "1.0.8",
   "description": "The Zero-Trust Security Gateway, AST Firewall & Secret Sanitizer for Model Context Protocol (MCP) and AI Agents.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,6 +10,7 @@
   "files": [
     "dist",
     "bin",
+    "cloud-dashboard",
     "shield.config.default.yaml",
     "LICENSE",
     "README.md",
@@ -34,6 +35,7 @@
     "bench:secrets": "ts-node benchmarks/secret-detection.bench.ts",
     "bench:tokens": "ts-node benchmarks/token-overhead.bench.ts",
     "bench:all": "ts-node benchmarks/proxy-latency.bench.ts",
+    "demo:verify": "ts-node scripts/demo-verify.ts",
     "sbom": "cyclonedx-npm --output-format JSON --output-file mcp-shield.sbom.json",
     "prepack": "npm run build"
   },
@@ -57,6 +59,7 @@
     "express": "^5.2.1",
     "ink": "^7.1.1",
     "js-yaml": "^5.4.1",
+    "mcpshld": "^1.0.5",
     "react": "^19.2.8",
     "tree-sitter": "0.25.1",
     "tree-sitter-bash": "0.25.1",

@@ -532,7 +532,10 @@ export class PowerShellASTAnalyzer {
       index++;
     }
 
-    const canonicalName = this.CMDLET_ALIASES[commandName.toLowerCase()] || commandName;
+    const lowerCmd = (commandName || '').toLowerCase();
+    const canonicalName = Object.prototype.hasOwnProperty.call(this.CMDLET_ALIASES, lowerCmd)
+      ? this.CMDLET_ALIASES[lowerCmd]
+      : commandName;
 
     return {
       commandName,
@@ -688,12 +691,12 @@ export class PowerShellASTAnalyzer {
       }
 
       // 4. Execution of .ps1 files directly
-      if (node.commandName.toLowerCase().endsWith('.ps1')) {
+      if (String(node.commandName || '').toLowerCase().endsWith('.ps1')) {
         return { isSafe: false, reason: `Direct execution of PowerShell script file "${node.commandName}" is blocked` };
       }
 
       // 5. Evaluate canonical cmdlets
-      const cmd = node.canonicalName.toLowerCase();
+      const cmd = String(node.canonicalName || '').toLowerCase();
 
       // powershell.exe / pwsh unwrapping & file execution check
       if (cmd === 'powershell' || cmd === 'powershell.exe' || cmd === 'pwsh' || cmd === 'pwsh.exe') {

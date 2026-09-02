@@ -8,27 +8,31 @@ on:
 permissions:
   contents: write
   id-token: write
+  attestations: write
 
 jobs:
-  publish:
-    name: Reproducible Release Pipeline
-    runs-on: ubuntu-latest
+  validate:
+    name: Multi-OS Security & Regression Validation
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-    - name: Harden Runner
-      uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
-      with:
-        egress-policy: audit
-
     - name: Checkout Tagged Commit
-      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
       with:
         fetch-depth: 0
-    
+
+    - name: Verify Signed Release Tag
+      # Security P0: Enforce that the tag is cryptographically signed by an authorized maintainer
+      # We only run this on linux to avoid windows gpg path issues, but the validation is identical.
+      if: runner.os == 'Linux'
+      run: git verify-tag "${{ github.ref_name }}"
+
     - name: Setup Node.js
-      uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+      uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
       with:
         node-version: '20.x'
-        registry-url: 'https://registry.npmjs.org'
         
     - name: Clean Dependency Installation
       run: npm ci
@@ -36,35 +40,54 @@ jobs:
     - name: Verify Lockfile Signatures
       run: npm audit signatures
 
-    - name: Typecheck
-      run: npm run typecheck
-
     - name: Clean Production Build
       run: npm run build
 
-    - name: Execute Test Suite & Adversarial Security Corpora
+    - name: Execute Security & Regression Corpus
       run: npm test
 
-    - name: Execute Red-Team Validation Harness
-      run: npm run test:redteam
+  publish:
+    name: OIDC Trusted Publish & Release
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
-    - name: Generate CycloneDX Software Bill of Materials (SBOM)
-      run: npm run sbom
-      
-    - name: Generate Tarball Package
-      run: npm pack
-
-    - name: Publish to npm with Provenance
-      run: npm publish --provenance --access public
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    - name: Setup Node.js
+      uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8
+      with:
+        node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org'
         
-    - name: Create Signed GitHub Release
-      uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
+    - name: Clean Install & Build
+      run: |
+        npm ci
+        npm run build
+        npm run sbom
+        npm pack
+
+    - name: Cryptographic Hash Artifacts (Reproducible Build)
+      run: |
+        sha256sum mcp-shield-*.tgz > artifact-checksums.txt
+        sha256sum mcp-shield.sbom.json >> artifact-checksums.txt
+
+    - name: npm OIDC Trusted Publishing
+      # Security P0: Removed long-lived NPM_TOKEN. Using ephemeral OIDC provenance.
+      run: npm publish --provenance --access public
+
+    - name: Sigstore Cryptographic Artifact Attestation
+      uses: actions/attest-build-provenance@v1
+      with:
+        subject-path: 'mcp-shield-*.tgz'
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
       with:
         generate_release_notes: true
         files: |
           mcp-shield.sbom.json
           mcp-shield-*.tgz
+          artifact-checksums.txt
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

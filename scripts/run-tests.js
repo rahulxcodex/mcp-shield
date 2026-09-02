@@ -9,7 +9,7 @@ console.log(`[TEST RUNNER] Executing Jest on Node ${process.version} (${process.
 
 const result = spawnSync(process.execPath, ['--expose-gc', jestBin, '--runInBand', '--verbose', ...args], {
   cwd: path.resolve(__dirname, '..'),
-  env: process.env,
+  env: { ...process.env, NODE_ENV: 'test' },
   stdio: 'inherit'
 });
 

@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-shield.fullname" . }}-config
+  labels:
+    {{- include "mcp-shield.labels" . | nindent 4 }}
+data:
+  shield.config.yaml: |
+    version: "1.0"
+    profile: "enterprise"
+    
+    redaction:
+      enabled: {{ .Values.config.redaction.enabled }}
+      maskStyle: {{ .Values.config.redaction.maskStyle | quote }}
+      highEntropyCheck: {{ .Values.config.redaction.highEntropyCheck }}
+      entropyThreshold: {{ .Values.config.redaction.entropyThreshold }}
+      
+    sandbox:
+      cowEnabled: {{ .Values.config.sandbox.cowEnabled }}
+      cowStagingDir: {{ .Values.config.sandbox.cowStagingDir | quote }}
+      autoCommitOnApproval: {{ .Values.config.sandbox.autoCommitOnApproval }}
+      readOnlyWorkspace: {{ .Values.config.sandbox.readOnlyWorkspace }}
+      
+    egress:
+      enabled: {{ .Values.config.egress.enabled }}
+      allowMode: {{ .Values.config.egress.allowMode | quote }}
+      allowPrivateNetworks: {{ .Values.config.egress.allowPrivateNetworks }}
+      blockLoopback: {{ .Values.config.egress.blockLoopback }}
+      blockLinkLocal: {{ .Values.config.egress.blockLinkLocal }}
+      blockMetadataEndpoints: {{ .Values.config.egress.blockMetadataEndpoints }}
+      blockedDomains:
+        {{- range .Values.config.egress.blockedDomains }}
+        - {{ . | quote }}
+        {{- end }}
+        
+    audit:
+      enabled: {{ .Values.config.audit.enabled }}
+      logDir: {{ .Values.config.audit.logDir | quote }}
+      tamperEvidentHashing: {{ .Values.config.audit.tamperEvidentHashing }}
