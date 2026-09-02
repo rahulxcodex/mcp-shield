@@ -16,7 +16,7 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini python3 make g++
 
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
