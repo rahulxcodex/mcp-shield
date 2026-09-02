@@ -8,6 +8,11 @@ import { StatsCommand } from './cli/commands/stats';
 import { LinkCommand } from './cli/commands/link';
 import { DemoCommand } from './cli/commands/demo';
 import { DashboardServer } from './dashboard/server';
+import { LicenseCommand } from './cli/commands/license';
+import { LicenseManager } from './security/license-manager';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 
 export * from './core/proxy';
 export * from './security/policy-engine';
@@ -21,8 +26,23 @@ export * from './dashboard/server';
 const args = process.argv.slice(2);
 const command = args[0];
 
+const bypassCommands = ['demo', 'install', 'license', 'enterprise'];
+if (command && !bypassCommands.includes(command)) {
+  const licenseFile = path.join(os.homedir(), '.mcp-shield', 'license.key');
+  if (!fs.existsSync(licenseFile)) {
+    console.error('❌ Missing License Key. MCP Shield requires an active license.');
+    console.error('Please obtain a key from your enterprise control plane and run:');
+    console.error('  mcp-shield license <key>');
+    process.exit(1);
+  }
+  const licenseManager = new LicenseManager();
+  licenseManager.verifyLicense(fs.readFileSync(licenseFile, 'utf8').trim());
+}
+
 if (command === 'demo') {
   DemoCommand.run(args.slice(1));
+} else if (command === 'license') {
+  LicenseCommand.run(args[1]);
 } else if (command === 'protect') {
   ProtectCommand.run();
   process.exit(0);
@@ -72,6 +92,7 @@ if (command === 'demo') {
 Usage:
   mcp-shield demo [--dashboard]   Run interactive attack simulation & security demo.
   mcp-shield install              Quickly install and configure MCP-Shield.
+  mcp-shield license <key>        Activate your MCP Shield enterprise license.
   mcp-shield scan                 Scan your MCP servers for security vulnerabilities.
   mcp-shield fix                  Automatically generate and apply security policies.
   mcp-shield protect              Auto-discover and protect MCP clients.
