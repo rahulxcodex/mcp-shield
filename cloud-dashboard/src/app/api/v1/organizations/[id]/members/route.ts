@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -12,7 +12,7 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const organizationId = params.id;
+  const organizationId = (await context.params).id;
 
   // Check if current user is part of the organization
   const { data: userMembership, error: membershipError } = await supabase
@@ -46,7 +46,7 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -55,7 +55,7 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const organizationId = params.id;
+  const organizationId = (await context.params).id;
 
   // Check if current user has permission to invite (owner or admin)
   const { data: userMembership, error: membershipError } = await supabase
