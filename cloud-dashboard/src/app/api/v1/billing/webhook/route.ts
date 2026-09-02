@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummyKeyForBuild', {
-  apiVersion: '2026-08-26.dahlia',
-});
+const getStripe = () => {
+  const key = process.env.STRIPE_SECRET_KEY || '';
+  return new Stripe(key, {
+    apiVersion: '2026-08-26.dahlia',
+  });
+};
 
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
@@ -21,6 +24,7 @@ export async function POST(req: Request) {
   let event: Stripe.Event;
 
   try {
+    const stripe = getStripe();
     event = stripe.webhooks.constructEvent(body, sig, endpointSecret);
   } catch (err: any) {
     console.error(`Webhook Error: ${err.message}`);

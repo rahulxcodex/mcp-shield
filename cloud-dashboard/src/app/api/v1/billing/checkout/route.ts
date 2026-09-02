@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummyKeyForBuild', {
-  apiVersion: '2026-08-26.dahlia',
-});
+const getStripe = () => {
+  const key = process.env.STRIPE_SECRET_KEY || '';
+  return new Stripe(key, {
+    apiVersion: '2026-08-26.dahlia',
+  });
+};
 
 export async function POST(req: Request) {
   try {
@@ -38,8 +41,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Must be an owner or admin to manage billing' }, { status: 403 });
     }
 
-    // Optional: Get or create Stripe customer for the organization
-    // Let's pass the organization_id in client_reference_id or metadata
+    const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
