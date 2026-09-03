@@ -36,6 +36,7 @@
     "bench:tokens": "ts-node benchmarks/token-overhead.bench.ts",
     "bench:all": "ts-node benchmarks/proxy-latency.bench.ts",
     "demo:verify": "ts-node scripts/demo-verify.ts",
+    "telemetry:demo": "ts-node scripts/send-demo-telemetry.ts",
     "sbom": "cyclonedx-npm --output-format JSON --output-file mcp-shield.sbom.json",
     "prepack": "npm run build"
   },

@@ -13,6 +13,7 @@ import { NetworkEgressProxy } from '../security/network-proxy';
 import { CapabilityInferencer } from '../security/capabilities';
 import { CanaryManager } from '../security/canary';
 import { JITElevationManager } from '../security/jit-elevation';
+import { CloudTelemetryPublisher, SecurityTelemetryPayload } from '../cloud/telemetry';
 
 export interface Lifecycle {
   start(): Promise<number>;
@@ -42,6 +43,7 @@ export class ProxyServer implements Lifecycle {
   private networkEgressProxy: NetworkEgressProxy;
   public readonly canaryManager = new CanaryManager();
   public readonly jitManager = new JITElevationManager();
+  private telemetryPublisher = new CloudTelemetryPublisher();
 
   constructor(
     private targetCmd: string,
@@ -61,6 +63,41 @@ export class ProxyServer implements Lifecycle {
     this.session.logger.log(event);
     if (this.dashboard) {
       this.dashboard.broadcast(event);
+    }
+    this.forwardToTelemetry(event);
+  }
+
+  private forwardToTelemetry(event: any) {
+    try {
+      let eventType: SecurityTelemetryPayload['eventType'] = 'PASSTHROUGH';
+      let riskLevel: SecurityTelemetryPayload['riskLevel'] = 'LOW';
+
+      if (event.type === 'policy_blocked' || event.type === 'sandbox_blocked' || event.type === 'user_denied') {
+        eventType = 'BLOCK';
+        riskLevel = 'CRITICAL';
+      } else if (event.type === 'quarantine' || event.type === 'schema_violation') {
+        eventType = 'QUARANTINE';
+        riskLevel = 'CRITICAL';
+      } else if (event.type === 'secret_restored' || event.type?.includes('sanitize')) {
+        eventType = 'SANITIZE';
+        riskLevel = 'HIGH';
+      } else if (event.type === 'policy_warn') {
+        eventType = 'RATE_LIMIT';
+        riskLevel = 'MEDIUM';
+      }
+
+      this.telemetryPublisher.trackEvent({
+        sessionId: this.session?.sessionId || `sess-${Date.now()}`,
+        eventType,
+        detector: event.ruleId || event.detector || event.stream || event.type || 'ProxyEngine',
+        riskLevel,
+        toolName: event.toolName || 'proxy_transport',
+        reason: event.reason || event.type || 'Security policy evaluation',
+        sanitizedPreview: event.payload || undefined,
+        clientTimestamp: new Date().toISOString()
+      });
+    } catch {
+      // Non-blocking telemetry
     }
   }
 
@@ -569,6 +606,12 @@ ${red}BLOCKED${reset}
     }
     if (this.session && this.session.logger) {
       this.session.logger.endSession();
+    }
+    if (this.telemetryPublisher) {
+      try {
+        await this.telemetryPublisher.flush();
+        this.telemetryPublisher.stop();
+      } catch {}
     }
   }
 }
