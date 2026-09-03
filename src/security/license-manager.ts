@@ -59,8 +59,11 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
       console.log(`License Verified: Issued to ${licenseData.githubId || 'Enterprise'} (${tierDesc}, ${seats} Seats)`);
       return true;
 
-    } catch (error) {
-      console.error('LICENSE ERROR:', error);
+    } catch (error: any) {
+      console.error('LICENSE ERROR:', error?.message || error);
+      if (process.env.NODE_ENV === 'test' || process.env.MCP_SHIELD_NO_EXIT) {
+        throw error;
+      }
       process.exit(1); // Hard exit if license is invalid
     }
   }
@@ -80,13 +83,24 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
 
     const masterHash = crypto.createHash('sha256').update(cleanKey).digest('hex');
 
-    if (
-      (envMasterHash && masterHash === envMasterHash) ||
-      (envMasterKey && cleanKey === envMasterKey)
-    ) {
-      console.log('✅ Master License Key Accepted via secure server environment.');
-      return true;
+    if (envMasterHash) {
+      const bufA = Buffer.from(masterHash, 'utf8');
+      const bufB = Buffer.from(envMasterHash.trim(), 'utf8');
+      if (bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)) {
+        console.log('✅ Master License Key Accepted via secure server environment.');
+        return true;
+      }
     }
+
+    if (envMasterKey) {
+      const bufA = Buffer.from(cleanKey, 'utf8');
+      const bufB = Buffer.from(envMasterKey.trim(), 'utf8');
+      if (bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)) {
+        console.log('✅ Master License Key Accepted via secure server environment.');
+        return true;
+      }
+    }
+
     return false;
   }
 }

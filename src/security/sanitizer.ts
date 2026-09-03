@@ -45,7 +45,7 @@ export const MODULAR_SECRET_DETECTORS: ModularSecretDetector[] = [
     provider: 'GitHub',
     regex: /ghp_[a-zA-Z0-9]{30,40}|github_pat_[a-zA-Z0-9_]{30,}|gho_[a-zA-Z0-9]{30,40}|ghu_[a-zA-Z0-9]{30,40}|ghs_[a-zA-Z0-9]{30,40}|ghr_[a-zA-Z0-9]{30,40}/g,
     confidence: 'KNOWN_SECRET',
-    validator: (m) => m.startsWith('ghp_') || m.startsWith('gho_') || m.startsWith('github_pat_')
+    validator: (m) => m.startsWith('ghp_') || m.startsWith('gho_') || m.startsWith('github_pat_') || m.startsWith('ghu_') || m.startsWith('ghs_') || m.startsWith('ghr_')
   },
   {
     name: 'GOOGLE_API_KEY',
