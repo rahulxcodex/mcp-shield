@@ -36,7 +36,8 @@
   - Pre-serialization telemetry sanitization scrubbing filesystem paths and credentials.
   - Synchronized event taxonomy: BLOCK, SANITIZE, QUARANTINE, RATE_LIMIT, PASSTHROUGH, PROMPT, ERROR across UI, API, DB.
 - Verification & Deployment:
-  - 41/41 test suites passed (680/680 unit & integration tests).
-  - 33/33 Next.js production routes compiled cleanly.
-  - Packaged as `mcpshld@1.0.12`.
+  - 41/41 test suites passed (683/683 unit & integration tests).
+  - Remediation milestone: Fixed MCP initialization race, tools/call vs call_tool secret restoration, outbound DLP (result/error/params), loopback dashboard binding, TOCTOU COW verification, and dispatcher concurrency.
+  - Published as `mcpshld@1.0.13` on npm.
+  - Pushed to GitHub (PR #16 created for branch protection compliance).
 
