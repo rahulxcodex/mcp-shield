@@ -11,10 +11,14 @@ export default function BillingPage() {
     try {
       const res = await fetch('/api/v1/billing/checkout', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId: 'price_mcp_pro_monthly' })
       });
       if (res.ok) {
-        // Redirect to Stripe checkout or handle success
-        console.log('Redirecting to checkout...');
+        const data = await res.json();
+        if (data?.url) {
+          window.location.href = data.url;
+        }
       }
     } catch (error) {
       console.error('Failed to upgrade:', error);

@@ -63,10 +63,10 @@ You can install MCP Shield globally or run it directly using `npx`:
 
 ```bash
 # Global installation (recommended)
-npm install -g mcp-shield
+npm install -g mcpshld
 
-# Verify installation
-mcp-shield --version
+# Verify installation (both mcpshld and mcp-shield aliases work)
+mcpshld --version
 ```
 
 ### Enterprise Master License Activation

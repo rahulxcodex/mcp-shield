@@ -14,7 +14,7 @@ export class LinkCommand {
       apiKey = args[keyIdx + 1].trim();
     }
 
-    let endpoint = 'https://api.mcpshield.dev/v1/telemetry';
+    let endpoint = process.env.MCP_SHIELD_CLOUD_URL || 'https://mcp-shield-dashboard-d6jyrwkny-rahulsahgupta24-8925.vercel.app/api/v1/telemetry/ingest';
     const urlIdx = args.indexOf('--url');
     if (urlIdx !== -1 && args[urlIdx + 1]) {
       endpoint = args[urlIdx + 1].trim();

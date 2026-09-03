@@ -24,6 +24,13 @@
   - Free-tier deployment instructions documented in `DEPLOYMENT_GUIDE.md` and complete documentation in `USER_GUIDE.md`.
   - Proxy Core Telemetry: Hooked `CloudTelemetryPublisher` into `ProxyServer.logAndBroadcast(...)` for live agent event streaming.
   - Console Key Center: Built interactive API key generation and device pairing center in `/console` with modal creation and `/api/v1/keys` endpoint.
+  - Unique Key Lookup Prefix & Scoping:
+  - Fixed P1 badge: Generated keys now store unique 8-character random hex prefixes (`mcp_live_${prefixId}`) and enforced `UNIQUE` constraint in database migration.
+  - Scoped key queries and deletions strictly to user's organization projects.
+  - Telemetry ingest now returns HTTP 500 on database insertion failures and enforces strict HMAC verification.
+- Website User Guide (`/guide`):
+  - Created interactive web user guide with Master License Activation (`MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY`), client tabs (Claude, Cursor, Antigravity, Cline, Windsurf), threat engine diagrams, and SOC2 walkthrough.
+  - Verified with Playwright MCP testing on live deployment.
   - Render Keep-Alive: Added `.github/workflows/render-keepalive.yml` pinging free-tier instances every 10 mins.
   - Vercel Live Deployment: Deployed to `https://mcp-shield-dashboard-d6jyrwkny-rahulsahgupta24-8925.vercel.app`.
   - GitHub Integration: Pushed `feat/console-keys-telemetry-guide` and opened PR #11 on `rahulxcodex/mcp-shield`.

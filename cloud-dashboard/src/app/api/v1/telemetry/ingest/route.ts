@@ -46,11 +46,14 @@ export async function POST(request: Request) {
     try {
       const { data: apiKeyData } = await supabase
         .from('api_keys')
-        .select('key_hash, project_id')
+        .select('key_hash, project_id, expires_at')
         .eq('key_prefix', keyPrefix)
         .maybeSingle();
 
       if (apiKeyData?.key_hash) {
+        if (apiKeyData.expires_at && new Date(apiKeyData.expires_at).getTime() < Date.now()) {
+          return NextResponse.json({ error: 'API Key expired. Please renew your key in the console.' }, { status: 401 });
+        }
         apiKey = apiKeyData.key_hash;
         projectId = apiKeyData.project_id;
       }

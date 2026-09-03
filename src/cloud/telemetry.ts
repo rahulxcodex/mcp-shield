@@ -34,7 +34,7 @@ export class CloudTelemetryPublisher {
 
     this.config = {
       enabled: config?.enabled ?? storedConfig.enabled ?? !!process.env.MCP_SHIELD_API_KEY,
-      cloudEndpoint: config?.cloudEndpoint || process.env.MCP_SHIELD_CLOUD_URL || storedConfig.cloudEndpoint || 'https://api.mcpshield.dev/v1/telemetry',
+      cloudEndpoint: config?.cloudEndpoint || process.env.MCP_SHIELD_CLOUD_URL || storedConfig.cloudEndpoint || 'https://mcp-shield-dashboard-d6jyrwkny-rahulsahgupta24-8925.vercel.app/api/v1/telemetry/ingest',
       apiKey: config?.apiKey || process.env.MCP_SHIELD_API_KEY || storedConfig.apiKey,
       batchIntervalMs: config?.batchIntervalMs || 5000,
       maxBatchSize: config?.maxBatchSize || 50

@@ -39,9 +39,9 @@ export async function POST(req: Request) {
       }, { status: 403 });
     }
 
-    // 3. Generate 3-Month Trial Payload
+    // 3. Generate 1-Month Free Trial Payload (30 Days)
     const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + 3);
+    expiresAt.setMonth(expiresAt.getMonth() + 1);
 
     const payloadObj = {
       githubId: userData.login,

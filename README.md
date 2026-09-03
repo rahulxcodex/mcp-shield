@@ -152,10 +152,10 @@ Install MCP-Shield globally or use it via `npx`:
 
 ```bash
 # Global installation via npm
-npm install -g mcp-shield
+npm install -g mcpshld
 
 # Or run directly with npx
-npx mcp-shield --help
+npx -y mcpshld --help
 ```
 
 ### 2. Auto-Discover & Protect Your IDEs (Dual-Mode)

@@ -140,9 +140,9 @@ export default function GuidePage() {
               Install the MCP Shield binary globally on your workstation, or run it directly using npx:
             </p>
             <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between font-mono text-xs text-emerald-300">
-              <span>npm install -g mcp-shield</span>
+              <span>npm install -g mcpshld</span>
               <button
-                onClick={() => copyToClipboard('npm install -g mcp-shield', 'install-cmd')}
+                onClick={() => copyToClipboard('npm install -g mcpshld', 'install-cmd')}
                 className="p-1.5 text-slate-400 hover:text-white transition"
               >
                 {copiedId === 'install-cmd' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -155,9 +155,9 @@ export default function GuidePage() {
                 Run the auto-discovery engine. It locates Claude Desktop, Cursor, Cline, and Windsurf configurations, and non-invasively wraps servers with the security proxy:
               </p>
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between font-mono text-slate-200">
-                <span>mcp-shield protect</span>
+                <span>mcpshld protect</span>
                 <button
-                  onClick={() => copyToClipboard('mcp-shield protect', 'protect-cmd')}
+                  onClick={() => copyToClipboard('mcpshld protect', 'protect-cmd')}
                   className="p-1.5 text-slate-400 hover:text-white transition"
                 >
                   {copiedId === 'protect-cmd' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -192,9 +192,9 @@ export default function GuidePage() {
               </p>
 
               <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 flex items-center justify-between font-mono text-xs text-emerald-300">
-                <span className="truncate mr-2">mcp-shield license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY</span>
+                <span className="truncate mr-2">mcpshld license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY</span>
                 <button
-                  onClick={() => copyToClipboard('mcp-shield license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY', 'master-key-cmd')}
+                  onClick={() => copyToClipboard('mcpshld license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY', 'master-key-cmd')}
                   className="p-1.5 text-slate-400 hover:text-white transition shrink-0"
                   title="Copy Master Key Activation Command"
                 >
