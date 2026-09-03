@@ -70,11 +70,24 @@ class InMemoryRateLimiter {
 export const globalRateLimiter = new InMemoryRateLimiter();
 
 export function getClientIp(req: Request): string {
-  const forwarded = req.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+  // 1. Authoritative Vercel edge proxy header (immune to client-injected spoofing)
+  const vercelForwarded = req.headers.get('x-vercel-forwarded-for');
+  if (vercelForwarded) {
+    return vercelForwarded.split(',')[0].trim();
   }
+
+  // 2. Authoritative real IP set by trusted load balancer
   const realIp = req.headers.get('x-real-ip');
   if (realIp) return realIp.trim();
+
+  // 3. Fallback: sanitize standard forwarded chain
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) {
+    const parts = forwarded.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      return parts[parts.length - 1];
+    }
+  }
+
   return '127.0.0.1';
 }

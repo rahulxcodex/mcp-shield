@@ -18,15 +18,22 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { name, email, type = 'Complaint', priority = 'Medium', subject, message } = body;
 
-    if (!email || !subject || !message) {
-      return NextResponse.json(
-        { error: 'Missing required fields: email, subject, and message are required.' },
-        { status: 400 }
-      );
+    // Strict input validation & size bounding
+    if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 254) {
+      return NextResponse.json({ error: 'Valid email address is required (max 254 chars).' }, { status: 400 });
     }
 
+    if (!subject || typeof subject !== 'string' || subject.trim().length === 0 || subject.length > 200) {
+      return NextResponse.json({ error: 'Subject is required and must not exceed 200 characters.' }, { status: 400 });
+    }
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0 || message.length > 5000) {
+      return NextResponse.json({ error: 'Message is required and must not exceed 5000 characters.' }, { status: 400 });
+    }
+
+    const safeName = typeof name === 'string' ? name.slice(0, 100) : 'Anonymous';
     const ticketId = `MCP-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-    const targetEmail = 'rahulr24g@gmail.com';
+    const targetEmail = process.env.SUPPORT_ROUTING_EMAIL || 'support@mcpshield.com';
 
     const appsScriptUrl = process.env.APPS_SCRIPT_WEBHOOK_URL;
     let dispatchedViaAppsScript = false;
@@ -38,7 +45,7 @@ export async function POST(req: Request) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ticketId,
-            name: name || 'Anonymous',
+            name: safeName,
             email,
             type,
             priority,
@@ -64,7 +71,7 @@ export async function POST(req: Request) {
       ticketId,
       dispatchedViaAppsScript,
       recipient: targetEmail,
-      message: `Your ${type.toLowerCase()} has been logged and queued for administrative review at ${targetEmail}.`
+      message: `Your ${type.toLowerCase()} has been logged and queued for review.`
     });
   } catch (err: unknown) {
     return sanitizeApiError(err, 'Failed to submit complaint/inquiry');

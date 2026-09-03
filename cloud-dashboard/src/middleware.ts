@@ -10,7 +10,7 @@ export async function middleware(request: NextRequest) {
   const method = request.method;
 
   // CSRF & Origin Protection for mutating API requests (POST, PUT, PATCH, DELETE)
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && pathname.startsWith('/api/v1/')) {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && (pathname.startsWith('/api/v1/') || pathname.startsWith('/api/license'))) {
     // Exempt cryptographic webhook endpoints and HMAC-signed telemetry ingest
     const isExempt = pathname === '/api/v1/billing/webhook' || pathname === '/api/v1/telemetry/ingest';
     
@@ -50,7 +50,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/guide') ||
-    pathname.startsWith('/api/v1/telemetry')
+    pathname.startsWith('/api/v1/telemetry') ||
+    pathname === '/api/v1/support/complaint' ||
+    pathname === '/api/license'
   ) {
     return supabaseResponse;
   }
@@ -112,35 +114,42 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      url.searchParams.set('next', pathname)
-      return NextResponse.redirect(url)
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Unauthorized: Authentication required' }, { status: 401 });
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('next', pathname);
+      return NextResponse.redirect(url);
     }
 
-    // Master Admin route guard — project owner accounts can access /console/system-admin
+    // Master Admin route guard — strictly rely on verified immutable email or server-managed app_metadata.
+    // Client-writable user_metadata is forbidden for authorization checks.
     const email = (user.email || '').toLowerCase();
-    const githubUsername = (user.user_metadata?.user_name || '').toLowerCase();
-    const metadataAccountType = (user.user_metadata?.account_type || '').toLowerCase();
+    const adminEmail = (process.env.MASTER_ADMIN_EMAIL || 'rahulsahygupta24@gmail.com').toLowerCase();
     const isMasterAdmin =
-      email === 'rahulsahygupta24@gmail.com' ||
-      githubUsername === 'rahulxcodex';
+      email === adminEmail ||
+      user.app_metadata?.role === 'master_admin' ||
+      user.id === process.env.MASTER_ADMIN_USER_ID;
 
     if (pathname.startsWith('/console/system-admin')) {
       if (!isMasterAdmin) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/console'
-        return NextResponse.redirect(url)
+        const url = request.nextUrl.clone();
+        url.pathname = '/console';
+        return NextResponse.redirect(url);
       }
     }
 
-    // Enterprise Admin route guard — enterprise account types or master admin can access /console/admin
+    // Enterprise Admin route guard — server-validated plan in app_metadata or master admin
     if (pathname.startsWith('/console/admin')) {
-      const isEnterprise = metadataAccountType.includes('enterprise') || isMasterAdmin;
+      const isEnterprise =
+        user.app_metadata?.plan === 'enterprise' ||
+        user.app_metadata?.role === 'enterprise_admin' ||
+        isMasterAdmin;
       if (!isEnterprise) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/console'
-        return NextResponse.redirect(url)
+        const url = request.nextUrl.clone();
+        url.pathname = '/console';
+        return NextResponse.redirect(url);
       }
     }
   } catch (err) {
