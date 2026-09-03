@@ -46,7 +46,7 @@ export default function SupportModal({ isOpen, onClose, defaultType = 'Complaint
 
       setResult({
         ticketId: data.ticketId,
-        message: data.message || `Dispatched to administrator (rahulr24g@gmail.com).`
+        message: data.message || `Dispatched to support queue for review.`
       });
     } catch (err: any) {
       setErrorMsg(err.message || 'An error occurred while dispatching your inquiry.');

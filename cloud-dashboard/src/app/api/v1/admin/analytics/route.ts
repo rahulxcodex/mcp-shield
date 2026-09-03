@@ -8,12 +8,13 @@ export async function GET(req: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Verify master admin privilege
+    // Verify master admin privilege strictly via immutable email or server-managed app_metadata
     const email = (user?.email || '').toLowerCase();
-    const username = (user?.user_metadata?.user_name || '').toLowerCase();
+    const adminEmail = (process.env.MASTER_ADMIN_EMAIL || 'rahulsahygupta24@gmail.com').toLowerCase();
     const isMaster =
-      email === 'rahulsahygupta24@gmail.com' ||
-      username === 'rahulxcodex';
+      email === adminEmail ||
+      user?.app_metadata?.role === 'master_admin' ||
+      user?.id === process.env.MASTER_ADMIN_USER_ID;
 
     if (!user || !isMaster) {
       return NextResponse.json({ error: 'Forbidden: Master admin access required' }, { status: 403 });
