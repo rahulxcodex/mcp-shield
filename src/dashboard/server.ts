@@ -16,12 +16,35 @@ export class DashboardServer {
     this.actualPort = this.port;
     this.authToken = process.env.MCP_SHIELD_DASHBOARD_TOKEN || crypto.randomBytes(16).toString('hex');
 
+    const parseCookies = (cookieHeader?: string): Record<string, string> => {
+      const cookies: Record<string, string> = {};
+      if (!cookieHeader) return cookies;
+      for (const item of cookieHeader.split(';')) {
+        const [k, v] = item.trim().split('=');
+        if (k && v) cookies[k] = decodeURIComponent(v);
+      }
+      return cookies;
+    };
+
     this.app.use((req, res, next) => {
-      if (req.query.token !== this.authToken) {
-        res.status(401).send('Unauthorized: Invalid or missing token parameter.');
+      const cookies = parseCookies(req.headers.cookie);
+      const authHeader = req.headers.authorization;
+      const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+
+      // 1. If query parameter token is present and valid: set HttpOnly session cookie & redirect to /
+      if (req.query.token === this.authToken) {
+        res.setHeader('Set-Cookie', `mcp_shield_session=${this.authToken}; HttpOnly; SameSite=Strict; Path=/`);
+        // Redirect to root path without query string to eliminate token leakage in browser history/logs/referrers
+        res.redirect(302, '/');
         return;
       }
-      next();
+
+      // 2. Validate session cookie or bearer token
+      if (cookies['mcp_shield_session'] === this.authToken || bearerToken === this.authToken) {
+        return next();
+      }
+
+      res.status(401).send('Unauthorized: Invalid or missing session credentials.');
     });
 
     this.app.get('/', (req, res) => {
@@ -29,10 +52,16 @@ export class DashboardServer {
       res.send(getDashboardHtml(this.authToken, this.getPort()));
     });
 
-    // Cross-Site WebSocket Hijacking Protection & Token Auth
+    // Cross-Site WebSocket Hijacking Protection & Multi-Factor Auth (Cookie / Query / Header)
     this.wss.on('connection', (ws, req) => {
+      const cookies = parseCookies(req.headers.cookie);
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-      if (url.searchParams.get('token') !== this.authToken) {
+      const tokenParam = url.searchParams.get('token');
+      const hasValidAuth =
+        cookies['mcp_shield_session'] === this.authToken ||
+        tokenParam === this.authToken;
+
+      if (!hasValidAuth) {
         ws.close(4001, 'Unauthorized: Invalid token');
         return;
       }

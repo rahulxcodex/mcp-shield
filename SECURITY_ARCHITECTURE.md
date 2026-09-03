@@ -145,3 +145,39 @@ MCP-Shield operates on a **Zero-Trust Architecture** designed specifically for a
 | **Any Multi-IP DNS Address Forbidden** | Immediate `BLOCK` | Prevents DNS rebinding and dual-stack bypasses |
 | **Policy Engine Exception** | Defaults to `BLOCK` | Eliminates bypasses from malformed rule structures |
 | **Child Process Abrupt Crash** | Gateway exits with matching exit code | Prevents orphaned ghost processes |
+
+---
+
+## 🏛️ Trade Secret & Multi-Repository IP Boundary Specification
+
+To maintain a defensible IP moat and adhere to formal trade secret isolation standards, the MCP-Shield ecosystem is partitioned into three distinct repositories with verifiable boundaries:
+
+```
++-----------------------------------------------------------------------------------+
+| 1. mcp-shield (Public Open Source / npm: mcpshld / MIT)                          |
+|    - Local Zero-Trust Gateway & AST Firewall (CLI: mcp-shield, mcpshld)           |
+|    - Bijective Format-Preserving Encryption DLP Sanitizer                         |
+|    - Multi-Tenant Memory-Safe State Machine & Stream Framing                      |
+|    - Standard Security Benchmark Suite (49 suites / 713 tests)                    |
+|    - Cloud Telemetry Emitter & Next.js Console (Deployed on Vercel)              |
++-----------------------------------------+-----------------------------------------+
+                                          |
+        +---------------------------------+---------------------------------+
+        | Authenticated HTTPS RPC                                           | Ed25519 Public Verification
+        v                                                                   v
++---------------------------------------------------+   +---------------------------------------------------+
+| 2. mcp-shield-enterprise-intel (Private / Render) |   | 3. mcp-shield-licensing (Private / Vercel API)    |
+|    - TRADE SECRET BOUNDARY                        |   |    - Ed25519 Military-Grade Private Signing Key   |
+|    - Non-linear multi-factor Risk Scoring Engine  |   |    - Anti-Sybil GitHub Account Age Validation     |
+|    - Proprietary AST Complexity Exponents         |   |    - Stripe Billing & Webhook Synchronization     |
+|    - Egress Severity Multipliers & Drift Penalty  |   |    - Supabase Organization & Tenant State         |
+|    - Live URL: mcp-shield-enterprise-intel.onrender|   |    - Live URL: mcp-shield-licensing.vercel.app     |
++---------------------------------------------------+   +---------------------------------------------------+
+```
+
+### Trade Secret Isolation Invariants:
+1. **Proprietary Scoring Separation**: The proprietary multi-factor mathematical scoring weights (`AST_COMPLEXITY_EXPONENT`, `EGRESS_SEVERITY_MULTIPLIER`, `DRIFT_BASE_PENALTY`) are physically excluded from the public open-source gateway and reside exclusively inside the private `mcp-shield-enterprise-intel` Render microservice.
+2. **Cryptographic Signing Authority**: The Ed25519 private signing key (`LICENSE_PRIVATE_KEY`) is stored exclusively in Vercel KMS environment variables. The open-source client contains only the public verification key.
+3. **No Hardcoded Master Key Bypasses**: Client binaries never contain hardcoded master key hashes; master key verification requires explicit server-side environment configuration.
+4. **Verifiable In-Flight Delegation**: The public gateway delegates high-risk intelligence queries to `mcp-shield-enterprise-intel` via authenticated bearer RPC (`X-MCP-Shield-Key`), ensuring that proprietary models are never exposed via client-side decompilation.
+

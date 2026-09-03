@@ -25,21 +25,36 @@ export class RateLimiter {
     return Math.max(1, Math.ceil(str.length / 4));
   }
 
+  public getGlobalCount(): number {
+    return this.globalCount;
+  }
+
+  public getGlobalTokenWeight(): number {
+    return this.globalTokenWeight;
+  }
+
+  public getToolCount(toolName: string): number {
+    const record = this.counts.get((toolName || '').trim().toLowerCase());
+    return record ? record.count : 0;
+  }
+
   public checkLimit(toolName: string, payload?: any): boolean {
     const now = Date.now();
     const normalizedName = (toolName || '').trim().toLowerCase();
     const weight = payload ? this.estimatePayloadWeight(payload) : 1;
 
-    // 1. Global throughput & token budget check
+    // 1. Reset global window if expired
     if (now - this.globalWindowStart > this.windowMs) {
       this.globalCount = 0;
       this.globalTokenWeight = 0;
       this.globalWindowStart = now;
     }
-    this.globalCount++;
-    this.globalTokenWeight += weight;
 
-    if (this.globalCount > this.maxGlobalCalls || this.globalTokenWeight > this.maxGlobalTokenBudget) {
+    // Atomic pre-check: Do NOT increment global counters if this request would exceed limit
+    if (
+      this.globalCount + 1 > this.maxGlobalCalls ||
+      this.globalTokenWeight + weight > this.maxGlobalTokenBudget
+    ) {
       return false; // Global throughput ceiling or semantic token budget exceeded
     }
 
@@ -59,18 +74,34 @@ export class RateLimiter {
       }
     }
 
-    if (!record || (now - record.firstSeen > this.windowMs)) {
+    const isStale = !record || (now - record.firstSeen > this.windowMs);
+
+    if (isStale) {
+      // New tool or expired window: verify weight fits within per-tool limit before admitting
+      if (1 > this.maxCalls || weight > this.maxTokenBudgetPerTool) {
+        return false;
+      }
+      // Atomically commit both global and per-tool usage
+      this.globalCount++;
+      this.globalTokenWeight += weight;
       this.counts.set(normalizedName, { count: 1, tokenWeight: weight, firstSeen: now });
-      return true; // within limit
+      return true;
     }
-    
+
+    // Atomic pre-check: Do NOT increment tool counters if call exceeds budget
+    if (
+      record.count + 1 > this.maxCalls ||
+      record.tokenWeight + weight > this.maxTokenBudgetPerTool
+    ) {
+      return false; // Per-tool limit or semantic token budget exceeded
+    }
+
+    // Atomically commit both counters only upon admittance
+    this.globalCount++;
+    this.globalTokenWeight += weight;
     record.count++;
     record.tokenWeight += weight;
 
-    if (record.count > this.maxCalls || record.tokenWeight > this.maxTokenBudgetPerTool) {
-      return false; // limit or semantic token budget exceeded
-    }
-    
     return true; // within limit
   }
 }

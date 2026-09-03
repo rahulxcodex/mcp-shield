@@ -40,6 +40,11 @@ export class SecuritySession {
 
   private initialToolsSnapshotHash: string | null = null;
   private registeredToolNames: Set<string> = new Set();
+  private allowToolsUpdate: boolean = false;
+
+  public allowNextToolsUpdate(): void {
+    this.allowToolsUpdate = true;
+  }
 
   private calculateServerIdentity(cmd: string, args: string[]) {
     try {
@@ -71,6 +76,38 @@ export class SecuritySession {
       } else {
          hasher.update(cmd);
       }
+
+      // Provenance strengthening: Detect interpreter execution and bind to package/target script
+      const isInterpreter = /node(?:\.exe)?$|python(?:\.exe|\d)?$|npx(?:\.cmd)?$|bun|deno/i.test(path.basename(cmd));
+      if (isInterpreter && args.length > 0) {
+        for (const arg of args) {
+          if (typeof arg === 'string' && (arg.endsWith('.js') || arg.endsWith('.mjs') || arg.endsWith('.cjs') || arg.endsWith('.py') || arg.endsWith('.ts'))) {
+            const resolvedTarget = path.isAbsolute(arg) ? arg : path.resolve(process.cwd(), arg);
+            if (fs.existsSync(resolvedTarget) && fs.statSync(resolvedTarget).isFile()) {
+              const scriptStat = fs.statSync(resolvedTarget);
+              hasher.update(`script:${scriptStat.size}:${fs.readFileSync(resolvedTarget)}:`);
+
+              // Inspect adjacent package.json for immutable dependency & package identity
+              let currentDir = path.dirname(resolvedTarget);
+              for (let d = 0; d < 4; d++) {
+                const pkgPath = path.join(currentDir, 'package.json');
+                if (fs.existsSync(pkgPath)) {
+                  try {
+                    const pkgContent = fs.readFileSync(pkgPath, 'utf8');
+                    const parsed = JSON.parse(pkgContent);
+                    hasher.update(`pkg:${parsed.name}@${parsed.version}:`);
+                  } catch {}
+                  break;
+                }
+                const parent = path.dirname(currentDir);
+                if (parent === currentDir) break;
+                currentDir = parent;
+              }
+              break;
+            }
+          }
+        }
+      }
       
       hasher.update(args.join('|'));
       this.serverIdentity = hasher.digest('hex');
@@ -93,7 +130,14 @@ export class SecuritySession {
       this.initialToolsSnapshotHash = snapshotHash;
       this.registeredToolNames = new Set(tools.map(t => t.name));
     } else if (this.initialToolsSnapshotHash !== snapshotHash) {
-      throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool list altered dynamically (added/removed/reordered/modified tool capabilities).`);
+      if (this.allowToolsUpdate) {
+        // Legitimate dynamic tools update (e.g. notifications/tools/list_changed)
+        this.initialToolsSnapshotHash = snapshotHash;
+        this.registeredToolNames = new Set(tools.map(t => t.name));
+        this.allowToolsUpdate = false;
+      } else {
+        throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool list altered dynamically without expected update notice.`);
+      }
     }
   }
 
@@ -124,7 +168,9 @@ export class SecuritySession {
     // Check if tool already exists and if the schema changed
     const existing = this.toolRegistry.get(toolName);
     if (existing && existing.schemaHash !== hash) {
-      throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool '${toolName}' changed its schema dynamically.`);
+      if (!this.allowToolsUpdate) {
+        throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool '${toolName}' changed its schema dynamically.`);
+      }
     }
 
     const profile = CapabilityInferencer.createProfile(

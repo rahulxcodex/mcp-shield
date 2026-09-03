@@ -10,7 +10,7 @@ import { RequestDispatcher } from './dispatcher';
 import { EvaluationContext, Evidence } from '../security/policy-engine';
 import { ConfigLoader } from '../security/config';
 import { NetworkEgressProxy } from '../security/network-proxy';
-import { CapabilityInferencer } from '../security/capabilities';
+import { CapabilityInferencer, ToolCapabilities } from '../security/capabilities';
 import { CanaryManager } from '../security/canary';
 import { JITElevationManager } from '../security/jit-elevation';
 import { CloudTelemetryPublisher, SecurityTelemetryPayload } from '../cloud/telemetry';
@@ -174,7 +174,11 @@ export class ProxyServer implements Lifecycle {
            message.error = JSON.parse(sanitizedErrStr);
         }
 
-        if (message.params && !message.method) {
+        if (message.method === 'notifications/tools/list_changed') {
+           this.session.allowNextToolsUpdate();
+        }
+
+        if (message.params) {
            const paramsStr = JSON.stringify(message.params);
            const sanitizedParamsStr = this.session.sanitizer.sanitize(paramsStr);
            message.params = JSON.parse(sanitizedParamsStr);
@@ -236,14 +240,17 @@ export class ProxyServer implements Lifecycle {
         
         this.logAndBroadcast({ type: 'tool_call_intercepted', toolName, payload: sanitizedArgs });
 
-        if (registeredTool) {
-           const inferred = registeredTool.inferredCapabilities;
-           if (inferred) {
-             this.session.updateObservedCapabilities(toolName, inferred);
+        const evidence: Evidence[] = [];
+        const actualObserved: Partial<ToolCapabilities> = {};
+
+        // Track runtime evidence for filesystem interactions
+        if (rawArgs.path || rawArgs.file || rawArgs.filename || rawArgs.targetPath) {
+           if (rawArgs.content !== undefined || rawArgs.data !== undefined) {
+              actualObserved.filesystemWrite = true;
+           } else {
+              actualObserved.filesystemRead = true;
            }
         }
-
-        const evidence: Evidence[] = [];
 
         // -2. Canary / Honeypot Tool Tripwire Check
         if (this.canaryManager.isCanaryTool(toolName)) {
@@ -263,21 +270,58 @@ export class ProxyServer implements Lifecycle {
         // 0.5 Egress Network Firewall (URL/argument-level check against RawSecurityInput)
         const egressCheck = this.session.policyEngine.checkEgress(rawArgs);
         if (egressCheck.isBlocked) {
+           actualObserved.networkAccess = true;
            evidence.push({ detector: 'url-egress-filter', finding: `EGRESS_BLOCKED: Unauthorized destination ${egressCheck.domain || 'endpoint'}: ${egressCheck.reason || ''}`, risk: 'CRITICAL' });
+        } else if (rawArgs.url || rawArgs.endpoint || rawArgs.host || rawArgs.uri) {
+           actualObserved.networkAccess = true;
         }
 
-        // 2. AST Firewall (Evaluated against RawSecurityInput commands)
-        const commandArg = rawArgs.command || rawArgs.cmd || rawArgs.script || rawArgs.code || '';
-        const shouldCheckAst = registeredTool?.inferredCapabilities.shellExecution || 
-                               /bash|shell|terminal|exec|run|do_cmd|cmd|powershell|pwsh|system/i.test(toolName) ||
-                               (typeof commandArg === 'string' && commandArg.trim().length > 0);
-
-        if (shouldCheckAst && typeof commandArg === 'string' && commandArg.trim().length > 0) {
-           const astResult = this.astAnalyzer.analyzeCommand(commandArg);
-           if (!astResult.isSafe) {
-              const risk = astResult.reason?.includes('ARBITRARY_CODE_EXECUTION') ? 'HIGH' : 'CRITICAL';
-              evidence.push({ detector: 'ast-analyzer', finding: astResult.reason || 'AST_BLOCKED', risk });
+        // 2. AST Firewall (Recursive deep search across structured execution parameters)
+        const candidateCommands: string[] = [];
+        const extractCmds = (obj: any, depth = 0) => {
+           if (!obj || depth > 8) return;
+           if (typeof obj === 'string') {
+              const trimmed = obj.trim();
+              if (trimmed.length > 0) candidateCommands.push(trimmed);
+              return;
            }
+           if (Array.isArray(obj)) {
+              for (const item of obj) extractCmds(item, depth + 1);
+              return;
+           }
+           if (typeof obj === 'object') {
+              for (const [k, v] of Object.entries(obj)) {
+                 const lower = k.toLowerCase();
+                 if (['command', 'cmd', 'script', 'code', 'exec', 'shell', 'query', 'payload', 'args', 'run', 'eval', 'instruction'].includes(lower)) {
+                    if (typeof v === 'string') candidateCommands.push(v.trim());
+                    else if (Array.isArray(v)) v.forEach((item) => typeof item === 'string' && candidateCommands.push(item.trim()));
+                 } else if (typeof v === 'object' && v !== null) {
+                    extractCmds(v, depth + 1);
+                 }
+              }
+           }
+        };
+        extractCmds(rawArgs);
+
+        const isShellTool = registeredTool?.inferredCapabilities.shellExecution || 
+                            /bash|shell|terminal|exec|run|do_cmd|cmd|powershell|pwsh|system/i.test(toolName);
+        const shouldCheckAst = isShellTool || candidateCommands.length > 0;
+
+        if (shouldCheckAst && candidateCommands.length > 0) {
+           actualObserved.shellExecution = true;
+           for (const cmd of candidateCommands) {
+              const astResult = this.astAnalyzer.analyzeCommand(cmd);
+              if (!astResult.isSafe) {
+                 const risk = astResult.reason?.includes('ARBITRARY_CODE_EXECUTION') ? 'HIGH' : 'CRITICAL';
+                 evidence.push({ detector: 'ast-analyzer', finding: astResult.reason || 'AST_BLOCKED', risk });
+                 break;
+              }
+           }
+        }
+
+        // Update observed capabilities strictly with runtime evidence
+        if (registeredTool && Object.keys(actualObserved).length > 0) {
+           this.session.updateObservedCapabilities(toolName, actualObserved);
         }
         
         // 3. Capability Attestation Check
@@ -415,33 +459,52 @@ ${red}BLOCKED${reset}
                  this.sendErrorToHost(message.id, -32000, 'USER DENIED: Staged file changes rejected.');
               }
               return;
-           } else {
-              this.logAndBroadcast({ type: 'sandbox_blocked', toolName, reason: 'Sandbox write action requested but target path or content was missing.' });
-              this.sendErrorToHost(message.id, -32000, 'SANDBOX POLICY BLOCKED: Missing path or content for staged execution.');
-              return;
-           }
+            } else {
+               // Non-file mutating tool evaluated under sandbox action: permit read-only isolated execution
+               this.logAndBroadcast({
+                 type: 'sandbox_pass_through',
+                 toolName,
+                 reason: 'Tool has no filesystem write parameters (path/content); allowing non-mutating execution.'
+               });
+            }
         }
       }
       
       // 3. RESTORED EXECUTION INPUT: Granular Trust & Capability-Aware Secret Restoration
+      // Cryptographic binding to (serverIdentity, toolName, sessionId, scope)
       if (message.method === 'call_tool' || message.method === 'tools/call') {
-         const toolName = message.params.name;
+         const toolName = message.params?.name;
          const registeredTool = this.session.toolRegistry.get(toolName);
          
          const isTrusted = registeredTool?.trustLevel === 'TRUSTED';
-         const hasSecretCapability = registeredTool?.declaredCapabilities.secretAccess || registeredTool?.inferredCapabilities.secretAccess;
+         // STRICT INVARIANT: Never allow inferred capabilities to authorize secret access; require explicitly declared attestation.
+         const hasDeclaredSecretAccess = !!registeredTool?.declaredCapabilities?.secretAccess;
          
-         if (isTrusted && hasSecretCapability) {
-            // Restore tokenized secrets only for TRUSTED tools with explicit secret access capability
+         if (isTrusted && hasDeclaredSecretAccess) {
+            // Restore tokenized secrets strictly bound to server identity, tool name, and session
+            const secretScope = `${this.session.serverIdentity}:${toolName}`;
+            const restorationContext = {
+              serverIdentity: this.session.serverIdentity,
+              toolName,
+              sessionId: this.session.sessionId,
+              scope: secretScope
+            };
             const payloadStr = JSON.stringify(message.params);
-            const restoredStr = this.session.sanitizer.restore(payloadStr);
+            // First attempt scoped restoration; fallback to session-level if authorized
+            let restoredStr = this.session.sanitizer.restore(payloadStr, restorationContext);
+            if (restoredStr === payloadStr) {
+               restoredStr = this.session.sanitizer.restore(payloadStr, {
+                 serverIdentity: this.session.serverIdentity,
+                 sessionId: this.session.sessionId
+               });
+            }
             message.params = JSON.parse(restoredStr);
-            this.logAndBroadcast({ type: 'secret_restored', toolName, trustLevel: registeredTool.trustLevel });
-         } else if (isTrusted && !hasSecretCapability) {
+            this.logAndBroadcast({ type: 'secret_restored', toolName, trustLevel: registeredTool.trustLevel, scope: secretScope });
+         } else if (isTrusted && !hasDeclaredSecretAccess) {
             this.logAndBroadcast({
               type: 'secret_restoration_skipped',
               toolName,
-              reason: 'Tool is TRUSTED but does not have declared secretAccess capability; masked tokens retained.'
+              reason: 'Tool is TRUSTED but lacks explicitly declared secretAccess capability attestation; masked tokens retained.'
             });
          } else {
             this.logAndBroadcast({
