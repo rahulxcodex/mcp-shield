@@ -1,101 +1,29 @@
-# MCP Shield - Project Context
+﻿# MCP Shield - Multi-Repo System Context
 
-## Project Architecture
-- Core: Zero-Trust Security Gateway, AST Firewall & Bijective DLP Sanitizer for Model Context Protocol (MCP).
-- Package: `mcpshld` (v1.0.11 on npm) with CLI bin `mcp-shield` and `mcpshld`.
-- Tech Stack: TypeScript, Node.js, Tree-sitter AST, eBPF SIMD fastpath, FPE bijective DLP, WORM cryptographic audit.
-- Web Platform & Console: Next.js 16 (App Router), React 19, Tailwind CSS v4, Recharts, Lucide Icons, Supabase SSR & Auth.
-- Telemetry: Real-time HMAC-SHA256 signed ingestion (`/api/v1/telemetry/ingest`), threat stream, guardrail metrics.
+## 1. System Topology & 3-Repository Ecosystem
+- **`mcp-shield`** (Public GitHub `rahulxcodex/mcp-shield`, npm package `mcpshld` v1.0.17):
+  - Zero-Trust Security Gateway, AST Firewall & Bijective DLP Sanitizer for Model Context Protocol (MCP).
+  - Web Platform & Console: Next.js 16 App Router on Vercel (`mcp-shield-dashboard.vercel.app`).
+  - Open Security Benchmark Suite: 42 suites / 693 tests covering AST evasion, DLP, memory bounds, and protocol invariants.
+  - License Verification: Client-side cryptographic Ed25519 signature verification using public key.
+- **`mcp-shield-enterprise-intel`** (Private GitHub `rahulxcodex/mcp-shield-enterprise-intel`, Render Web Service):
+  - Proprietary non-linear risk scoring algorithm (`AST_COMPLEXITY_EXPONENT`, `EGRESS_SEVERITY_MULTIPLIER`, `DRIFT_BASE_PENALTY`).
+  - Endpoint: `https://mcp-shield-enterprise-intel.onrender.com/api/v1/intel/scoring`.
+  - Trade Secret Boundary: Excluded from public binaries and repositories.
+- **`mcp-shield-licensing`** (Private GitHub `rahulxcodex/mcp-shield-licensing`, Vercel App):
+  - Asymmetric cryptographic license generation (`/api/license`) using Ed25519 private key.
+  - Anti-sybil GitHub account age validation (>1 year account required).
+  - Stripe billing, subscription webhooks, and Supabase multi-tenant organization state.
+  - Endpoint: `https://mcp-shield-licensing.vercel.app`.
 
-## Completed Milestones
-- Enterprise Marketing Website (`/`): Interactive Zero-Day Attack Simulator, copyable config for Claude/Cursor/Antigravity, JSON-LD SEO, sitemap.xml.
-- Console & Telemetry Center (`/console`):
-  - Connection health indicator (🟢 Live / 8s Polling / ⚪ Demo Mode) with real-time freshness ticker.
-  - Onboarding Checklist Banner & 4-step interactive Onboarding Wizard (`OnboardingWizard.tsx`).
-  - Workspace/Organization Switcher (`WorkspaceSwitcher.tsx`) with role and tier badges.
-  - Click-to-inspect Threat Event Detail Drawer (`EventDetailDrawer.tsx`) with AST analysis, payload viewer, and allowlist creation.
-  - Comprehensive filters: Environment (Prod/Staging/Dev), Date Range (1h/24h/7d/30d), Action Type, and Search.
-  - Multi-select bulk actions: Bulk acknowledge and CSV export.
-  - Metric calculation tooltips explaining Attacks Neutralized, AST latency, and Secrets Tokenized.
-- Enterprise Settings Suite (`/settings`):
-  - General: Key management table with prefixes, rotation, revocation, expiry, and reveal-once modal.
-  - Security: Device/session management, 2FA/MFA setup, IP allowlisting, and Enterprise SAML/OIDC SSO.
-  - Team: Organization members and role-based permissions (Owner, Admin, Member).
-  - Billing: Unified Stripe (Global USD) and Razorpay (India INR) checkout, seat usage meter, invoice history, and cancellation flow.
-  - Integrations: Outbound JSON-RPC / SIEM webhooks, Slack/Teams alerts, PagerDuty integration.
-  - Audit Logs: Privileged organization action logs with CSV export.
-- Compliance & Trust Center:
-  - `/compliance`: SOC 2 Type II audit-evidence export, Zero Customer Payload Storage guarantee, encryption specs, data residency.
-  - `/privacy`, `/terms`, `/security`, `/subprocessors`: Complete legal and security disclosure framework.
-- Security Invariants & Cross-System Hardening:
-  - Canonical ApiKey contract shared across CLI, Next.js API, and Database.
-  - Zero development fallback in production mode; strict HMAC & SHA-256 validation.
-  - CLI `link` performs signed cryptographic handshake with `/api/v1/telemetry/verify` before confirming pairing.
-  - Telemetry strictly decoupled from MCP hot path with durable local disk spool (`~/.mcp-shield/spool/`), backpressure cap, and graceful shutdown flushing.
-  - Complete multi-tenant runtime identity (`installation_id`, `environment`, `sequence_number`, `eventId` deduplication).
-# MCP Shield - Project Context
+## 2. Trade Secret Invariants & Security Boundaries
+- **No Private Keys in Open Source**: Ed25519 signing private keys only exist in Vercel KMS/env (`LICENSE_PRIVATE_KEY`).
+- **No Plaintext Master Keys in Code**: Master license keys verified strictly via one-way SHA-256 cryptographic hashes.
+- **Strict Separation of Scoring Weights**: Proprietary non-linear scoring stays isolated in `mcp-shield-enterprise-intel`.
+- **Environment Isolation**: All `.env*` files strictly gitignored and excluded from npm packages.
 
-## Project Architecture
-- Core: Zero-Trust Security Gateway, AST Firewall & Bijective DLP Sanitizer for Model Context Protocol (MCP).
-- Package: `mcpshld` (v1.0.11 on npm) with CLI bin `mcp-shield` and `mcpshld`.
-- Tech Stack: TypeScript, Node.js, Tree-sitter AST, eBPF SIMD fastpath, FPE bijective DLP, WORM cryptographic audit.
-- Web Platform & Console: Next.js 16 (App Router), React 19, Tailwind CSS v4, Recharts, Lucide Icons, Supabase SSR & Auth.
-- Telemetry: Real-time HMAC-SHA256 signed ingestion (`/api/v1/telemetry/ingest`), threat stream, guardrail metrics.
-
-## Completed Milestones
-- Enterprise Marketing Website (`/`): Interactive Zero-Day Attack Simulator, copyable config for Claude/Cursor/Antigravity, JSON-LD SEO, sitemap.xml.
-- Console & Telemetry Center (`/console`):
-  - Connection health indicator (🟢 Live / 8s Polling / ⚪ Demo Mode) with real-time freshness ticker.
-  - Onboarding Checklist Banner & 4-step interactive Onboarding Wizard (`OnboardingWizard.tsx`).
-  - Workspace/Organization Switcher (`WorkspaceSwitcher.tsx`) with role and tier badges.
-  - Click-to-inspect Threat Event Detail Drawer (`EventDetailDrawer.tsx`) with AST analysis, payload viewer, and allowlist creation.
-  - Comprehensive filters: Environment (Prod/Staging/Dev), Date Range (1h/24h/7d/30d), Action Type, and Search.
-  - Multi-select bulk actions: Bulk acknowledge and CSV export.
-  - Metric calculation tooltips explaining Attacks Neutralized, AST latency, and Secrets Tokenized.
-- Enterprise Settings Suite (`/settings`):
-  - General: Key management table with prefixes, rotation, revocation, expiry, and reveal-once modal.
-  - Security: Device/session management, 2FA/MFA setup, IP allowlisting, and Enterprise SAML/OIDC SSO.
-  - Team: Organization members and role-based permissions (Owner, Admin, Member).
-  - Billing: Unified Stripe (Global USD) and Razorpay (India INR) checkout, seat usage meter, invoice history, and cancellation flow.
-  - Integrations: Outbound JSON-RPC / SIEM webhooks, Slack/Teams alerts, PagerDuty integration.
-  - Audit Logs: Privileged organization action logs with CSV export.
-- Compliance & Trust Center:
-  - `/compliance`: SOC 2 Type II audit-evidence export, Zero Customer Payload Storage guarantee, encryption specs, data residency.
-  - `/privacy`, `/terms`, `/security`, `/subprocessors`: Complete legal and security disclosure framework.
-- Security Invariants & Cross-System Hardening:
-  - Canonical ApiKey contract shared across CLI, Next.js API, and Database.
-  - Zero development fallback in production mode; strict HMAC & SHA-256 validation.
-  - CLI `link` performs signed cryptographic handshake with `/api/v1/telemetry/verify` before confirming pairing.
-  - Telemetry strictly decoupled from MCP hot path with durable local disk spool (`~/.mcp-shield/spool/`), backpressure cap, and graceful shutdown flushing.
-  - Complete multi-tenant runtime identity (`installation_id`, `environment`, `sequence_number`, `eventId` deduplication).
-  - Pre-serialization telemetry sanitization scrubbing filesystem paths and credentials.
-  - Synchronized event taxonomy: BLOCK, SANITIZE, QUARANTINE, RATE_LIMIT, PASSTHROUGH, PROMPT, ERROR across UI, API, DB.
-- Verification & Deployment:
-  - 41/41 test suites passed (683/683 unit & integration tests).
-  - Remediation milestone: Fixed MCP initialization race, tools/call vs call_tool secret restoration, outbound DLP (result/error/params), loopback dashboard binding, TOCTOU COW verification, and dispatcher concurrency.
-  - Packaged as `mcpshld@1.0.12`.
-- Console Navbar Redesign & Enterprise Admin Suite:
-  - Decluttered navbar: 10 items → 4 (Logo+Workspace, Live indicator, More dropdown, Account dropdown).
-  - `MoreDropdown.tsx`: Onboarding, Simulate, Export SOC2, Plans, Feedback, Theme Toggle in dropdown.
-  - `AccountDropdown.tsx`: Role-aware profile dropdown with GitHub link, plan badge, admin panel links, sign out.
-  - Dedicated Account section (`/settings/account`) with profile details, OAuth binding, quota meters, and password change.
-  - Universal "Add Existing Key" flow with auto-elevation for `MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY`.
-  - Enterprise Admin Panel (`/console/admin`): Key distribution pool, single email invite, CSV bulk mass invite, and join link generator.
-  - Master Admin Panel (`/console/system-admin`): Multi-source telemetry tracking MCP, Dashboard, and Website metrics.
-  - Multi-source analytics API (`/api/v1/admin/analytics`).
-  - Middleware route guards: `/console/system-admin` → master admin only, `/console/admin` → enterprise + master.
-  - Removed GitHub 1-year account age check from license API.
-- Step 10 VRIO AI Agent Runtime Security Platform Milestone:
-  - Step 1: Formal MCP protocol state machine (`src/core/mcp-protocol-state-machine.ts`) with fail-closed envelopes, JSON-RPC 2.0 version validation, and handshake replay rejection.
-  - Step 2: Proprietary Agent Attack Corpus (`src/security/attack-corpus.ts`) expanded across 7 categories with `ATK-PROMPT-003`, `ATK-ABUSE-002`, and `ATK-ABUSE-003`.
-  - Step 3: Security Intelligence Engine (`src/security/intelligence-engine.ts`) with non-linear compounding risk scores and stateful n-gram sequence anomaly detection (`evaluateNGramAnomaly`).
-  - Step 4: Standardized Security Benchmark (`benchmarks/mcp-security-benchmark.ts`) yielding 100/100 score and verifiable badge generation (`SecurityComplianceHelper`).
-  - Step 5: Multi-factor server identity fingerprinting, runtime drift detection (binary/schema/deps), and reputation graph (`src/security/server-identity.ts`).
-  - Step 6: Ecosystem distribution auto-discovery covering Claude, Cursor, Windsurf, Cline, Zed, Roo Code, and Goose.
-  - Step 7: Centralized Enterprise Control Plane APIs (`/api/v1/control-plane/policies`, `simulate`, `provenance`, `runtime`).
-  - Step 8: Trade Secret Private Repo Boundary (`mcp-shield-enterprise-intel`) with authenticated `/api/v1/intel/*` endpoints shielding non-linear weights and reasoning trees.
-  - Step 9: Independent trust verification suite and reproducible invariant test harness.
-  - Step 10: Non-MCP AI Agent Runtime Security Platform (`src/core/ai-runtime-security.ts`) covering Aider, LangGraph, AutoGen, CrewAI, Coding Agents, and Multi-Agent Swarms.
-  - Patents: Strategic Patent Blueprint formulated in `docs/PATENT_STRATEGY.md` covering Bijective Safe Secret Restoration & Execution Boundary Isolation.
-  - Tests: 42/42 test suites passing (693/693 tests).
-  - Released `mcpshld@1.0.16` to npm.
+## 3. Deployment & Release Matrix
+- **npm**: `npm publish` pushes `mcpshld` package to npm registry.
+- **GitHub**: All 3 repos push to `origin main`.
+- **Vercel**: Auto-deploys `mcp-shield-dashboard` and `mcp-shield-licensing`.
+- **Render**: Auto-deploys `mcp-shield-enterprise-intel`.
