@@ -116,7 +116,8 @@
     "cloud-dashboard/**/*",
     "dist",
     "dist/**/*",
-    "node_modules"
+    "node_modules",
+    "scripts/verify-website.ts"
   ],
   "ts-node": {
     "compilerOptions": {

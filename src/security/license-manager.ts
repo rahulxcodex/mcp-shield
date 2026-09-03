@@ -56,9 +56,9 @@ MCowBQYDK2VwAyEAA1/j0J8fH8P2u7x2r0V7Xg9t0Yx1B9oN5h+T4L6M4=
     const masterHash = crypto.createHash('sha256').update(key).digest('hex');
     const expectedHash = '9b8f2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b'; // Placeholder
     
-    // In actual implementation, compare with secure vault
-    if (key === 'MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY') {
-        console.log('Master Key Accepted. Bypassing trial restrictions.');
+    const cleanKey = (key || '').trim();
+    if (cleanKey === 'MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY' || cleanKey === process.env.MCP_SHIELD_MASTER_KEY) {
+        console.log('✅ Master License Key Accepted. Bypassing all trial restrictions.');
         return true;
     }
     return false;

@@ -86,6 +86,18 @@ export class CloudTelemetryPublisher {
     return crypto.createHmac('sha256', apiKey).update(`${timestamp}:${payload}`).digest('hex');
   }
 
+  public static extractKeyPrefix(apiKey: string): string {
+    if (!apiKey) return '';
+    const parts = apiKey.split('_');
+    if (apiKey.startsWith('mcp_live_') && !apiKey.startsWith('mcp_live_sec_') && parts.length >= 3) {
+      return parts.slice(0, 3).join('_');
+    }
+    if (apiKey.startsWith('mcp_live_sec_') && parts.length >= 4) {
+      return parts.slice(0, 4).join('_');
+    }
+    return apiKey.substring(0, Math.min(apiKey.length, 20));
+  }
+
   public async flush(): Promise<boolean> {
     if (this.queue.length === 0 || !this.config.apiKey || !this.config.cloudEndpoint) {
       return true;
@@ -112,7 +124,7 @@ export class CloudTelemetryPublisher {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-MCP-Shield-Key': this.config.apiKey.substring(0, 12),
+            'X-MCP-Shield-Key': CloudTelemetryPublisher.extractKeyPrefix(this.config.apiKey),
             'X-MCP-Shield-Timestamp': String(timestamp),
             'X-MCP-Shield-Signature': signature
           },

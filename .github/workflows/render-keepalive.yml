@@ -1,0 +1,18 @@
+name: Keep Render Alive Cron
+
+on:
+  schedule:
+    # Runs every 10 minutes to prevent Render free-tier instances from spinning down
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Service Endpoint
+        env:
+          RENDER_SERVICE_URL: ${{ secrets.RENDER_SERVICE_URL || 'https://mcp-shield-proxy.onrender.com/health' }}
+        run: |
+          echo "Pinging Render service at $RENDER_SERVICE_URL..."
+          curl -s -f -m 15 "$RENDER_SERVICE_URL" || echo "Service pinged (ignoring errors if offline)."

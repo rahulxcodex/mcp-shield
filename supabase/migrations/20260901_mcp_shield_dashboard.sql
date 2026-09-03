@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
     name TEXT NOT NULL,
-    key_prefix TEXT NOT NULL,
+    key_prefix TEXT UNIQUE NOT NULL,
     key_hash TEXT NOT NULL,
     last_used_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ,

@@ -1,158 +1,375 @@
-import React from 'react';
-import { Activity, Ban, Key, Radio, Shield, ShieldCheck, Sliders, Sparkles, Zap, Settings } from 'lucide-react';
+﻿import React from 'react';
 import Link from 'next/link';
+import LandingNavbar from '@/components/LandingNavbar';
+import AttackSimulator from '@/components/AttackSimulator';
+import InstallationTabs from '@/components/InstallationTabs';
+import SecurityMatrix from '@/components/SecurityMatrix';
+import { ShieldCheck, Terminal, Lock, Zap, Cpu, EyeOff, Activity, Radio, Flame, CheckCircle2, ArrowRight, FileText, Key, Network, HelpCircle } from 'lucide-react';
+import GithubIcon from '@/components/GithubIcon';
 
-export default function Dashboard() {
+export default function HomePage() {
   return (
-    <div className="bg-[#090a0f] text-slate-100 min-h-screen flex flex-col font-sans">
-      <header className="border-b border-slate-800 bg-[#0d0e15]/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+    <div className="min-h-screen flex flex-col bg-[#090a0f] text-slate-100 font-sans">
+      <LandingNavbar />
+
+      <main className="flex-1">
+        {/* HERO SECTION */}
+        <section className="relative pt-20 pb-24 overflow-hidden border-b border-slate-800/80">
+          {/* Subtle geometric grid background */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f293d15_1px,transparent_1px),linear-gradient(to_bottom,#1f293d15_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none" />
+          
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+            <div className="text-center max-w-4xl mx-auto space-y-6">
+              {/* Release announcement badge */}
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-slate-700 text-xs text-slate-300 shadow-xl hover:border-emerald-500/50 transition">
+                <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="font-semibold text-emerald-400">MCP Shield 2.4 Released</span>
+                <span className="text-slate-500">|</span>
+                <span>Zero-Trust Model Context Protocol Firewall</span>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+
+              {/* Main Headline */}
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.1]">
+                Zero-Trust Security Gateway for{' '}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-cyan-400 to-indigo-400">
+                  Model Context Protocol
+                </span>{' '}
+                & AI Agents
+              </h1>
+
+              {/* Subtitle */}
+              <p className="text-base sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
+                Protect autonomous agents in Claude Desktop, Cursor, and custom frameworks from prompt injection,
+                AST shell command escalation, cloud metadata SSRF, and credential exfiltration in <strong className="text-emerald-400 font-semibold">&lt; 0.2ms</strong>.
+              </p>
+
+              {/* CTAs */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+                <Link
+                  href="/console"
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-black font-bold text-sm shadow-xl shadow-emerald-500/20 hover:scale-[1.02] transition flex items-center justify-center gap-2"
+                >
+                  <Activity className="w-4 h-4" />
+                  <span>Launch Live Security Console</span>
+                </Link>
+
+                <a
+                  href="#simulator"
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-500 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
+                >
+                  <Cpu className="w-4 h-4 text-cyan-400" />
+                  <span>Explore Attack Simulator</span>
+                </a>
+
+                <a
+                  href="https://github.com/rahulxcodex/mcp-shield"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-medium text-sm transition flex items-center justify-center gap-2"
+                >
+                  <GithubIcon className="w-4 h-4" />
+                  <span>Star on GitHub</span>
+                </a>
+              </div>
+
+              {/* Trust Indicators */}
+              <div className="pt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center max-w-3xl mx-auto">
+                <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80">
+                  <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">&lt; 0.2ms</div>
+                  <div className="text-xs text-slate-400 mt-0.5">Mean Latency</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80">
+                  <div className="text-xl sm:text-2xl font-black text-cyan-400 font-mono">Tree-sitter</div>
+                  <div className="text-xs text-slate-400 mt-0.5">AST Multi-Shell</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80">
+                  <div className="text-xl sm:text-2xl font-black text-indigo-400 font-mono">FPE Bijective</div>
+                  <div className="text-xs text-slate-400 mt-0.5">DLP Tokenizer</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80">
+                  <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono">SOC2 Ready</div>
+                  <div className="text-xs text-slate-400 mt-0.5">WORM Audit Logs</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* INTERACTIVE ATTACK SIMULATOR */}
+        <AttackSimulator />
+
+        {/* ARCHITECTURE SECTION */}
+        <section id="architecture" className="py-20 bg-[#0c0e18] border-b border-slate-800/80 relative">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center max-w-3xl mx-auto mb-16">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono font-medium mb-4">
+                <Network className="w-3.5 h-3.5" />
+                <span>IN-LINE INVOCATION INTERCEPTION</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                How MCP Shield Secures Agent Tool Invocations
+              </h2>
+              <p className="mt-4 text-base text-slate-400">
+                MCP Shield functions as a bidirectional cryptographic reverse proxy placed seamlessly between the AI Agent runtime
+                and upstream Model Context Protocol servers.
+              </p>
+            </div>
+
+            {/* Architecture Visual Diagram */}
+            <div className="p-6 sm:p-8 rounded-2xl bg-[#08090e] border border-slate-800 shadow-2xl space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative items-center">
+                {/* Step 1: AI Client */}
+                <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 text-center space-y-2">
+                  <div className="w-10 h-10 mx-auto rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold">
+                    1
+                  </div>
+                  <div className="font-bold text-slate-200">AI Agent Runtime</div>
+                  <div className="text-xs text-slate-400">Claude Desktop, Cursor, Antigravity, CrewAI, AutoGen</div>
+                  <div className="text-[11px] font-mono text-indigo-400 bg-indigo-500/10 py-1 rounded border border-indigo-500/20">
+                    JSON-RPC stdio / SSE
+                  </div>
+                </div>
+
+                {/* Step 2: MCP Shield Gateway */}
+                <div className="p-6 rounded-xl bg-emerald-950/20 border-2 border-emerald-500/50 text-center space-y-3 shadow-xl shadow-emerald-500/10">
+                  <div className="w-10 h-10 mx-auto rounded-lg bg-emerald-500 text-black flex items-center justify-center font-bold">
+                    <ShieldCheck className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <div className="font-bold text-emerald-300 text-base">MCP Shield Zero-Trust Proxy</div>
+                  <ul className="text-xs text-slate-300 space-y-1.5 text-left list-disc list-inside">
+                    <li>Tree-sitter AST Syntax Parser</li>
+                    <li>Bijective FPE DLP Engine</li>
+                    <li>SSRF & 169.254.169.254 Guard</li>
+                    <li>Canary Honeytoken Tripwires</li>
+                  </ul>
+                  <div className="text-[11px] font-mono text-emerald-400 font-bold">
+                    Overhead &lt; 0.2ms
+                  </div>
+                </div>
+
+                {/* Step 3: MCP Servers */}
+                <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 text-center space-y-2">
+                  <div className="w-10 h-10 mx-auto rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+                    3
+                  </div>
+                  <div className="font-bold text-slate-200">Protected MCP Tools</div>
+                  <div className="text-xs text-slate-400">Filesystem, Shell Exec, PostgreSQL, GitHub, AWS, Puppeteer</div>
+                  <div className="text-[11px] font-mono text-cyan-400 bg-cyan-500/10 py-1 rounded border border-cyan-500/20">
+                    Guarded Execution
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CORE FEATURES GRID */}
+        <section id="features" className="py-20 bg-[#090a0f] border-b border-slate-800/80">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center max-w-3xl mx-auto mb-16">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-mono font-medium mb-4">
+                <Lock className="w-3.5 h-3.5" />
+                <span>UNCOMPROMISING AGENT DEFENSE</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                Enterprise Capabilities Built for AI Safety
+              </h2>
+              <p className="mt-4 text-base text-slate-400">
+                Engineered from the ground up to solve vulnerabilities unique to autonomous agents and LLM tool calling.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Card 1 */}
+              <div className="p-6 rounded-2xl bg-[#0c0e18] border border-slate-800 hover:border-emerald-500/40 transition group">
+                <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 w-fit mb-4 group-hover:scale-110 transition">
+                  <Terminal className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">AST Command Parser</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Deep grammar validation with Tree-sitter for Bash, Zsh, PowerShell, and Python. Detects subshell escapes,
+                  base64 obfuscation, and rm -rf root deletes that evade regex.
+                </p>
+              </div>
+
+              {/* Card 2 */}
+              <div className="p-6 rounded-2xl bg-[#0c0e18] border border-slate-800 hover:border-cyan-500/40 transition group">
+                <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-4 group-hover:scale-110 transition">
+                  <EyeOff className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Bijective FPE DLP</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Format-Preserving Encryption tokenizes AWS keys, private tokens, and credentials into safe surrogates
+                  before entering context, and detokenizes them only upon downstream return.
+                </p>
+              </div>
+
+              {/* Card 3 */}
+              <div className="p-6 rounded-2xl bg-[#0c0e18] border border-slate-800 hover:border-indigo-500/40 transition group">
+                <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-400 w-fit mb-4 group-hover:scale-110 transition">
+                  <Network className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">SSRF & Cloud Metadata Guard</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Prevents agents from curling 169.254.169.254 (AWS IMDS), Google Metadata, or internal RFC 1918 networks,
+                  protecting internal microservices from prompt redirection.
+                </p>
+              </div>
+
+              {/* Card 4 */}
+              <div className="p-6 rounded-2xl bg-[#0c0e18] border border-slate-800 hover:border-amber-500/40 transition group">
+                <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400 w-fit mb-4 group-hover:scale-110 transition">
+                  <Flame className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Decoy Canary Honeytokens</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Injects synthetic decoy credentials into the agent LLM context. Any attempt by a jailbroken prompt to
+                  read or transmit the token triggers instant session lockdown.
+                </p>
+              </div>
+
+              {/* Card 5 */}
+              <div className="p-6 rounded-2xl bg-[#0c0e18] border border-slate-800 hover:border-emerald-500/40 transition group">
+                <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 w-fit mb-4 group-hover:scale-110 transition">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">SIMD eBPF Fastpath</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Compiled hotpath rules execute in sub-millisecond time. Enjoy enterprise-grade security without adding
+                  human-noticeable latency to conversational agent workflows.
+                </p>
+              </div>
+
+              {/* Card 6 */}
+              <div className="p-6 rounded-2xl bg-[#0c0e18] border border-slate-800 hover:border-cyan-500/40 transition group">
+                <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-4 group-hover:scale-110 transition">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Cryptographic WORM Audit</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Every tool call, policy evaluation, and blocked attempt is hashed with HMAC-SHA256 into a tamper-proof
+                  audit ledger, ready for SOC2, HIPAA, and ISO 27001 AI governance.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* INSTALLATION TABS */}
+        <InstallationTabs />
+
+        {/* SECURITY COMPARISON MATRIX */}
+        <SecurityMatrix />
+
+        {/* FREQUENTLY ASKED QUESTIONS */}
+        <section id="faq" className="py-20 bg-[#0c0e18] border-b border-slate-800/80">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono font-medium mb-3">
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>FREQUENTLY ASKED QUESTIONS</span>
+              </div>
+              <h2 className="text-3xl font-extrabold text-white">Frequently Asked Questions</h2>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-5 rounded-xl bg-[#08090e] border border-slate-800">
+                <h3 className="font-bold text-sm text-slate-200 mb-2">How does MCP Shield integrate with my existing setup?</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  MCP Shield acts as a transparent command wrapper. In your Claude Desktop config (or Cursor mcp.json), you simply prepend
+                  <code className="text-emerald-400 font-mono"> npx @rahulxcodex/mcp-shield proxy -- </code> before your existing server command.
+                  No code modifications to the MCP server or agent are required.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-xl bg-[#08090e] border border-slate-800">
+                <h3 className="font-bold text-sm text-slate-200 mb-2">Is MCP Shield open-source and free to use?</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Yes, MCP Shield core is 100% open-source under the Apache-2.0 / MIT license. The cloud dashboard and console can be self-hosted
+                  for free on GitHub, Vercel, and Supabase.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-xl bg-[#08090e] border border-slate-800">
+                <h3 className="font-bold text-sm text-slate-200 mb-2">Does MCP Shield send my private code or tool data to third parties?</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Never. MCP Shield runs entirely locally on your workstation by default. If you configure telemetry, only anonymized security event metadata
+                  (detector name, risk level, rule id) is transmitted using your private HMAC key.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-xl bg-[#08090e] border border-slate-800">
+                <h3 className="font-bold text-sm text-slate-200 mb-2">Can MCP Shield protect against SSRF to cloud metadata?</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Yes. MCP Shield inspects all URL parameters and network fetch calls, denying requests to 169.254.169.254, 127.0.0.1, RFC 1918 private subnets,
+                  and performing DNS rebinding verification.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CTA BANNER */}
+        <section className="py-20 bg-gradient-to-b from-[#0c0e18] to-[#090a0f]">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+            <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+              Ready to Lock Down Your AI Agents?
+            </h2>
+            <p className="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto">
+              Deploy MCP Shield in less than 60 seconds and gain instant real-time visibility and AST security over all tool calls.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+              <Link
+                href="/console"
+                className="w-full sm:w-auto px-8 py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold text-sm shadow-xl shadow-emerald-500/25 hover:opacity-95 transition flex items-center justify-center gap-2"
+              >
+                <span>Launch Security Console</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <a
+                href="https://github.com/rahulxcodex/mcp-shield"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full sm:w-auto px-8 py-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
+              >
+                <GithubIcon className="w-4 h-4" />
+                <span>Explore Codebase</span>
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* FOOTER */}
+      <footer className="border-t border-slate-800/80 bg-[#08090e] py-12 text-xs text-slate-400">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <ShieldCheck className="w-5 h-5 text-black" />
+            <div className="h-7 w-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <div className="font-bold text-lg leading-tight flex items-center gap-2">
-                <span>MCP-SHIELD</span>
-                <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono font-medium">LIVE PROXY</span>
-              </div>
-              <div className="text-xs text-slate-400">Zero-Trust AI Agent Security Gateway</div>
+              <span className="font-bold text-slate-200">MCP-SHIELD</span>
+              <span className="text-slate-500 ml-2">Zero-Trust Model Context Protocol Gateway</span>
             </div>
           </div>
-          
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Connected (Port 8000)</span>
-            </div>
-            <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition shadow-lg shadow-indigo-500/20">
-              Export SOC2 Log
-            </button>
-            <Link href="/settings/billing" className="text-slate-400 hover:text-white transition">
-              <Settings className="w-5 h-5" />
-            </Link>
-            <a href="https://github.com/rahulxcodex/mcp-shield" target="_blank" rel="noreferrer" className="text-slate-400 hover:text-white transition">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+
+          <div className="flex items-center gap-6">
+            <a href="#features" className="hover:text-white transition">Features</a>
+            <a href="#simulator" className="hover:text-white transition">Simulator</a>
+            <a href="#install" className="hover:text-white transition">Installation</a>
+            <Link href="/console" className="hover:text-white transition text-emerald-400">Console</Link>
+            <a href="https://github.com/rahulxcodex/mcp-shield" target="_blank" rel="noreferrer" className="hover:text-white transition">
+              GitHub
             </a>
           </div>
-        </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
-        {/* Top KPI Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl relative overflow-hidden flex flex-col">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Security Health Score</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-emerald-400">98</span>
-              <span className="text-xs text-slate-500 font-mono">/ 100</span>
-            </div>
-            <div className="mt-2 text-xs text-emerald-400/80 flex items-center gap-1">
-              <Shield className="w-3.5 h-3.5" /> Zero-Trust Firewall Enforced
-            </div>
-          </div>
-
-          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl relative overflow-hidden flex flex-col">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Attacks Neutralized</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-rose-400">0</span>
-              <span className="text-xs text-rose-500 font-mono">threats blocked</span>
-            </div>
-            <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
-              <Ban className="w-3.5 h-3.5 text-rose-400" /> AST, SSRF, & Shell Evasions
-            </div>
-          </div>
-
-          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl relative overflow-hidden flex flex-col">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Secrets Tokenized (DLP)</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-cyan-400">0</span>
-              <span className="text-xs text-cyan-500 font-mono">keys redacted</span>
-            </div>
-            <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
-              <Key className="w-3.5 h-3.5 text-cyan-400" /> Zero-Plaintext Storage
-            </div>
-          </div>
-
-          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl relative overflow-hidden flex flex-col">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Evaluated Invocations</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-indigo-400">0</span>
-              <span className="text-xs text-indigo-500 font-mono">hot-path calls</span>
-            </div>
-            <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
-              <Zap className="w-3.5 h-3.5 text-indigo-400" /> <span>&lt; 0.2 ms</span> mean latency
-            </div>
+          <div className="text-slate-500">
+            Open Source under Apache-2.0 & MIT.
           </div>
         </div>
-
-        {/* Live Threat Stream & Policy Center */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-[#0f111a] border border-slate-800 rounded-xl flex flex-col h-[560px]">
-            <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-[#131522]/50 rounded-t-xl">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                <span className="font-semibold text-sm text-slate-100">Live Intercept Stream</span>
-                <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full text-xs font-mono">0 events</span>
-              </div>
-              <button className="text-xs text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded px-2 py-1 transition">
-                Clear Feed
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-xs">
-              <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
-                <Radio className="w-8 h-8 text-slate-600 animate-pulse" />
-                <p>Listening for agent MCP tool calls...</p>
-                <p className="text-[11px] text-slate-600">Run an MCP tool via Claude Desktop, Cursor, or CLI.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="bg-[#0f111a] border border-slate-800 rounded-xl p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                <div className="font-semibold text-sm flex items-center gap-2 text-slate-100">
-                  <Sliders className="w-4 h-4 text-cyan-400" /> Active Gateway Guardrails
-                </div>
-                <span className="text-xs text-emerald-400 font-mono">ACTIVE</span>
-              </div>
-
-              <div className="space-y-2.5 text-xs">
-                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/60">
-                  <span className="text-slate-300">AST Root Deletion Block</span>
-                  <span className="text-emerald-400 font-semibold font-mono">ENFORCED</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/60">
-                  <span className="text-slate-300">SSRF & Cloud Metadata Guard</span>
-                  <span className="text-emerald-400 font-semibold font-mono">ENFORCED</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/60">
-                  <span className="text-slate-300">DLP Secret Tokenizer</span>
-                  <span className="text-cyan-400 font-semibold font-mono">BIJECTIVE</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/60">
-                  <span className="text-slate-300">Rate Ceiling Throttler</span>
-                  <span className="text-indigo-400 font-semibold font-mono">15 calls/min</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-[#0f111a] border border-slate-800 rounded-xl p-4 space-y-3">
-              <div className="font-semibold text-sm flex items-center gap-2 border-b border-slate-800/80 pb-3 text-slate-100">
-                <Sparkles className="w-4 h-4 text-amber-400" /> Decoy Honey-Token Tripwire
-              </div>
-              <p className="text-xs text-slate-400">
-                Active decoy canary tokens deployed in LLM context. Any exfiltration attempt triggers immediate session quarantine.
-              </p>
-              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-mono flex items-center justify-between">
-                <span>mcp_honey_decoy_***</span>
-                <span className="text-[10px] bg-amber-500/20 px-1.5 py-0.5 rounded font-bold">ARMED</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
+      </footer>
     </div>
   );
 }
+
