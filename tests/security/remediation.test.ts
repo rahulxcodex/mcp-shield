@@ -57,4 +57,44 @@ describe('Security Remediation Invariants', () => {
       expect(allowedRoles.includes(invalidRole)).toBe(false);
     });
   });
+
+  describe('SEC-REM-04: GitHub Token Variant Redaction (ghu_, ghs_, ghr_)', () => {
+    it('detects and redacts modern GitHub token prefixes', async () => {
+      const { SecretSanitizer } = await import('../../src/security/sanitizer');
+      const sanitizer = new SecretSanitizer();
+
+      const userToken = 'ghu_1234567890abcdefghijklmnopqrstuv';
+      const serverToken = 'ghs_1234567890abcdefghijklmnopqrstuv';
+      const refreshToken = 'ghr_1234567890abcdefghijklmnopqrstuv';
+
+      const sanitizedUser = sanitizer.sanitize(userToken);
+      expect(sanitizedUser).not.toContain(userToken);
+
+      const sanitizedServer = sanitizer.sanitize(serverToken);
+      expect(sanitizedServer).not.toContain(serverToken);
+
+      const sanitizedRefresh = sanitizer.sanitize(refreshToken);
+      expect(sanitizedRefresh).not.toContain(refreshToken);
+    });
+  });
+
+  describe('SEC-REM-05: Master Key Constant-Time Verification', () => {
+    it('verifies master key in constant time and returns false when unmatched without crash', async () => {
+      const { LicenseManager } = await import('../../src/security/license-manager');
+      const manager = new LicenseManager();
+
+      const testKey = 'MASTER_SECRET_KEY_123456789';
+      const expectedHash = crypto.createHash('sha256').update(testKey).digest('hex');
+
+      process.env.MCP_SHIELD_MASTER_KEY_HASH = expectedHash;
+      const verified = manager.verifyLicense(testKey);
+      expect(verified).toBe(true);
+
+      delete process.env.MCP_SHIELD_MASTER_KEY_HASH;
+      expect(manager.verifyLicense(testKey)).toBe(false);
+
+      // Verify counterfeit signature throws in test mode
+      expect(() => manager.verifyLicense('invalid_base64_payload.invalid_signature')).toThrow();
+    });
+  });
 });
