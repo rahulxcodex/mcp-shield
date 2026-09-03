@@ -197,15 +197,15 @@ export class SecretSanitizer {
     return false;
   }
 
-  public registerSecret(secret: string): string {
-    return this.vault.store(secret);
+  public registerSecret(secret: string, context?: import('./vault').SecretContext): string {
+    return this.vault.store(secret, undefined, context);
   }
 
-  public sanitize(payload: string): string {
+  public sanitize(payload: string, context?: import('./vault').SecretContext): string {
     return payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, google, stripe, hf, gitlab, jwt, ssh, supabase, twilio, sendgrid, highEntropy, offset, fullString) => {
       // If it matched a known pattern (groups 1-14), register immediately
       if (aws || anthropic || openai || slack || github || google || stripe || hf || gitlab || jwt || ssh || supabase || twilio || sendgrid) {
-        return this.registerSecret(match);
+        return this.registerSecret(match, context);
       }
       
       // If it matched the high entropy fallback
@@ -236,17 +236,17 @@ export class SecretSanitizer {
 
         const threshold = this.config?.confidenceThreshold || 60;
         if (score >= threshold) {
-          return this.registerSecret(match);
+          return this.registerSecret(match, context);
         }
       }
       return match;
     });
   }
 
-  public restore(payload: string): string {
+  public restore(payload: string, context?: import('./vault').SecretContext): string {
     const tokenRegex = /\[\[SHIELD_SECRET_[0-9a-fA-F-]{36}\]\]/g;
     return payload.replace(tokenRegex, (match) => {
-      const secret = this.vault.retrieve(match);
+      const secret = this.vault.retrieve(match, context);
       return secret !== null ? secret : match;
     });
   }

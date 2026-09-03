@@ -28,6 +28,18 @@ export interface SecurityTelemetryPayload {
   serverName?: string;
 }
 
+export interface TelemetryDeliveryState {
+  enabled: boolean;
+  cloudEndpoint: string;
+  hasApiKey: boolean;
+  lastFlushSuccess: boolean;
+  lastFlushTimestamp: number;
+  lastError?: string;
+  queuedCount: number;
+  spooledCount: number;
+  droppedCount: number;
+}
+
 export class CloudTelemetryPublisher {
   private queue: SecurityTelemetryPayload[] = [];
   private timer: NodeJS.Timeout | null = null;
@@ -38,6 +50,9 @@ export class CloudTelemetryPublisher {
   private sequenceCounter = 0;
   private droppedEventsCount = 0;
   private isShuttingDown = false;
+  private lastFlushSuccess = true;
+  private lastFlushTimestamp = 0;
+  private lastError: string | undefined = undefined;
 
   constructor(config?: Partial<TelemetryConfig>) {
     const baseDir = path.resolve(os.homedir(), '.mcp-shield');
@@ -305,16 +320,44 @@ export class CloudTelemetryPublisher {
           body: payloadStr
         });
         if (res.ok) {
+          this.lastFlushSuccess = true;
+          this.lastFlushTimestamp = Date.now();
+          this.lastError = undefined;
           return true;
+        } else {
+          this.lastError = `Cloud HTTP status ${res.status}: ${res.statusText}`;
         }
       }
-    } catch {
-      // Network failure
+    } catch (err: any) {
+      this.lastError = err?.message || 'Network unreachable';
     }
 
+    this.lastFlushSuccess = false;
+    this.lastFlushTimestamp = Date.now();
     // Persist to local disk spool on failure
     this.persistSpool(batch);
     return false;
+  }
+
+  public getDeliveryState(): TelemetryDeliveryState {
+    let spooledCount = 0;
+    if (fs.existsSync(this.spoolPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(this.spoolPath, 'utf8'));
+        if (Array.isArray(data)) spooledCount = data.length;
+      } catch {}
+    }
+    return {
+      enabled: this.config.enabled,
+      cloudEndpoint: this.config.cloudEndpoint || '',
+      hasApiKey: !!this.config.apiKey,
+      lastFlushSuccess: this.lastFlushSuccess,
+      lastFlushTimestamp: this.lastFlushTimestamp,
+      lastError: this.lastError,
+      queuedCount: this.queue.length,
+      spooledCount,
+      droppedCount: this.droppedEventsCount
+    };
   }
 
   private registerShutdownHooks(): void {

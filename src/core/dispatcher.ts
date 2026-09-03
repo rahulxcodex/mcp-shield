@@ -15,6 +15,7 @@ export class RequestDispatcher {
   private queue: QueuedMessage[] = [];
   private inflight = 0;
   private inflightIds = new Set<string | number>();
+  private cancelledIds = new Set<string | number>();
   
   private maxQueueDepth: number;
   private maxInflightRequests: number;
@@ -30,12 +31,41 @@ export class RequestDispatcher {
     this.queueTimeoutMs = config?.queueTimeoutMs || 30000;
   }
 
+  public getInflightCount(): number {
+    return this.inflight;
+  }
+
+  public getQueueDepth(): number {
+    return this.queue.length;
+  }
+
+  public cancel(requestId: string | number): boolean {
+    // 1. Remove from queued messages
+    const initialLen = this.queue.length;
+    this.queue = this.queue.filter(item => item.message.id !== requestId);
+    if (this.queue.length < initialLen) {
+      return true;
+    }
+    // 2. Mark inflight request as cancelled
+    if (this.inflightIds.has(requestId)) {
+      this.cancelledIds.add(requestId);
+      return true;
+    }
+    return false;
+  }
+
   public enqueue(message: any): void {
     if (!this.isValidJsonRpc(message)) {
       if (this.errorCallback && message && message.id !== undefined && message.id !== null) {
         this.errorCallback(message, -32600, 'Invalid JSON-RPC Request: missing jsonrpc version or method');
       }
       return; 
+    }
+
+    // Handle MCP standard request cancellation notification
+    if (message.method === 'notifications/cancelled' && message.params && message.params.requestId !== undefined) {
+      this.cancel(message.params.requestId);
+      return;
     }
 
     // Duplicate Request-ID Protection for inflight requests
@@ -127,6 +157,7 @@ export class RequestDispatcher {
       this.inflight--;
       if (hasId) {
         this.inflightIds.delete(message.id);
+        this.cancelledIds.delete(message.id);
       }
       this.scheduleDrain();
     }
@@ -136,5 +167,6 @@ export class RequestDispatcher {
     this.queue = [];
     this.inflight = 0;
     this.inflightIds.clear();
+    this.cancelledIds.clear();
   }
 }

@@ -201,20 +201,68 @@ export class PolicyEngine {
       return { isBlocked: false };
     }
 
-    const candidateUrlsAndHosts: string[] = [];
-    const extractHostFields = (obj: any) => {
-      if (!obj || typeof obj !== 'object') return;
+    const candidateUrlsAndHosts = new Set<string>();
+    const seenObjects = new Set<any>();
+
+    const tryAddCandidate = (val: string) => {
+      if (!val || typeof val !== 'string') return;
+      const clean = val.trim();
+      if (!clean) return;
+
+      // Add direct value
+      candidateUrlsAndHosts.add(clean);
+
+      // Check URL-decoding
+      if (clean.includes('%')) {
+        try {
+          const decoded = decodeURIComponent(clean);
+          if (decoded !== clean) candidateUrlsAndHosts.add(decoded);
+        } catch {}
+      }
+
+      // Check Base64 payload decoding if plausible
+      if (/^[A-Za-z0-9+/]{12,}={0,2}$/.test(clean)) {
+        try {
+          const b64Decoded = Buffer.from(clean, 'base64').toString('utf8');
+          if (/[\w.-]+:\/\/[^\s]+|(?:\d{1,3}\.){3}\d{1,3}|metadata\./i.test(b64Decoded)) {
+            candidateUrlsAndHosts.add(b64Decoded);
+          }
+        } catch {}
+      }
+
+      // Extract embedded URLs or IPs from arbitrary text payloads
+      const urlMatches = clean.match(/[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s"'<>]+/g);
+      if (urlMatches) {
+        for (const u of urlMatches) candidateUrlsAndHosts.add(u);
+      }
+      const ipMatches = clean.match(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g);
+      if (ipMatches) {
+        for (const ip of ipMatches) candidateUrlsAndHosts.add(ip);
+      }
+    };
+
+    const extractHostFields = (obj: any, depth = 0) => {
+      if (!obj || depth > 10) return;
+      if (typeof obj === 'string') {
+        tryAddCandidate(obj);
+        return;
+      }
+      if (typeof obj !== 'object') return;
+      if (seenObjects.has(obj)) return;
+      seenObjects.add(obj);
+
+      if (Array.isArray(obj)) {
+        for (const item of obj) {
+          extractHostFields(item, depth + 1);
+        }
+        return;
+      }
+
       for (const [k, v] of Object.entries(obj)) {
         if (typeof v === 'string') {
-          const lowerK = k.toLowerCase();
-          if (
-            ['url', 'uri', 'endpoint', 'host', 'hostname', 'domain', 'target', 'dest', 'destination', 'link', 'href', 'webhook', 'address'].includes(lowerK) ||
-            v.includes('://')
-          ) {
-            candidateUrlsAndHosts.push(v);
-          }
-        } else if (typeof v === 'object') {
-          extractHostFields(v);
+          tryAddCandidate(v);
+        } else if (typeof v === 'object' && v !== null) {
+          extractHostFields(v, depth + 1);
         }
       }
     };

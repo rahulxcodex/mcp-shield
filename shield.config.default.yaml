@@ -40,8 +40,8 @@ audit:
   tamperEvidentHashing: true
 
 rules:
-  - id: "allow-all-safe"
-    name: "Allow safe commands"
+  - id: "allow-safe-tools"
+    name: "Allow safe tools"
     priority: 10
     riskLevel: "LOW"
     action: "allow"

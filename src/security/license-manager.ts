@@ -12,7 +12,8 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
    * Retrieves the normalized Ed25519 public key, supporting environment override.
    */
   public getPublicKey(): string {
-    const envKey = process.env.MCP_SHIELD_PUBLIC_KEY || process.env.LICENSE_PUBLIC_KEY || process.env.NEXT_PUBLIC_LICENSE_PUBLIC_KEY;
+    // Strict server-side trust root selection: NEXT_PUBLIC_* is excluded to prevent client-exposed trust-root tampering
+    const envKey = process.env.MCP_SHIELD_PUBLIC_KEY || process.env.LICENSE_PUBLIC_KEY;
     if (envKey) {
       return envKey.replace(/\\n/g, '\n').trim();
     }
@@ -68,18 +69,22 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
     const cleanKey = (key || '').trim();
     if (!cleanKey) return false;
 
-    // One-way SHA-256 cryptographic verification prevents leaking plaintext master keys in public client binaries
-    const masterHash = crypto.createHash('sha256').update(cleanKey).digest('hex');
-    const knownMasterHash = 'bfd1ce3d08a98d249c0b214ee2a91ad14e7d096f9969271f3dea2ab263837b05';
+    // Cryptographic emergency verification requires explicit server-side environment configuration.
+    // Hardcoded public hashes are strictly forbidden to eliminate binary reverse-engineering bypasses.
     const envMasterHash = process.env.MCP_SHIELD_MASTER_KEY_HASH;
     const envMasterKey = process.env.MCP_SHIELD_MASTER_KEY;
 
+    if (!envMasterHash && !envMasterKey) {
+      return false;
+    }
+
+    const masterHash = crypto.createHash('sha256').update(cleanKey).digest('hex');
+
     if (
-      masterHash === knownMasterHash ||
       (envMasterHash && masterHash === envMasterHash) ||
       (envMasterKey && cleanKey === envMasterKey)
     ) {
-      console.log('✅ Master License Key Accepted. Bypassing all trial restrictions.');
+      console.log('✅ Master License Key Accepted via secure server environment.');
       return true;
     }
     return false;
