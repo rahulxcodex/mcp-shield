@@ -1,17 +1,50 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import crypto from 'crypto';
+import { generateApiKey } from '@/lib/api-keys';
+import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { sanitizeApiError } from '@/lib/errors';
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   try {
-    const { organization_id, project_name } = await req.json();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // 1. Create a project
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limiting: max 10 project creations per hour
+    const clientIp = getClientIp(req);
+    const rlCheck = globalRateLimiter.check(`proj_create:${user.id}:${clientIp}`, 10, 3600 * 1000);
+    if (!rlCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded: too many project creation attempts. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    const { organization_id, project_name } = await req.json().catch(() => ({}));
+
+    if (!organization_id) {
+      return NextResponse.json({ error: 'Missing organization_id' }, { status: 400 });
+    }
+
+    // Server-side verification of organization membership (Prevents cross-org project creation)
+    const { data: membership, error: memberErr } = await supabase
+      .from('organization_members')
+      .select('organization_id, role')
+      .eq('organization_id', organization_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (memberErr || !membership) {
+      return NextResponse.json(
+        { error: 'Forbidden: You are not a member of the specified organization' },
+        { status: 403 }
+      );
+    }
+
+    // 1. Create project
     const { data: project, error: projErr } = await supabase
       .from('projects')
       .insert([{ organization_id, name: project_name || 'Default Project', slug: 'proj-' + Date.now() }])
@@ -20,31 +53,30 @@ export async function POST(req: Request) {
 
     if (projErr) throw projErr;
 
-    // 2. Generate a secure API Key with unique lookup prefix
-    const prefixId = crypto.randomBytes(4).toString('hex');
-    const keyPrefix = `mcp_live_${prefixId}`;
-    const rawKey = crypto.randomBytes(24).toString('hex');
-    const apiKey = `${keyPrefix}_${rawKey}`;
-    
-    // In a real app, hash the full key, but for this demo, we store raw so CLI can use it via fallback if needed
-    // Actually, backend verifyHmacSignature uses apiKeyData.key (so we need to store the raw key in `key` column for this demo)
-    // Wait, migration says: name, key_prefix, key_hash.
-    
-    const { data: keyData, error: keyErr } = await supabase
+    // 2. Generate secure API key with unique lookup prefix and SHA-256 hashed secret
+    const keyInfo = generateApiKey({ name: 'Default Key', clientType: 'Gateway' });
+
+    const { error: keyErr } = await supabase
       .from('api_keys')
-      .insert([{ 
-        project_id: project.id, 
-        name: 'Default Key', 
-        key_prefix: keyPrefix, 
-        key_hash: apiKey // STUB: storing raw key in hash for the hacky verifyHmacSignature to work
-      }])
-      .select()
-      .single();
+      .insert([{
+        project_id: project.id,
+        name: keyInfo.name,
+        key_prefix: keyInfo.keyPrefix,
+        key_hash: keyInfo.keyHash, // Hashed with SHA-256; raw secret never stored
+        expires_at: keyInfo.expiresAt,
+        created_at: keyInfo.createdAt,
+      }]);
 
     if (keyErr) throw keyErr;
 
-    return NextResponse.json({ project, apiKey });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({
+      project,
+      apiKey: keyInfo.rawKey,
+      keyPrefix: keyInfo.keyPrefix,
+      createdAt: keyInfo.createdAt,
+    });
+  } catch (err: unknown) {
+    return sanitizeApiError(err, 'Failed to create project');
   }
 }
+

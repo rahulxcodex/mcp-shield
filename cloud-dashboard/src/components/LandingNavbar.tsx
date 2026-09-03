@@ -2,10 +2,13 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ShieldCheck, Terminal, Menu, X, ArrowUpRight, LogIn } from 'lucide-react';
+import { ShieldCheck, Terminal, Menu, X, ArrowUpRight, LogIn, MessageSquare, UserPlus } from 'lucide-react';
+import ThemeToggle from '@/components/ThemeToggle';
+import SupportModal from '@/components/SupportModal';
 
 export default function LandingNavbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-[#090a0f]/85 backdrop-blur-md">
@@ -40,6 +43,13 @@ export default function LandingNavbar() {
           </Link>
           <a href="#benchmarks" className="hover:text-emerald-400 transition">Benchmarks</a>
           <a href="#faq" className="hover:text-emerald-400 transition">FAQ</a>
+          <button
+            onClick={() => setSupportOpen(true)}
+            className="hover:text-emerald-400 transition text-cyan-400 cursor-pointer flex items-center gap-1 font-medium"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Complaints & Support</span>
+          </button>
         </nav>
 
         {/* Action CTAs */}
@@ -56,12 +66,22 @@ export default function LandingNavbar() {
             <span>GitHub</span>
           </a>
 
+          <ThemeToggle />
+
           <Link
             href="/login"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white hover:border-slate-700 transition shrink-0"
           >
             <LogIn className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>Sign In</span>
+          </Link>
+
+          <Link
+            href="/login?mode=signup"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-md shadow-emerald-500/20 transition shrink-0 whitespace-nowrap"
+          >
+            <UserPlus className="w-3.5 h-3.5 shrink-0" />
+            <span>Sign Up</span>
           </Link>
 
           <Link
@@ -75,15 +95,16 @@ export default function LandingNavbar() {
 
         {/* Mobile menu toggle */}
         <div className="lg:hidden flex items-center gap-2">
+          <ThemeToggle />
           <Link
-            href="/login"
-            className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 text-xs font-medium shrink-0"
+            href="/login?mode=signup"
+            className="px-2.5 py-1 rounded-lg bg-emerald-500 text-black text-xs font-bold shrink-0"
           >
-            Sign In
+            Sign Up
           </Link>
           <Link
             href="/console"
-            className="px-2.5 py-1 rounded-lg bg-emerald-500 text-black text-xs font-bold shrink-0"
+            className="px-2.5 py-1 rounded-lg bg-slate-800 text-white text-xs font-medium shrink-0 border border-slate-700"
           >
             Console
           </Link>
@@ -149,6 +170,13 @@ export default function LandingNavbar() {
           >
             FAQ
           </a>
+          <button
+            onClick={() => { setMobileOpen(false); setSupportOpen(true); }}
+            className="w-full text-left py-1.5 text-cyan-400 font-medium flex items-center gap-1.5 cursor-pointer"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Complaints & Support</span>
+          </button>
           <div className="pt-2 border-t border-slate-800 flex gap-2">
             <Link
               href="/login"
@@ -158,23 +186,29 @@ export default function LandingNavbar() {
               Sign In
             </Link>
             <Link
+              href="/login?mode=signup"
+              onClick={() => setMobileOpen(false)}
+              className="flex-1 text-center py-2 rounded-lg bg-emerald-500 text-black font-bold text-xs hover:bg-emerald-400"
+            >
+              Sign Up
+            </Link>
+            <Link
               href="/console"
               onClick={() => setMobileOpen(false)}
-              className="flex-1 text-center py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-semibold text-xs"
+              className="flex-1 text-center py-2 rounded-lg bg-slate-800 text-white font-semibold text-xs border border-slate-700"
             >
               Console
             </Link>
-            <a
-              href="https://github.com/rahulxcodex/mcp-shield"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-white"
-            >
-              GitHub
-            </a>
           </div>
         </div>
       )}
+
+      {/* Support & Complaint Modal */}
+      <SupportModal
+        isOpen={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        defaultType="Complaint"
+      />
     </header>
   );
 }

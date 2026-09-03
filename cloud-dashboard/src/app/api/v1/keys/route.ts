@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import crypto from 'crypto';
+import { generateApiKey, hashApiKey } from '@/lib/api-keys';
+import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { sanitizeApiError } from '@/lib/errors';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -25,30 +27,30 @@ export async function GET() {
       
       const projectIds = (projects || []).map((p: any) => p.id);
 
-      let query = supabase
-        .from('api_keys')
-        .select('id, name, key_prefix, created_at, last_used_at, expires_at');
-      
-      if (projectIds.length > 0) {
-        query = query.in('project_id', projectIds);
+      if (projectIds.length === 0) {
+        return NextResponse.json({ keys: [] });
       }
 
-      const { data: keys, error } = await query.order('created_at', { ascending: false });
+      const { data: keys, error } = await supabase
+        .from('api_keys')
+        .select('id, name, key_prefix, created_at, last_used_at, expires_at, status')
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: false });
 
-      if (!error && keys && keys.length > 0) {
-        return NextResponse.json({ keys });
+      if (!error) {
+        return NextResponse.json({ keys: keys || [] });
       }
     }
-  } catch {
-    // Fallback when Supabase credentials not set or local offline
+  } catch (err: unknown) {
+    console.warn('[KEYS_GET] Lookup notice:', err);
   }
 
-  // Default demo / development key representation
+  // Only unauthenticated / offline demo fallback
   return NextResponse.json({
     keys: [
       {
         id: 'key-dev-101',
-        name: 'Production Proxy (Default)',
+        name: 'Production Proxy (Default Demo)',
         key_prefix: 'mcp_live_default01',
         created_at: new Date(Date.now() - 3600 * 1000 * 24 * 7).toISOString(),
         last_used_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
@@ -61,6 +63,20 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Rate limiting: max 10 key creations per hour per IP / user
+    const clientIp = getClientIp(req);
+    const rateLimitKey = user ? `key_create:${user.id}` : `key_create:${clientIp}`;
+    const rlCheck = globalRateLimiter.check(rateLimitKey, 10, 3600 * 1000);
+    if (!rlCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded: maximum 10 API keys can be generated per hour.' },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const keyName = body.name?.trim() || 'MCP Agent Token';
     const clientType = body.clientType || 'Generic MCP Client';
@@ -68,51 +84,53 @@ export async function POST(req: Request) {
     const seats = body.seats !== undefined && body.seats !== null ? Number(body.seats) : 1;
     const displayName = seats > 1 ? `${keyName} (${clientType} - ${seats} Seats Single Key)` : `${keyName} (${clientType})`;
 
-    // Generate cryptographically secure API key with a unique lookup prefix
-    const prefixId = crypto.randomBytes(4).toString('hex'); // 8 unique hex characters
-    const rawSecret = crypto.randomBytes(24).toString('hex');
-    const keyPrefix = `mcp_live_${prefixId}`;
-    const apiKey = `${keyPrefix}_${rawSecret}`;
-    let keyId = `key_${crypto.randomUUID().slice(0, 8)}`;
-    const now = new Date().toISOString();
-    const expiresAt = expiresInDays > 0 ? new Date(Date.now() + expiresInDays * 24 * 3600 * 1000).toISOString() : null;
+    // Generate secure API key with unique lookup prefix and SHA-256 hash
+    const generated = generateApiKey({
+      name: displayName,
+      clientType,
+      expiresInDays,
+      seats,
+    });
 
-    try {
-      const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+    let keyId = generated.keyId;
 
-      if (user) {
-        // Scope project binding to user's organization
-        const { data: orgs } = await supabase
-          .from('organization_members')
-          .select('organization_id')
-          .eq('user_id', user.id);
-        const orgIds = (orgs || []).map((o: any) => o.organization_id);
+    if (user) {
+      // Scope project binding to user's organization
+      const { data: orgs } = await supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id);
+      const orgIds = (orgs || []).map((o: any) => o.organization_id);
 
-        const { data: project } = await supabase
-          .from('projects')
-          .select('id')
-          .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000'])
-          .limit(1)
-          .maybeSingle();
+      const { data: project } = await supabase
+        .from('projects')
+        .select('id')
+        .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000'])
+        .limit(1)
+        .maybeSingle();
 
-        const projectId = project?.id || null;
+      const projectId = project?.id || null;
 
-        const { data: inserted } = await supabase.from('api_keys').insert([{
+      // Store SHA-256 hash in database - NEVER raw plaintext secret
+      const { data: inserted, error: insertErr } = await supabase
+        .from('api_keys')
+        .insert([{
           project_id: projectId,
           name: displayName,
-          key_prefix: keyPrefix,
-          key_hash: apiKey,
-          expires_at: expiresAt,
-          created_at: now
-        }]).select('id').single();
+          key_prefix: generated.keyPrefix,
+          key_hash: generated.keyHash, // Secure SHA-256 hash
+          expires_at: generated.expiresAt,
+          status: 'active',
+          created_at: generated.createdAt
+        }])
+        .select('id')
+        .single();
 
-        if (inserted?.id) {
-          keyId = inserted.id;
-        }
+      if (insertErr) {
+        console.error('[KEYS_POST] Insert error:', insertErr);
+      } else if (inserted?.id) {
+        keyId = inserted.id;
       }
-    } catch {
-      // Graceful offline fallback
     }
 
     return NextResponse.json({
@@ -120,16 +138,112 @@ export async function POST(req: Request) {
       key: {
         id: keyId,
         name: displayName,
-        keyPrefix,
-        apiKey,
-        created_at: now,
-        expires_at: expiresAt,
+        keyPrefix: generated.keyPrefix,
+        apiKey: generated.rawKey, // Returned ONCE to client on creation
+        created_at: generated.createdAt,
+        expires_at: generated.expiresAt,
         seats,
         status: 'active'
       }
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Failed to generate key' }, { status: 500 });
+  } catch (err: unknown) {
+    return sanitizeApiError(err, 'Failed to generate API key');
+  }
+}
+
+/**
+ * Key Rotation: Revokes a compromised or aged key and seamlessly provisions a replacement.
+ */
+export async function PATCH(req: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const clientIp = getClientIp(req);
+    const rlCheck = globalRateLimiter.check(`key_rotate:${user.id}:${clientIp}`, 10, 3600 * 1000);
+    if (!rlCheck.allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded for key rotation.' }, { status: 429 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const { keyId, keyPrefix, expiresInDays = 90 } = body;
+
+    if (!keyId && !keyPrefix) {
+      return NextResponse.json({ error: 'Missing keyId or keyPrefix for rotation' }, { status: 400 });
+    }
+
+    // Check user's project ownership
+    const { data: orgs } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+    const orgIds = (orgs || []).map((o: any) => o.organization_id);
+
+    const { data: projects } = await supabase
+      .from('projects')
+      .select('id')
+      .in('organization_id', orgIds);
+    const projectIds = (projects || []).map((p: any) => p.id);
+
+    // Fetch existing key
+    let keyQuery = supabase
+      .from('api_keys')
+      .select('id, project_id, name')
+      .in('project_id', projectIds);
+    if (keyId) keyQuery = keyQuery.eq('id', keyId);
+    else if (keyPrefix) keyQuery = keyQuery.eq('key_prefix', keyPrefix);
+
+    const { data: existingKey, error: fetchErr } = await keyQuery.maybeSingle();
+    if (fetchErr || !existingKey) {
+      return NextResponse.json({ error: 'Key not found or not authorized' }, { status: 404 });
+    }
+
+    // 1. Mark existing key as revoked
+    await supabase
+      .from('api_keys')
+      .update({ status: 'revoked' })
+      .eq('id', existingKey.id);
+
+    // 2. Generate replacement key for the same project
+    const newKeyInfo = generateApiKey({
+      name: `${existingKey.name} (Rotated)`,
+      expiresInDays: Number(expiresInDays) || 90,
+    });
+
+    const { data: insertedNew } = await supabase
+      .from('api_keys')
+      .insert([{
+        project_id: existingKey.project_id,
+        name: newKeyInfo.name,
+        key_prefix: newKeyInfo.keyPrefix,
+        key_hash: newKeyInfo.keyHash,
+        expires_at: newKeyInfo.expiresAt,
+        status: 'active',
+        created_at: newKeyInfo.createdAt,
+      }])
+      .select('id')
+      .single();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Key rotated successfully. Compromised key has been revoked.',
+      revokedKeyId: existingKey.id,
+      newKey: {
+        id: insertedNew?.id || newKeyInfo.keyId,
+        name: newKeyInfo.name,
+        keyPrefix: newKeyInfo.keyPrefix,
+        apiKey: newKeyInfo.rawKey,
+        expires_at: newKeyInfo.expiresAt,
+        created_at: newKeyInfo.createdAt,
+        status: 'active',
+      }
+    });
+  } catch (err: unknown) {
+    return sanitizeApiError(err, 'Failed to rotate API key');
   }
 }
 
@@ -143,37 +257,33 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Missing key id or prefix' }, { status: 400 });
     }
 
-    try {
-      const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-      if (user) {
-        // Scope delete to caller's projects only
-        const { data: orgs } = await supabase
-          .from('organization_members')
-          .select('organization_id')
-          .eq('user_id', user.id);
-        const orgIds = (orgs || []).map((o: any) => o.organization_id);
-        const { data: projects } = await supabase
-          .from('projects')
-          .select('id')
-          .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000']);
-        const projectIds = (projects || []).map((p: any) => p.id);
+    if (user) {
+      // Scope delete/revocation to caller's projects only
+      const { data: orgs } = await supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id);
+      const orgIds = (orgs || []).map((o: any) => o.organization_id);
+      const { data: projects } = await supabase
+        .from('projects')
+        .select('id')
+        .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000']);
+      const projectIds = (projects || []).map((p: any) => p.id);
 
-        let query = supabase.from('api_keys').delete();
-        if (projectIds.length > 0) {
-          query = query.in('project_id', projectIds);
-        }
+      if (projectIds.length > 0) {
+        let query = supabase.from('api_keys').delete().in('project_id', projectIds);
         if (id) query = query.eq('id', id);
         else if (prefix) query = query.eq('key_prefix', prefix);
         await query;
       }
-    } catch {
-      // Graceful fallback
     }
 
     return NextResponse.json({ success: true, message: 'Key revoked successfully' });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Failed to revoke key' }, { status: 500 });
+  } catch (err: unknown) {
+    return sanitizeApiError(err, 'Failed to revoke key');
   }
 }
+

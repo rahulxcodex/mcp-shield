@@ -124,7 +124,9 @@ export class CloudTelemetryPublisher {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-MCP-Shield-Key': CloudTelemetryPublisher.extractKeyPrefix(this.config.apiKey),
+            'X-MCP-Shield-Key': this.config.apiKey,
+            'X-MCP-Shield-Key-Prefix': CloudTelemetryPublisher.extractKeyPrefix(this.config.apiKey),
+            'Authorization': `Bearer ${this.config.apiKey}`,
             'X-MCP-Shield-Timestamp': String(timestamp),
             'X-MCP-Shield-Signature': signature
           },
