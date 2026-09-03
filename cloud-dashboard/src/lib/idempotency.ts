@@ -32,6 +32,10 @@ class IdempotencyStore {
     const existing = this.processed.get(key);
     return Boolean(existing && now - existing.timestamp < 24 * 3600 * 1000);
   }
+
+  public release(key: string): void {
+    this.processed.delete(key);
+  }
 }
 
 export const idempotencyStore = new IdempotencyStore();

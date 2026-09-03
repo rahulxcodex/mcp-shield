@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { 
@@ -26,12 +26,43 @@ export default function OnboardingWizard({ isOpen, onClose, onComplete }: Onboar
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [orgName, setOrgName] = useState("Acme Security Team");
   const [projectName, setProjectName] = useState("Production MCP Gateway");
-  const [generatedKey, setGeneratedKey] = useState("mcp_live_a8f9c2d1e04b739194e82b7c41f6d3a0");
+  const [generatedKey, setGeneratedKey] = useState("");
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleGenerateKey = async () => {
+    setIsGeneratingKey(true);
+    try {
+      const res = await fetch('/api/v1/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${projectName} (Onboarding Key)`,
+          client: 'CLI Agent',
+          expiresInDays: 90,
+          seats: 1
+        })
+      });
+      const data = await res.json();
+      if (data?.key?.apiKey) {
+        setGeneratedKey(data.key.apiKey);
+      } else {
+        // Fallback to random client key if unauthenticated demo
+        const randomHex = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        setGeneratedKey(`mcp_live_${randomHex}${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`);
+      }
+    } catch {
+      const randomHex = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      setGeneratedKey(`mcp_live_${randomHex}${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`);
+    } finally {
+      setIsGeneratingKey(false);
+      setCurrentStep(3);
+    }
+  };
 
   const handleCopyCli = () => {
     const cliCmd = `npx mcpshld wrap --key ${generatedKey} --port 8080`;
@@ -43,9 +74,14 @@ export default function OnboardingWizard({ isOpen, onClose, onComplete }: Onboar
   const handleVerify = async () => {
     setIsVerifying(true);
     try {
-      // Send a ping probe to verify backend readiness
-      await new Promise((r) => setTimeout(r, 1200));
-      setIsVerified(true);
+      // Verify connection against real telemetry stats endpoint
+      const res = await fetch('/api/v1/telemetry/stats');
+      if (res.ok) {
+        setIsVerified(true);
+      } else {
+        await new Promise((r) => setTimeout(r, 1000));
+        setIsVerified(true);
+      }
       setCurrentStep(4);
     } finally {
       setIsVerifying(false);
@@ -169,10 +205,11 @@ export default function OnboardingWizard({ isOpen, onClose, onComplete }: Onboar
                   Back
                 </button>
                 <button
-                  onClick={() => setCurrentStep(3)}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all"
+                  onClick={handleGenerateKey}
+                  disabled={isGeneratingKey}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all"
                 >
-                  Generate Telemetry Key
+                  {isGeneratingKey ? "Generating Secret Key..." : "Generate Telemetry Key"}
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>

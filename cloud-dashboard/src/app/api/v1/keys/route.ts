@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       const projectId = project?.id || null;
 
       // Store SHA-256 hash in database - NEVER raw plaintext secret
-      const { data: inserted, error: insertErr } = await supabase
+      let { data: inserted, error: insertErr } = await supabase
         .from('api_keys')
         .insert([{
           project_id: projectId,
@@ -126,8 +126,29 @@ export async function POST(req: Request) {
         .select('id')
         .single();
 
+      // If status column is missing on older schema, retry insert without status column
+      if (insertErr && (insertErr.message?.includes('status') || insertErr.details?.includes('status'))) {
+        const retry = await supabase
+          .from('api_keys')
+          .insert([{
+            project_id: projectId,
+            name: displayName,
+            key_prefix: generated.keyPrefix,
+            key_hash: generated.keyHash,
+            expires_at: generated.expiresAt,
+            created_at: generated.createdAt
+          }])
+          .select('id')
+          .single();
+        inserted = retry.data;
+        insertErr = retry.error;
+      }
+
       if (insertErr) {
         console.error('[KEYS_POST] Insert error:', insertErr);
+        if (user) {
+          return NextResponse.json({ error: 'Failed to persist API key in database' }, { status: 500 });
+        }
       } else if (inserted?.id) {
         keyId = inserted.id;
       }

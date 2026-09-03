@@ -57,7 +57,11 @@ export async function POST(req: Request) {
               })
               .eq('id', organizationId);
               
-            if (error) console.error('[STRIPE_WEBHOOK] Database update failed:', error);
+            if (error) {
+              console.error('[STRIPE_WEBHOOK] Database update failed:', error);
+              idempotencyStore.release(`stripe_event:${event.id}`);
+              return NextResponse.json({ error: 'Database update failed, retry permitted' }, { status: 500 });
+            }
           }
           break;
         }
