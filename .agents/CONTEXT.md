@@ -38,6 +38,14 @@
 - Verification & Deployment:
   - 41/41 test suites passed (683/683 unit & integration tests).
   - Remediation milestone: Fixed MCP initialization race, tools/call vs call_tool secret restoration, outbound DLP (result/error/params), loopback dashboard binding, TOCTOU COW verification, and dispatcher concurrency.
-  - Published as `mcpshld@1.0.13` on npm.
+  - Packaged as `mcpshld@1.0.12`.
+- Console Navbar Redesign & Admin Panels:
+  - Decluttered navbar: 10 items → 4 (Logo+Workspace, Live indicator, More dropdown, Account dropdown).
+  - `MoreDropdown.tsx`: Onboarding, Simulate, Export SOC2, Plans, Feedback, Theme Toggle in dropdown.
+  - `AccountDropdown.tsx`: Role-aware profile dropdown with GitHub link, plan badge, admin panel links, sign out.
+  - "Add Existing Key" flow: Import pre-existing `mcp_live_*` keys via PUT `/api/v1/keys` without server-side generation.
+  - Enterprise Admin Panel (`/console/admin`): Key distribution dashboard, activation tracking, team view.
+  - Master Admin Panel (`/console/system-admin`): Cross-org system view, all users/keys/orgs, audit log.
+  - Middleware route guards: `/console/system-admin` → master admin only, `/console/admin` → enterprise + master.
+  - Removed GitHub 1-year account age check from license API. on npm.
   - Pushed to GitHub (PR #16 created for branch protection compliance).
-

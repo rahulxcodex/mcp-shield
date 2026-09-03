@@ -14,7 +14,8 @@ import {
   Plus, 
   Clock, 
   ShieldAlert,
-  X
+  X,
+  Upload
 } from "lucide-react";
 
 interface KeyItem {
@@ -65,6 +66,11 @@ export default function GeneralSettingsPage() {
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [rotatedMessage, setRotatedMessage] = useState<string | null>(null);
+  const [showAddKeyModal, setShowAddKeyModal] = useState(false);
+  const [addKeyValue, setAddKeyValue] = useState("");
+  const [addKeyName, setAddKeyName] = useState("");
+  const [addKeyError, setAddKeyError] = useState<string | null>(null);
+  const [addKeySuccess, setAddKeySuccess] = useState(false);
 
 
   useEffect(() => {
@@ -183,6 +189,74 @@ export default function GeneralSettingsPage() {
     setKeys(keys.filter(k => k.id !== id));
   };
 
+  const handleAddExistingKey = async () => {
+    const trimmedKey = addKeyValue.trim();
+    const trimmedName = addKeyName.trim();
+
+    if (!trimmedKey) {
+      setAddKeyError("Please paste the API key.");
+      return;
+    }
+    if (!trimmedName) {
+      setAddKeyError("Please provide a name for this key.");
+      return;
+    }
+
+    if (trimmedKey.length < 8) {
+      setAddKeyError("Key must be at least 8 characters long.");
+      return;
+    }
+
+    try {
+      setAddKeyError(null);
+      const res = await fetch('/api/v1/keys', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawKey: trimmedKey, name: trimmedName })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.key) {
+          const imported: KeyItem = {
+            id: data.key.id,
+            name: data.key.name,
+            prefix: data.key.keyPrefix,
+            created_at: new Date().toISOString().split('T')[0],
+            last_used: 'Never',
+            last_ip: 'N/A',
+            project: 'Imported',
+            env: 'Production',
+            status: 'ACTIVE',
+            expires_in_days: 0
+          };
+          if (data?.isMaster) {
+            document.cookie = "mcp_master_elevated=true; path=/; max-age=2592000";
+            try {
+              localStorage.setItem('mcp_master_elevated', 'true');
+            } catch {}
+          }
+          setKeys([imported, ...keys]);
+          setAddKeySuccess(true);
+          setTimeout(() => {
+            setShowAddKeyModal(false);
+            setAddKeyValue("");
+            setAddKeyName("");
+            setAddKeySuccess(false);
+            if (data?.isMaster) {
+              window.location.reload();
+            }
+          }, 1500);
+          return;
+        }
+      }
+      const err = await res.json().catch(() => ({}));
+      setAddKeyError(err.error || 'Failed to import key.');
+    } catch {
+      setAddKeyError('Network error connecting to key service.');
+    }
+  };
+
   return (
     <div className="max-w-5xl space-y-6">
       <div className="flex items-center justify-between">
@@ -196,17 +270,32 @@ export default function GeneralSettingsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setShowCreateModal(true);
-            setCreatedSecret(null);
-            setNewKeyName("");
-          }}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Create New API Key
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setShowAddKeyModal(true);
+              setAddKeyValue("");
+              setAddKeyName("");
+              setAddKeyError(null);
+              setAddKeySuccess(false);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
+          >
+            <Upload className="w-4 h-4" />
+            Add Existing Key
+          </button>
+          <button
+            onClick={() => {
+              setShowCreateModal(true);
+              setCreatedSecret(null);
+              setNewKeyName("");
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Generate New Key
+          </button>
+        </div>
       </div>
 
       {rotatedMessage && (
@@ -406,6 +495,85 @@ export default function GeneralSettingsPage() {
                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold"
                   >
                     Done
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add Existing Key Modal */}
+      {showAddKeyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Upload className="w-4 h-4 text-emerald-400" />
+                Add Existing API Key
+              </h3>
+              <button onClick={() => setShowAddKeyModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-300 text-xs">
+              Paste a key you received from your enterprise admin or another source. The key will be validated and its hash stored securely.
+            </div>
+
+            {addKeyError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{addKeyError}</span>
+              </div>
+            )}
+
+            {addKeySuccess ? (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs text-center space-y-1">
+                <ShieldCheck className="w-6 h-6 mx-auto text-emerald-400" />
+                <p className="font-semibold text-white">Key Added Successfully!</p>
+                <p className="text-slate-400">The key has been validated and securely stored.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Key Name / Description</label>
+                  <input
+                    type="text"
+                    value={addKeyName}
+                    onChange={(e) => { setAddKeyName(e.target.value); setAddKeyError(null); }}
+                    placeholder="e.g. Enterprise Team Key, Master Admin Key"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">API Key</label>
+                  <input
+                    type="text"
+                    value={addKeyValue}
+                    onChange={(e) => { setAddKeyValue(e.target.value); setAddKeyError(null); }}
+                    placeholder="Paste your API key or license key"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Accepts any key format: enterprise distributed keys, master keys, or third-party keys.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowAddKeyModal(false)}
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddExistingKey}
+                    disabled={!addKeyValue.trim() || !addKeyName.trim()}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-black rounded-xl text-xs font-semibold shadow-lg shadow-emerald-500/20"
+                  >
+                    Import Key
                   </button>
                 </div>
               </div>

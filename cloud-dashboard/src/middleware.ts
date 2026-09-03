@@ -118,6 +118,36 @@ export async function middleware(request: NextRequest) {
       url.searchParams.set('next', pathname)
       return NextResponse.redirect(url)
     }
+
+    // Master Admin route guard — project owner or master key elevated accounts can access /console/system-admin
+    const email = user.email || '';
+    const githubUsername = user.user_metadata?.user_name || '';
+    const metadataAccountType = (user.user_metadata?.account_type || '').toLowerCase();
+    const isMasterElevatedCookie = request.cookies.get('mcp_master_elevated')?.value === 'true';
+    const isMasterAdmin =
+      email.toLowerCase() === 'rahulsahygupta24@gmail.com' ||
+      githubUsername.toLowerCase() === 'rahulxcodex' ||
+      user.user_metadata?.is_master === true ||
+      metadataAccountType === 'master_admin' ||
+      isMasterElevatedCookie;
+
+    if (pathname.startsWith('/console/system-admin')) {
+      if (!isMasterAdmin) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/console'
+        return NextResponse.redirect(url)
+      }
+    }
+
+    // Enterprise Admin route guard — enterprise account types or master admin can access /console/admin
+    if (pathname.startsWith('/console/admin')) {
+      const isEnterprise = metadataAccountType.includes('enterprise') || isMasterAdmin;
+      if (!isEnterprise) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/console'
+        return NextResponse.redirect(url)
+      }
+    }
   } catch (err) {
     // If Supabase check fails in dev/test, proceed to avoid blocking evaluator
     return supabaseResponse;

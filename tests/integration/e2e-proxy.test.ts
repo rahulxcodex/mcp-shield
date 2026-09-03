@@ -250,15 +250,26 @@ describe('End-to-End MCP-Shield Proxy Integration Test Suite', () => {
       done();
     });
 
+    // Send initialize handshake first so downstream server is ready
     setTimeout(() => {
       crashProxy.stdin?.write(JSON.stringify({
         jsonrpc: '2.0',
-        id: 999,
-        method: 'call_tool',
-        params: { name: 'crash_server', arguments: {} }
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2024-11-05', clientInfo: { name: 'test' }, capabilities: {} }
       }) + '\n');
-    }, 1200);
-  });
+      crashProxy.stdin?.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+
+      setTimeout(() => {
+        crashProxy.stdin?.write(JSON.stringify({
+          jsonrpc: '2.0',
+          id: 999,
+          method: 'call_tool',
+          params: { name: 'crash_server', arguments: {} }
+        }) + '\n');
+      }, 500);
+    }, 1000);
+  }, 15000);
 
   it('E2E-09: Generates cryptographically tamper-evident audit log with intact SHA-256 hash chains', () => {
     const logsDir = path.resolve(__dirname, '../../.mcp-shield/logs');

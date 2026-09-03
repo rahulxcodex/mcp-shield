@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -11,7 +11,8 @@ import {
   Webhook, 
   ChevronRight, 
   LayoutDashboard,
-  Building2
+  Building2,
+  User
 } from "lucide-react";
 import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 
@@ -23,6 +24,7 @@ export default function SettingsLayout({
   const pathname = usePathname();
 
   const navItems = [
+    { href: "/settings/account", label: "My Account", icon: User },
     { href: "/settings/general", label: "General & Keys", icon: Settings },
     { href: "/settings/security", label: "Security, MFA & SSO", icon: Shield },
     { href: "/settings/team", label: "Team & Permissions", icon: Users },
