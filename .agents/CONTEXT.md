@@ -1,4 +1,4 @@
-﻿# MCP Shield - Project Context
+# MCP Shield - Project Context
 
 ## Project Architecture
 - Core: Zero-Trust Security Proxy & Gateway for Model Context Protocol (MCP) and AI Agents.
@@ -21,4 +21,9 @@
   - Signed HMAC-SHA256 telemetry ingestion verified with live Next.js endpoint.
 - Verification & Deployment:
   - Playwright E2E verification passed across landing page, simulator, console, sitemap, and robots.
-  - Free-tier deployment instructions documented in `DEPLOYMENT_GUIDE.md` (GitHub, Vercel, Supabase, Render).
+  - Free-tier deployment instructions documented in `DEPLOYMENT_GUIDE.md` and complete documentation in `USER_GUIDE.md`.
+  - Proxy Core Telemetry: Hooked `CloudTelemetryPublisher` into `ProxyServer.logAndBroadcast(...)` for live agent event streaming.
+  - Console Key Center: Built interactive API key generation and device pairing center in `/console` with modal creation and `/api/v1/keys` endpoint.
+  - Render Keep-Alive: Added `.github/workflows/render-keepalive.yml` pinging free-tier instances every 10 mins.
+  - Vercel Live Deployment: Deployed to `https://mcp-shield-dashboard-d6jyrwkny-rahulsahgupta24-8925.vercel.app`.
+  - GitHub Integration: Pushed `feat/console-keys-telemetry-guide` and opened PR #11 on `rahulxcodex/mcp-shield`.
