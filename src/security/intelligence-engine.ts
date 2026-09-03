@@ -7,6 +7,14 @@
  * - Policy simulation engine
  */
 
+export interface RemoteIntelEvaluationResult {
+  riskScore: number;
+  verdict: 'ALLOW' | 'MONITOR' | 'CHALLENGE' | 'QUARANTINE' | 'BLOCK';
+  reasoningVector: string[];
+  recommendedAction: string;
+  source: 'REMOTE_ENTERPRISE_INTEL' | 'LOCAL_FALLBACK';
+}
+
 export interface SecurityNode {
   serverId: string;
   serverIdentityHash: string;
@@ -50,6 +58,68 @@ export class SecurityIntelligenceEngine {
   private static capabilityGraph = new Map<string, SecurityNode>();
   private static behavioralSequences = new Map<string, string[]>();
 
+  private static highRiskNGrams: { pattern: string[]; score: number; reason: string }[] = [
+    {
+      pattern: ['read_file', 'network'],
+      score: 30,
+      reason: 'Suspicious behavioral chain: local read followed immediately by outbound egress',
+    },
+    {
+      pattern: ['read_file', 'http_request'],
+      score: 35,
+      reason: 'Exfiltration kill-chain: local file access piped directly to external HTTP request',
+    },
+    {
+      pattern: ['list_directory', 'read_file', 'eval'],
+      score: 45,
+      reason: 'Reconnaissance-to-execution chain: directory recon followed by read and dynamic evaluation',
+    },
+    {
+      pattern: ['query_database', 'export_data', 'send_message'],
+      score: 40,
+      reason: 'Data exfiltration chain: database extraction transitioned to outbound messaging',
+    },
+    {
+      pattern: ['set_seed', 'append_buffer', 'eval_buffer'],
+      score: 50,
+      reason: 'Multi-turn staged payload detonation: staged memory accumulation before dynamic eval',
+    },
+    {
+      pattern: ['execute_reflection', 'execute_reflection'],
+      score: 40,
+      reason: 'Cyclical tool reflection loop: consecutive self-referential invocations detected',
+    },
+  ];
+
+  /**
+   * Stateful n-gram sequence anomaly detection against behavioral baselines & kill chains
+   */
+  public static evaluateNGramAnomaly(
+    history: string[],
+    currentTool: string
+  ): { anomalyScore: number; rationale: string[] } {
+    const fullSequence = [...history, currentTool];
+    let maxAnomaly = 0;
+    const rationale: string[] = [];
+
+    for (const rule of this.highRiskNGrams) {
+      const n = rule.pattern.length;
+      if (fullSequence.length >= n) {
+        const window = fullSequence.slice(-n);
+        const matches = rule.pattern.every((expected, idx) => {
+          const actual = window[idx];
+          return actual.toLowerCase().includes(expected.toLowerCase());
+        });
+        if (matches) {
+          maxAnomaly = Math.max(maxAnomaly, rule.score);
+          rationale.push(rule.reason);
+        }
+      }
+    }
+
+    return { anomalyScore: maxAnomaly, rationale };
+  }
+
   /**
    * Registers or updates a node in the Unified Security Decision Graph
    */
@@ -60,6 +130,42 @@ export class SecurityIntelligenceEngine {
 
   public static getNode(serverId: string, toolName: string): SecurityNode | undefined {
     return this.capabilityGraph.get(`${serverId}:${toolName}`);
+  }
+
+  /**
+   * Non-Linear Risk Score Compounding Curve:
+   * Translates raw additive factor sum into a synergistic multi-vector threat score.
+   * When multiple distinct threat dimensions compound (e.g. credential exposure + SSRF destination),
+   * risk escalates non-linearly to reflect compounded threat surface.
+   */
+  public static calculateNonLinearScore(factors: RiskScoreBreakdown['factors']): number {
+    const rawSum =
+      factors.capabilityRisk +
+      factors.behaviorAnomaly +
+      factors.provenanceRisk +
+      factors.destinationRisk +
+      factors.credentialExposure +
+      factors.policyViolations +
+      factors.historicalReputation;
+
+    // Identify co-occurring elevated vectors (> 15 points)
+    const elevatedVectors = [
+      factors.capabilityRisk > 15,
+      factors.behaviorAnomaly > 15,
+      factors.provenanceRisk > 15,
+      factors.destinationRisk > 15,
+      factors.credentialExposure > 15,
+      factors.policyViolations > 15,
+      factors.historicalReputation > 15,
+    ].filter(Boolean).length;
+
+    if (elevatedVectors <= 1) {
+      return Math.min(100, Math.round(rawSum));
+    }
+
+    // Non-linear synergy compounding: 12% escalation per co-occurring attack vector
+    const compoundingMultiplier = 1 + (elevatedVectors - 1) * 0.12;
+    return Math.min(100, Math.round(rawSum * compoundingMultiplier));
   }
 
   /**
@@ -105,11 +211,16 @@ export class SecurityIntelligenceEngine {
       }
     }
 
-    // 2. Behavior Anomaly (Sequence analysis)
+    // 2. Behavior Anomaly (Stateful n-gram sequence analysis)
     const history = this.behavioralSequences.get(params.serverId) || [];
+    const nGramAnomaly = this.evaluateNGramAnomaly(history, params.toolName);
+    if (nGramAnomaly.anomalyScore > 0) {
+      factors.behaviorAnomaly = Math.max(factors.behaviorAnomaly, nGramAnomaly.anomalyScore);
+      rationale.push(...nGramAnomaly.rationale);
+    }
     const isSuspiciousChaining =
       history.slice(-2).includes('read_file') && params.toolName.includes('network');
-    if (isSuspiciousChaining) {
+    if (isSuspiciousChaining && factors.behaviorAnomaly === 0) {
       factors.behaviorAnomaly = 30;
       rationale.push('Suspicious behavioral chain: local read followed immediately by outbound egress');
     }
@@ -185,17 +296,8 @@ export class SecurityIntelligenceEngine {
       rationale.push(`${params.priorIncidentsCount} prior security incidents associated with server`);
     }
 
-    // Calculate sum capped at 100
-    const compositeScore = Math.min(
-      100,
-      factors.capabilityRisk +
-        factors.behaviorAnomaly +
-        factors.provenanceRisk +
-        factors.destinationRisk +
-        factors.credentialExposure +
-        factors.policyViolations +
-        factors.historicalReputation
-    );
+    // Calculate non-linear composite risk score curve
+    const compositeScore = this.calculateNonLinearScore(factors);
 
     let classification: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'LOW';
     if (compositeScore >= 80) classification = 'CRITICAL';
@@ -265,6 +367,95 @@ export class SecurityIntelligenceEngine {
         strict: simulatedAction === 'ALLOW' ? 'QUARANTINE' : simulatedAction,
         permissive: simulatedAction === 'BLOCK' ? 'SANITIZE' : simulatedAction,
       },
+    };
+  }
+
+  /**
+   * Delegates risk scoring to the proprietary Enterprise Intelligence Cloud API
+   * (hosted on Render/Cloud Run in the private mcp-shield-enterprise-intel service)
+   * Falls back seamlessly to deterministic local heuristic if unconfigured or offline.
+   */
+  public static async evaluateViaRemoteIntel(params: {
+    toolName: string;
+    serverFingerprint?: string;
+    astEntropy: number;
+    untrustedEgressRequested: boolean;
+    toolCallFrequencyInWindow?: number;
+    credentialCanaryHits?: number;
+    unverifiedBinaryDrift?: boolean;
+    recentAnomalySequences?: string[];
+    apiKey?: string;
+    endpointUrl?: string;
+  }): Promise<RemoteIntelEvaluationResult> {
+    const apiKey = params.apiKey || process.env.MCP_SHIELD_API_KEY;
+    const endpoint =
+      params.endpointUrl ||
+      process.env.ENTERPRISE_INTEL_ENDPOINT ||
+      'https://mcp-shield-enterprise-intel.onrender.com';
+
+    if (apiKey && apiKey.startsWith('mcpshld_live_')) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1200); // 1.2s bounded timeout
+
+        const response = await fetch(`${endpoint}/api/v1/intel/scoring`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            toolName: params.toolName,
+            serverFingerprint: params.serverFingerprint,
+            astEntropy: params.astEntropy,
+            untrustedEgressRequested: params.untrustedEgressRequested,
+            toolCallFrequencyInWindow: params.toolCallFrequencyInWindow || 1,
+            credentialCanaryHits: params.credentialCanaryHits || 0,
+            unverifiedBinaryDrift: params.unverifiedBinaryDrift || false,
+            recentAnomalySequences: params.recentAnomalySequences || [],
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (response.ok) {
+          const json = await response.json();
+          if (json.data && typeof json.data.riskScore === 'number') {
+            return {
+              riskScore: json.data.riskScore,
+              verdict: json.data.verdict,
+              reasoningVector: json.data.reasoningVector || [],
+              recommendedAction: json.data.recommendedAction || 'Enforce cloud policy',
+              source: 'REMOTE_ENTERPRISE_INTEL',
+            };
+          }
+        }
+      } catch {
+        // Fall through to local fallback on network error or timeout
+      }
+    }
+
+    // Local deterministic fallback
+    const localScore = this.calculateRiskScore({
+      serverId: params.serverFingerprint || 'local',
+      toolName: params.toolName,
+      actionType: 'local_eval',
+      payloadSnippet: params.untrustedEgressRequested ? 'https://untrusted-host' : undefined,
+    });
+
+    let verdict: RemoteIntelEvaluationResult['verdict'] = 'ALLOW';
+    if (localScore.compositeScore >= 80) verdict = 'BLOCK';
+    else if (localScore.compositeScore >= 60) verdict = 'QUARANTINE';
+    else if (localScore.compositeScore >= 40) verdict = 'CHALLENGE';
+    else if (localScore.compositeScore >= 20) verdict = 'MONITOR';
+
+    return {
+      riskScore: localScore.compositeScore,
+      verdict,
+      reasoningVector: localScore.rationale,
+      recommendedAction: 'Local policy evaluation',
+      source: 'LOCAL_FALLBACK',
     };
   }
 }

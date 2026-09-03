@@ -65,14 +65,22 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
   }
 
   private verifyMasterKey(key: string): boolean {
-    // Hardcoded master key hash for CEO use only (prevents accidental source code leak of the raw master key)
-    const masterHash = crypto.createHash('sha256').update(key).digest('hex');
-    const expectedHash = '9b8f2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b'; // Placeholder
-    
     const cleanKey = (key || '').trim();
-    if (cleanKey === 'MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY' || cleanKey === process.env.MCP_SHIELD_MASTER_KEY) {
-        console.log('✅ Master License Key Accepted. Bypassing all trial restrictions.');
-        return true;
+    if (!cleanKey) return false;
+
+    // One-way SHA-256 cryptographic verification prevents leaking plaintext master keys in public client binaries
+    const masterHash = crypto.createHash('sha256').update(cleanKey).digest('hex');
+    const knownMasterHash = 'bfd1ce3d08a98d249c0b214ee2a91ad14e7d096f9969271f3dea2ab263837b05';
+    const envMasterHash = process.env.MCP_SHIELD_MASTER_KEY_HASH;
+    const envMasterKey = process.env.MCP_SHIELD_MASTER_KEY;
+
+    if (
+      masterHash === knownMasterHash ||
+      (envMasterHash && masterHash === envMasterHash) ||
+      (envMasterKey && cleanKey === envMasterKey)
+    ) {
+      console.log('✅ Master License Key Accepted. Bypassing all trial restrictions.');
+      return true;
     }
     return false;
   }

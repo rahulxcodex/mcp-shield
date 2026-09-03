@@ -68,6 +68,23 @@ export class MCPProtocolStateMachine {
       };
     }
 
+    // Fail-closed framing: JSON-RPC version & id validation
+    if (message.jsonrpc !== undefined && message.jsonrpc !== '2.0') {
+      return {
+        valid: false,
+        errorCode: -32600,
+        errorMessage: 'Fail-closed: invalid JSON-RPC version (must be "2.0")',
+      };
+    }
+
+    if (message.id !== undefined && message.id !== null && typeof message.id !== 'string' && typeof message.id !== 'number') {
+      return {
+        valid: false,
+        errorCode: -32600,
+        errorMessage: 'Fail-closed: malformed JSON-RPC id format (must be string, number, or null)',
+      };
+    }
+
     const method = message.method;
     const isNotification = message.id === undefined || message.id === null;
 
@@ -102,6 +119,13 @@ export class MCPProtocolStateMachine {
       }
 
       case MCPProtocolState.WAITING_FOR_INITIALIZE_RESPONSE: {
+        if (method === 'initialize') {
+          return {
+            valid: false,
+            errorCode: -32600,
+            errorMessage: 'Protocol violation: Handshake replay detected while awaiting initialize response',
+          };
+        }
         if (method === 'ping') {
           return { valid: true };
         }
@@ -113,6 +137,13 @@ export class MCPProtocolStateMachine {
       }
 
       case MCPProtocolState.READY: {
+        if (method === 'initialize') {
+          return {
+            valid: false,
+            errorCode: -32600,
+            errorMessage: 'Protocol violation: Handshake replay detected. "initialize" rejected in READY state',
+          };
+        }
         // In READY state, standard tools/call, resources, prompts, ping are valid
         return { valid: true };
       }
@@ -148,6 +179,14 @@ export class MCPProtocolStateMachine {
         valid: false,
         errorCode: -32603,
         errorMessage: 'Fail-closed: malformed server response envelope',
+      };
+    }
+
+    if (message.jsonrpc !== undefined && message.jsonrpc !== '2.0') {
+      return {
+        valid: false,
+        errorCode: -32600,
+        errorMessage: 'Fail-closed: invalid server JSON-RPC version (must be "2.0")',
       };
     }
 
