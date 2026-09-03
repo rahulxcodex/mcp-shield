@@ -1,6 +1,6 @@
 {
   "name": "mcpshld",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "The Zero-Trust Security Gateway, AST Firewall & Secret Sanitizer for Model Context Protocol (MCP) and AI Agents.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

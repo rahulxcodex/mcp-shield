@@ -9,7 +9,7 @@
 import * as crypto from 'crypto';
 import { SecurityIntelligenceEngine, RiskScoreBreakdown } from '../security/intelligence-engine';
 
-export type AgentRuntimeType = 'mcp' | 'coding_agent' | 'browser_agent' | 'multi_agent';
+export type AgentRuntimeType = 'mcp' | 'coding_agent' | 'browser_agent' | 'multi_agent' | 'aider' | 'langgraph' | 'autogen' | 'crewai';
 
 export interface AgentIdentityContext {
   agentId: string;

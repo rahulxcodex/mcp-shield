@@ -51,12 +51,36 @@ describe('Step 1-10 Moat & Security Invariants Verification', () => {
       });
       expect(cancel.valid).toBe(false);
     });
+
+    it('should enforce fail-closed framing and block handshake replay in READY state', () => {
+      const sm = new MCPProtocolStateMachine();
+      // Fail-closed framing: invalid JSON-RPC version
+      const malformed = sm.evaluateClientMessage({ jsonrpc: '1.0', id: 1, method: 'ping' });
+      expect(malformed.valid).toBe(false);
+      expect(malformed.errorCode).toBe(-32600);
+
+      // Handshake to READY
+      sm.evaluateClientMessage({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+      sm.evaluateServerMessage({ jsonrpc: '2.0', id: 1, result: { capabilities: {} } });
+      expect(sm.getState()).toBe(MCPProtocolState.READY);
+
+      // Handshake replay rejection
+      const replay = sm.evaluateClientMessage({ jsonrpc: '2.0', id: 2, method: 'initialize', params: {} });
+      expect(replay.valid).toBe(false);
+      expect(replay.errorCode).toBe(-32600);
+      expect(replay.errorMessage).toContain('Handshake replay');
+    });
   });
 
   describe('Step 2: Proprietary Attack Corpus', () => {
     it('should provide structured attacks across 7 categories with complete reasoning chains', () => {
       const attacks = AttackCorpusRegistry.getAllAttacks();
-      expect(attacks.length).toBeGreaterThanOrEqual(10);
+      expect(attacks.length).toBeGreaterThanOrEqual(13);
+
+      // Verify expanded corpus entries
+      expect(AttackCorpusRegistry.getAttackById('ATK-PROMPT-003')).toBeDefined();
+      expect(AttackCorpusRegistry.getAttackById('ATK-ABUSE-002')).toBeDefined();
+      expect(AttackCorpusRegistry.getAttackById('ATK-ABUSE-003')).toBeDefined();
 
       const stats = AttackCorpusRegistry.getStatistics();
       expect(stats.byCategory.protocol).toBeGreaterThan(0);
@@ -90,6 +114,37 @@ describe('Step 1-10 Moat & Security Invariants Verification', () => {
       expect(risk.factors.destinationRisk).toBeGreaterThan(0);
       expect(risk.factors.credentialExposure).toBeGreaterThan(0);
       expect(risk.rationale.length).toBeGreaterThan(0);
+    });
+
+    it('should detect stateful n-gram sequence anomalies and apply non-linear risk compounding', () => {
+      // Test stateful n-gram anomaly detection
+      const nGram = SecurityIntelligenceEngine.evaluateNGramAnomaly(['read_file'], 'http_request');
+      expect(nGram.anomalyScore).toBeGreaterThan(0);
+      expect(nGram.rationale[0]).toContain('Exfiltration');
+
+      // Test non-linear compounding across multi-vector threats
+      const singleVectorScore = SecurityIntelligenceEngine.calculateNonLinearScore({
+        capabilityRisk: 25,
+        behaviorAnomaly: 0,
+        provenanceRisk: 0,
+        destinationRisk: 0,
+        credentialExposure: 0,
+        policyViolations: 0,
+        historicalReputation: 0,
+      });
+      expect(singleVectorScore).toBe(25);
+
+      const multiVectorScore = SecurityIntelligenceEngine.calculateNonLinearScore({
+        capabilityRisk: 25,
+        behaviorAnomaly: 0,
+        provenanceRisk: 0,
+        destinationRisk: 30,
+        credentialExposure: 30,
+        policyViolations: 0,
+        historicalReputation: 0,
+      });
+      // 85 raw * (1 + 2 * 0.12) = 105.4 -> capped at 100
+      expect(multiVectorScore).toBe(100);
     });
 
     it('should simulate policy enforcement and recommend alternative outcomes', () => {
