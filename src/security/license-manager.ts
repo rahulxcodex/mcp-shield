@@ -5,7 +5,7 @@ import * as path from 'path';
 export class LicenseManager {
   // Ed25519 Public Key hardcoded in the enterprise binary for verification
   private readonly publicKey = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAA1/j0J8fH8P2u7x2r0V7Xg9t0Yx1B9oN5h+T4L6M4=
+MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
 -----END PUBLIC KEY-----`;
 
   /**

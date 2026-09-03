@@ -6,6 +6,76 @@ import { CreditCard, Check, Zap } from 'lucide-react';
 export default function BillingPage() {
   const [isUpgrading, setIsUpgrading] = useState(false);
 
+  const [isRazorpayLoading, setIsRazorpayLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const handleRazorpayUpgrade = async () => {
+    setIsRazorpayLoading(true);
+    setSuccessMessage(null);
+    try {
+      const res = await fetch('/api/v1/billing/razorpay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create-order', plan: 'pro' })
+      });
+      const data = await res.json();
+
+      if (data?.simulation) {
+        setSuccessMessage('Pro plan activated successfully (Test Simulation Mode).');
+        return;
+      }
+
+      if (data?.orderId && data?.keyId) {
+        // Load Razorpay checkout script if needed
+        if (!(window as any).Razorpay) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load Razorpay SDK'));
+            document.body.appendChild(script);
+          });
+        }
+
+        const options = {
+          key: data.keyId,
+          amount: data.amount,
+          currency: data.currency || 'INR',
+          name: 'MCP Shield Pro',
+          description: 'Monthly Pro Subscription',
+          order_id: data.orderId,
+          handler: async function (response: any) {
+            const verifyRes = await fetch('/api/v1/billing/razorpay', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'verify-payment',
+                plan: 'pro',
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+            if (verifyRes.ok) {
+              setSuccessMessage('Payment successful! Your account has been upgraded to Pro.');
+            }
+          },
+          theme: {
+            color: '#2563eb'
+          }
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      }
+    } catch (error: any) {
+      console.error('Razorpay checkout error:', error);
+      alert(error.message || 'Failed to initialize Razorpay checkout');
+    } finally {
+      setIsRazorpayLoading(false);
+    }
+  };
+
   const handleUpgrade = async () => {
     setIsUpgrading(true);
     try {
@@ -88,13 +158,29 @@ export default function BillingPage() {
               <Check className="h-4 w-4 text-green-500" /> Advanced analytics
             </li>
           </ul>
-          <button
-            onClick={handleUpgrade}
-            disabled={isUpgrading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
-          >
-            {isUpgrading ? 'Loading...' : 'Upgrade to Pro'}
-          </button>
+          
+          {successMessage && (
+            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-md text-emerald-400 text-sm">
+              {successMessage}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <button
+              onClick={handleRazorpayUpgrade}
+              disabled={isRazorpayLoading || isUpgrading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-md transition-colors disabled:opacity-50 flex justify-center items-center gap-2 text-sm shadow-sm"
+            >
+              {isRazorpayLoading ? 'Initializing...' : 'Pay with Razorpay (Cards, UPI, NetBanking)'}
+            </button>
+            <button
+              onClick={handleUpgrade}
+              disabled={isUpgrading || isRazorpayLoading}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2 px-4 rounded-md transition-colors disabled:opacity-50 flex justify-center items-center gap-2 text-xs border border-slate-700"
+            >
+              {isUpgrading ? 'Loading...' : 'Pay with Stripe (International)'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 
 // The private key must be stored in a highly secure environment variable/KMS
 const PRIVATE_KEY = process.env.LICENSE_PRIVATE_KEY || `-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIPtJ7v9s3X7e4t8q2z1w5r6y9u0i1o2p3a4s5d6f7g8=
+MC4CAQAwBQYDK2VwBCIEIPDiiRpSCad7AEC3ne6CLtXEQZDgPnMMLiMDOBtIQHvI
 -----END PRIVATE KEY-----`;
 
 export async function POST(req: Request) {
