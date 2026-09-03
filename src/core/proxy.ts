@@ -44,6 +44,7 @@ export class ProxyServer implements Lifecycle {
   public readonly canaryManager = new CanaryManager();
   public readonly jitManager = new JITElevationManager();
   private telemetryPublisher = new CloudTelemetryPublisher();
+  private pendingInitRequestId: string | number | null = null;
 
   constructor(
     private targetCmd: string,
@@ -127,9 +128,27 @@ export class ProxyServer implements Lifecycle {
       try {
         const message = JSON.parse(buffer.toString('utf8'));
         
+        // Intercept initialize response to complete handshake
+        if (this.pendingInitRequestId !== null && message.id === this.pendingInitRequestId) {
+          this.pendingInitRequestId = null;
+          if (message.result && this.session.getState() === 'INITIALIZING') {
+            this.session.transitionState('READY');
+            this.session.logger.startSession(this.session.policyEngine.getConfig(), Array.from(this.session.toolRegistry.keys()));
+          }
+        }
+
         // Intercept tools/list response
         if (message.id !== undefined && message.result && message.result.tools) {
            message.result.tools = this.canaryManager.injectCanariesIntoToolsList(message.result.tools);
+           
+           try {
+             // Pin full tool list snapshot
+             this.session.validateToolsSnapshot(message.result.tools);
+           } catch (e: any) {
+             this.logAndBroadcast({ type: 'schema_violation', reason: e.message });
+             if (this.child) { this.child.kill('SIGKILL'); }
+           }
+
            for (const tool of message.result.tools) {
               try {
                  this.session.registerTool(tool.name, tool.description || '', tool.inputSchema || {});
@@ -141,11 +160,24 @@ export class ProxyServer implements Lifecycle {
            }
         }
 
-        // DLP Sanitization on outputs back to host
+        // Comprehensive DLP Sanitization on outputs back to host:
+        // message.result, message.error, message.error.data, and server notifications (message.params)
         if (message.result) {
            const resultStr = JSON.stringify(message.result);
            const sanitizedStr = this.session.sanitizer.sanitize(resultStr);
            message.result = JSON.parse(sanitizedStr);
+        }
+
+        if (message.error) {
+           const errStr = JSON.stringify(message.error);
+           const sanitizedErrStr = this.session.sanitizer.sanitize(errStr);
+           message.error = JSON.parse(sanitizedErrStr);
+        }
+
+        if (message.params && !message.method) {
+           const paramsStr = JSON.stringify(message.params);
+           const sanitizedParamsStr = this.session.sanitizer.sanitize(paramsStr);
+           message.params = JSON.parse(sanitizedParamsStr);
         }
         
         const output = JSON.stringify(message) + '\n';
@@ -163,18 +195,32 @@ export class ProxyServer implements Lifecycle {
     try {
       const state = this.session.getState();
       
-      // Basic state machine enforcement
-      if (state !== 'READY' && state !== 'DEGRADED') {
-        if (message.method === 'initialize' && state === 'INITIALIZING') {
-           // allow initialization to proceed through to the server
-        } else if (message.method === 'notifications/initialized' || message.method === 'ping') {
-           // allow post-init and pings
+      // Strict state machine enforcement:
+      // In INITIALIZING: ONLY initialize requests, ping, or notifications/initialized are accepted
+      if (state === 'INITIALIZING') {
+        if (message.method === 'initialize') {
+          if (message.id !== undefined && message.id !== null) {
+            this.pendingInitRequestId = message.id;
+          }
+        } else if (message.method === 'notifications/initialized') {
+          // Client confirms initialization complete
+          if (this.session.getState() === 'INITIALIZING') {
+            this.session.transitionState('READY');
+            this.session.logger.startSession(this.session.policyEngine.getConfig(), Array.from(this.session.toolRegistry.keys()));
+          }
+        } else if (message.method === 'ping') {
+          // Allow liveness pings
         } else {
-           if (message.id) {
-             this.sendErrorToHost(message.id, -32002, `Server is not ready. Current state: ${state}`);
-           }
-           return;
+          if (message.id !== undefined && message.id !== null) {
+            this.sendErrorToHost(message.id, -32002, `Server is not ready. Current state: ${state}`);
+          }
+          return;
         }
+      } else if (state !== 'READY' && state !== 'DEGRADED') {
+        if (message.id !== undefined && message.id !== null) {
+          this.sendErrorToHost(message.id, -32002, `Server is not ready. Current state: ${state}`);
+        }
+        return;
       }
 
       if ((message.method === 'call_tool' || message.method === 'tools/call') && message.params && message.params.name) {
@@ -221,9 +267,13 @@ export class ProxyServer implements Lifecycle {
         }
 
         // 2. AST Firewall (Evaluated against RawSecurityInput commands)
-        if (registeredTool?.inferredCapabilities.shellExecution || /bash|shell|terminal|exec|run|do_cmd|cmd/i.test(toolName)) {
-           const cmd = rawArgs.command || rawArgs.cmd || '';
-           const astResult = this.astAnalyzer.analyzeCommand(cmd);
+        const commandArg = rawArgs.command || rawArgs.cmd || rawArgs.script || rawArgs.code || '';
+        const shouldCheckAst = registeredTool?.inferredCapabilities.shellExecution || 
+                               /bash|shell|terminal|exec|run|do_cmd|cmd|powershell|pwsh|system/i.test(toolName) ||
+                               (typeof commandArg === 'string' && commandArg.trim().length > 0);
+
+        if (shouldCheckAst && typeof commandArg === 'string' && commandArg.trim().length > 0) {
+           const astResult = this.astAnalyzer.analyzeCommand(commandArg);
            if (!astResult.isSafe) {
               const risk = astResult.reason?.includes('ARBITRARY_CODE_EXECUTION') ? 'HIGH' : 'CRITICAL';
               evidence.push({ detector: 'ast-analyzer', finding: astResult.reason || 'AST_BLOCKED', risk });
@@ -374,7 +424,7 @@ ${red}BLOCKED${reset}
       }
       
       // 3. RESTORED EXECUTION INPUT: Granular Trust & Capability-Aware Secret Restoration
-      if (message.method === 'call_tool') {
+      if (message.method === 'call_tool' || message.method === 'tools/call') {
          const toolName = message.params.name;
          const registeredTool = this.session.toolRegistry.get(toolName);
          
@@ -434,14 +484,13 @@ ${red}BLOCKED${reset}
      } catch {}
   }
 
-  public static buildSafeEnv(sourceEnv: any = process.env): any {
+  public static buildSafeEnv(sourceEnv: any = process.env, options: { allowTrustOverrides?: boolean } = {}): any {
      const safeEnvAllowlist = [
        'PATH', 'PATHEXT', 'SHELL', 'PWD',
        'HOME', 'USER', 'LOGNAME', 'USERNAME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH',
        'TMP', 'TEMP', 'TMPDIR',
        'LANG', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES', 'TZ',
-       'NODE_PATH', 'NODE_EXTRA_CA_CERTS',
-       'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CURL_CA_BUNDLE', 'REQUESTS_CA_BUNDLE',
+       ...(options.allowTrustOverrides ? ['NODE_PATH', 'SSL_CERT_FILE'] : []),
        'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_RUNTIME_DIR',
        'XDG_DATA_DIRS', 'XDG_CONFIG_DIRS',
        'TERM', 'COLORTERM', 'FORCE_COLOR', 'NO_COLOR', 'CI',
@@ -449,7 +498,9 @@ ${red}BLOCKED${reset}
        'PROGRAMFILES', 'PROGRAMFILES(X86)', 'COMSPEC', 'PSMODULEPATH'
      ];
 
-     const blockedInjectionPattern = /^(LD_|DYLD_|NODE_OPTIONS|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT|PROMPT_COMMAND)/i;
+     const blockedInjectionPattern = options.allowTrustOverrides
+       ? /^(LD_|DYLD_|NODE_OPTIONS|NODE_EXTRA_CA_CERTS|SSL_CERT_DIR|CURL_CA_BUNDLE|REQUESTS_CA_BUNDLE|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT|PROMPT_COMMAND)/i
+       : /^(LD_|DYLD_|NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|CURL_CA_BUNDLE|REQUESTS_CA_BUNDLE|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT|PROMPT_COMMAND)/i;
      const sensitiveKeyPattern = /(KEY|SECRET|TOKEN|PASSWORD|AUTH|CREDENTIAL|PRIVATE)/i;
 
      const safeEnv: any = {
@@ -509,8 +560,13 @@ ${red}BLOCKED${reset}
 
       const childEnv = ProxyServer.buildSafeEnv();
       if (proxyPort > 0) {
-        childEnv['HTTP_PROXY'] = `http://127.0.0.1:${proxyPort}`;
-        childEnv['HTTPS_PROXY'] = `http://127.0.0.1:${proxyPort}`;
+        const proxyUri = `http://127.0.0.1:${proxyPort}`;
+        childEnv['HTTP_PROXY'] = proxyUri;
+        childEnv['HTTPS_PROXY'] = proxyUri;
+        childEnv['ALL_PROXY'] = proxyUri;
+        childEnv['http_proxy'] = proxyUri;
+        childEnv['https_proxy'] = proxyUri;
+        childEnv['all_proxy'] = proxyUri;
       }
 
       this.child = spawn(cmd, args, {
@@ -589,8 +645,7 @@ ${red}BLOCKED${reset}
       process.on('SIGINT', () => handleShutdown('SIGINT'));
       process.on('SIGTERM', () => handleShutdown('SIGTERM'));
       
-      this.session.transitionState('READY');
-      this.session.logger.startSession(this.session.policyEngine.getConfig(), Array.from(this.session.toolRegistry.keys()));
+      // State remains INITIALIZING until client-server initialize handshake is established
     });
   }
 

@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as path from 'path';
 import { RegisteredTool, ToolProfile, CapabilityInferencer, ToolCapabilities } from '../security/capabilities';
 import { PolicyEngine, ShieldConfig } from '../security/policy-engine';
 import { SecretSanitizer } from '../security/sanitizer';
@@ -37,16 +38,35 @@ export class SecuritySession {
     this.policyEngine.start();
   }
 
+  private initialToolsSnapshotHash: string | null = null;
+  private registeredToolNames: Set<string> = new Set();
+
   private calculateServerIdentity(cmd: string, args: string[]) {
     try {
-      // Very naive approach: If it's a local file, hash it. Otherwise hash the command strings.
       let fileToHash = cmd;
       if (fs.existsSync(cmd)) {
         fileToHash = fs.realpathSync(cmd);
+      } else {
+        // Attempt resolution in PATH
+        const pathEnv = process.env.PATH || '';
+        const pathDirs = pathEnv.split(path.delimiter);
+        const exts = process.platform === 'win32' ? (process.env.PATHEXT || '.exe;.cmd;.bat').split(';') : [''];
+        for (const dir of pathDirs) {
+          for (const ext of exts) {
+            const candidate = path.join(dir, cmd.endsWith(ext) ? cmd : cmd + ext);
+            if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+              fileToHash = fs.realpathSync(candidate);
+              break;
+            }
+          }
+          if (fileToHash !== cmd) break;
+        }
       }
       
       const hasher = crypto.createHash('sha256');
       if (fs.existsSync(fileToHash) && fs.statSync(fileToHash).isFile()) {
+         const stat = fs.statSync(fileToHash);
+         hasher.update(`${stat.size}:${stat.mtimeMs}:`);
          hasher.update(fs.readFileSync(fileToHash));
       } else {
          hasher.update(cmd);
@@ -57,6 +77,23 @@ export class SecuritySession {
     } catch (e) {
       // Fallback
       this.serverIdentity = crypto.createHash('sha256').update(cmd + args.join('|')).digest('hex');
+    }
+  }
+
+  public validateToolsSnapshot(tools: Array<{ name: string; description?: string; inputSchema?: any }>): void {
+    // Generate deterministic signature of tools list
+    const sortedSignatures = tools.map(t => {
+      const schemaHash = CapabilityInferencer.hashSchema(t.inputSchema || {});
+      return `${t.name}:${schemaHash}`;
+    }).sort().join('|');
+
+    const snapshotHash = crypto.createHash('sha256').update(sortedSignatures).digest('hex');
+
+    if (this.initialToolsSnapshotHash === null) {
+      this.initialToolsSnapshotHash = snapshotHash;
+      this.registeredToolNames = new Set(tools.map(t => t.name));
+    } else if (this.initialToolsSnapshotHash !== snapshotHash) {
+      throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool list altered dynamically (added/removed/reordered/modified tool capabilities).`);
     }
   }
 

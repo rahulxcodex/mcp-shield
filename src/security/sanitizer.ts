@@ -97,6 +97,27 @@ export const MODULAR_SECRET_DETECTORS: ModularSecretDetector[] = [
     regex: /-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----[\s\S]+?-----END (?:[A-Z0-9_-]+ )?PRIVATE KEY-----/g,
     confidence: 'KNOWN_SECRET',
     validator: (m) => m.includes('-----BEGIN') && m.includes('-----END')
+  },
+  {
+    name: 'SUPABASE_KEY',
+    provider: 'Supabase',
+    regex: /sbp_[a-zA-Z0-9]{40}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.startsWith('sbp_') && m.length === 44
+  },
+  {
+    name: 'TWILIO_API_KEY',
+    provider: 'Twilio',
+    regex: /SK[0-9a-fA-F]{32}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.startsWith('SK') && m.length === 34
+  },
+  {
+    name: 'SENDGRID_KEY',
+    provider: 'SendGrid',
+    regex: /SG\.[a-zA-Z0-9_\-\.]{66}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.startsWith('SG.')
   }
 ];
 
@@ -106,7 +127,7 @@ export const SECRET_PATTERNS = MODULAR_SECRET_DETECTORS.map(d => ({ name: d.name
 export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MCP_SHIELD_HONEY_TOKENS.split(',') : [];
 
 // Combine all patterns into a single Regex. Capture groups map to patterns.
-const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9\-_]{20,})|(xox[baprs]-[a-zA-Z0-9\-_]{10,})|(ghp_[a-zA-Z0-9]{30,40}|github_pat_[a-zA-Z0-9_]{30,}|gho_[a-zA-Z0-9]{30,40}|ghu_[a-zA-Z0-9]{30,40}|ghs_[a-zA-Z0-9]{30,40}|ghr_[a-zA-Z0-9]{30,40})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,}|rk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----[\s\S]+?-----END (?:[A-Z0-9_-]+ )?PRIVATE KEY-----)|\b([a-zA-Z0-9+\/_\-]{40,}={0,2})\b/g;
+const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9\-_]{20,})|(xox[baprs]-[a-zA-Z0-9\-_]{10,})|(ghp_[a-zA-Z0-9]{30,40}|github_pat_[a-zA-Z0-9_]{30,}|gho_[a-zA-Z0-9]{30,40}|ghu_[a-zA-Z0-9]{30,40}|ghs_[a-zA-Z0-9]{30,40}|ghr_[a-zA-Z0-9]{30,40})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,}|rk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----[\s\S]+?-----END (?:[A-Z0-9_-]+ )?PRIVATE KEY-----)|(sbp_[a-zA-Z0-9]{40})|(SK[0-9a-fA-F]{32})|(SG\.[a-zA-Z0-9_\-\.]{66})|\b([a-zA-Z0-9+\/_\-]{40,}={0,2})\b/g;
 
 export class SecretSanitizer {
   private vault: SecretVault;
@@ -181,13 +202,13 @@ export class SecretSanitizer {
   }
 
   public sanitize(payload: string): string {
-    return payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, google, stripe, hf, gitlab, jwt, ssh, highEntropy, offset, fullString) => {
-      // If it matched a known pattern (groups 1-11), register immediately
-      if (aws || anthropic || openai || slack || github || google || stripe || hf || gitlab || jwt || ssh) {
+    return payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, google, stripe, hf, gitlab, jwt, ssh, supabase, twilio, sendgrid, highEntropy, offset, fullString) => {
+      // If it matched a known pattern (groups 1-14), register immediately
+      if (aws || anthropic || openai || slack || github || google || stripe || hf || gitlab || jwt || ssh || supabase || twilio || sendgrid) {
         return this.registerSecret(match);
       }
       
-      // If it matched the high entropy fallback (group 12)
+      // If it matched the high entropy fallback
       if (highEntropy) {
         if (match.startsWith('[[SHIELD_SECRET_')) return match;
         
