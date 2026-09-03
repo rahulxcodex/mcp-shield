@@ -10,6 +10,7 @@ import {
   CreditCard,
   MessageSquare,
   Sun,
+  Bot,
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -95,7 +96,17 @@ export default function MoreDropdown({
           {/* 3. Divider */}
           <div className="border-t border-slate-800 my-1.5 mx-3" />
 
-          {/* 4. Export SOC2 Log */}
+          {/* 4. AI Runtime Security Platform (Step 10) */}
+          <Link
+            href="/console/ai-runtime"
+            onClick={() => setIsOpen(false)}
+            className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-300 hover:bg-slate-800/60 hover:text-white transition cursor-pointer w-full text-left"
+          >
+            <Bot className="w-4 h-4 text-purple-400 shrink-0" />
+            <span>AI Runtime Security</span>
+          </Link>
+
+          {/* 5. Export SOC2 Log */}
           <button
             type="button"
             onClick={() => {

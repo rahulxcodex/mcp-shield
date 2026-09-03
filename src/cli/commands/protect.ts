@@ -31,6 +31,8 @@ export class ProtectCommand {
     this.patchConfigFile(this.getCursorConfigPath(), 'Cursor IDE');
     this.patchConfigFile(this.getClineConfigPath(), 'Cline (VS Code)');
     this.patchConfigFile(this.getWindsurfConfigPath(), 'Windsurf');
+    this.patchConfigFile(this.getZedConfigPath(), 'Zed Editor');
+    this.patchConfigFile(this.getRooConfigPath(), 'Roo Code');
   }
 
   public static getClaudeConfigPath(): string {
@@ -51,6 +53,18 @@ export class ProtectCommand {
   
   public static getWindsurfConfigPath(): string {
     return path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
+  }
+
+  public static getZedConfigPath(): string {
+    if (process.platform === 'win32') return path.join(os.homedir(), 'AppData', 'Roaming', 'Zed', 'settings.json');
+    if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'Zed', 'settings.json');
+    return path.join(os.homedir(), '.config', 'zed', 'settings.json');
+  }
+
+  public static getRooConfigPath(): string {
+    if (process.platform === 'win32') return path.join(os.homedir(), 'AppData', 'Roaming', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'cline_mcp_settings.json');
+    if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'cline_mcp_settings.json');
+    return path.join(os.homedir(), '.config', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'cline_mcp_settings.json');
   }
 
   /**
