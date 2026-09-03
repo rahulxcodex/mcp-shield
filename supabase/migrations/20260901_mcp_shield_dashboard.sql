@@ -41,10 +41,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
     name TEXT NOT NULL,
     key_prefix TEXT UNIQUE NOT NULL,
     key_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
     last_used_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
+
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 
 CREATE TABLE IF NOT EXISTS agent_instances (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

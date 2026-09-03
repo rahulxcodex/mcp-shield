@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
+import { idempotencyStore } from '@/lib/idempotency';
+import { sanitizeApiError } from '@/lib/errors';
 import crypto from 'crypto';
 
 export async function POST(req: Request) {
@@ -11,8 +14,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Rate limiting: 10 billing requests per minute per user/IP
+    const clientIp = getClientIp(req);
+    const rlCheck = globalRateLimiter.check(`billing_rzp:${user.id}:${clientIp}`, 10, 60 * 1000);
+    if (!rlCheck.allowed) {
+      return NextResponse.json({ error: 'Too many billing requests. Please try again in a minute.' }, { status: 429 });
+    }
+
     const body = await req.json().catch(() => ({}));
-    const { action, organizationId, plan = 'pro', seats = 25, razorpay_payment_id, razorpay_order_id, razorpay_signature } = body;
+    let { action, organizationId, plan = 'pro', seats = 25, razorpay_payment_id, razorpay_order_id, razorpay_signature } = body;
+
+    // Server-side verification of organization ownership / admin role
+    if (organizationId) {
+      const { data: member } = await supabase
+        .from('organization_members')
+        .select('organization_id, role')
+        .eq('user_id', user.id)
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+
+      if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+        return NextResponse.json({ error: 'Forbidden: Owner or Admin role required for this organization' }, { status: 403 });
+      }
+    } else {
+      const { data: orgs } = await supabase
+        .from('organization_members')
+        .select('organization_id, role')
+        .eq('user_id', user.id)
+        .in('role', ['owner', 'admin'])
+        .limit(1);
+      organizationId = orgs?.[0]?.organization_id;
+      if (!organizationId) {
+        return NextResponse.json({ error: 'No organization found where you have owner or admin privileges' }, { status: 403 });
+      }
+    }
 
     const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -82,15 +117,46 @@ export async function POST(req: Request) {
     }
 
     if (action === 'verify-payment') {
-      if (keySecret && razorpay_order_id && razorpay_payment_id && razorpay_signature) {
+      // STRICT FAIL-CLOSED VERIFICATION: Reject if any signature parameter is missing
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return NextResponse.json({
+          error: 'Payment verification failed: missing razorpay_order_id, razorpay_payment_id, or razorpay_signature'
+        }, { status: 400 });
+      }
+
+      if (!keySecret) {
+        // In local/test environment where secrets are omitted, allow test order IDs only
+        const isDev = process.env.NODE_ENV !== 'production';
+        if (!isDev || !razorpay_order_id.startsWith('order_sim_')) {
+          return NextResponse.json({ error: 'Razorpay secret key not configured on server (fail-closed)' }, { status: 500 });
+        }
+      } else {
         const expectedSignature = crypto
           .createHmac('sha256', keySecret)
           .update(`${razorpay_order_id}|${razorpay_payment_id}`)
           .digest('hex');
 
-        if (expectedSignature !== razorpay_signature) {
-          return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 });
+        const bufA = Buffer.from(expectedSignature, 'hex');
+        const bufB = Buffer.from(razorpay_signature, 'hex');
+        if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
+          return NextResponse.json({ error: 'Invalid payment signature: verification failed' }, { status: 400 });
         }
+      }
+
+      // Idempotency protection: prevent duplicate upgrades for the same payment
+      const isNewPayment = idempotencyStore.acquire(`rzp_payment:${razorpay_payment_id}`, {
+        organizationId,
+        plan,
+        seats: numSeats
+      });
+
+      if (!isNewPayment) {
+        return NextResponse.json({
+          success: true,
+          alreadyProcessed: true,
+          plan: plan || 'pro',
+          seats: numSeats
+        });
       }
 
       // Upgrade organization plan and seats in database
@@ -108,7 +174,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
+  } catch (err: unknown) {
+    return sanitizeApiError(err, 'Failed to process payment');
   }
 }
+

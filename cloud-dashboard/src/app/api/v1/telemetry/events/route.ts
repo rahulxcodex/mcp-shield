@@ -81,15 +81,19 @@ export async function GET(req: Request) {
 
           return NextResponse.json({ events: filtered, live: true });
         }
+
+        // Authenticated user with zero events: return real empty events (NEVER fake demo data)
+        return NextResponse.json({ events: [], live: true });
       } catch (err: any) {
         console.warn('[TELEMETRY_EVENTS] Database lookup warning:', err?.message);
+        return NextResponse.json({ events: [], live: true });
       }
     }
   } catch (err: any) {
     console.error('[TELEMETRY_EVENTS] Route error:', err);
   }
 
-  // Graceful fallback for offline / demo mode
+  // Graceful fallback ONLY for explicitly unauthenticated public demo/sandbox
   return NextResponse.json({
     events: [
       {
