@@ -9,13 +9,15 @@ export async function GET(req: Request) {
     const { data: { user } } = await supabase.auth.getUser();
 
     // Verify master admin privilege
-    const email = user?.email || '';
-    const metadata = user?.user_metadata || {};
+    const email = (user?.email || '').toLowerCase();
+    const username = (user?.user_metadata?.user_name || '').toLowerCase();
     const isMaster =
-      email.toLowerCase() === 'rahulsahygupta24@gmail.com' ||
-      metadata.user_name?.toLowerCase() === 'rahulxcodex' ||
-      metadata.is_master === true ||
-      metadata.account_type === 'master_admin';
+      email === 'rahulsahygupta24@gmail.com' ||
+      username === 'rahulxcodex';
+
+    if (!user || !isMaster) {
+      return NextResponse.json({ error: 'Forbidden: Master admin access required' }, { status: 403 });
+    }
 
     // Mock/aggregate telemetry for master analytics
     const analyticsPayload = {

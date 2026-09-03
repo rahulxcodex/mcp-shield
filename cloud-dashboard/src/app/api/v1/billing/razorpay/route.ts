@@ -124,12 +124,17 @@ export async function POST(req: Request) {
         }, { status: 400 });
       }
 
+      let authoritativePlan = 'pro';
+      let authoritativeSeats = 5;
+
       if (!keySecret) {
         // In local/test environment where secrets are omitted, allow test order IDs only
         const isDev = process.env.NODE_ENV !== 'production';
         if (!isDev || !razorpay_order_id.startsWith('order_sim_')) {
           return NextResponse.json({ error: 'Razorpay secret key not configured on server (fail-closed)' }, { status: 500 });
         }
+        authoritativePlan = plan === 'enterprise' ? 'enterprise' : 'pro';
+        authoritativeSeats = plan === 'enterprise' ? numSeats : 5;
       } else {
         const expectedSignature = crypto
           .createHmac('sha256', keySecret)
@@ -141,36 +146,55 @@ export async function POST(req: Request) {
         if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
           return NextResponse.json({ error: 'Invalid payment signature: verification failed' }, { status: 400 });
         }
+
+        // Authoritative verification: Fetch order details from Razorpay to prevent client parameter tampering
+        if (keyId && keySecret) {
+          try {
+            const authHeader = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+            const orderRes = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(razorpay_order_id)}`, {
+              headers: { 'Authorization': `Basic ${authHeader}` }
+            });
+            if (orderRes.ok) {
+              const orderInfo = await orderRes.json();
+              if (orderInfo.notes) {
+                authoritativePlan = orderInfo.notes.plan || 'pro';
+                authoritativeSeats = Number(orderInfo.notes.seats) || (authoritativePlan === 'enterprise' ? 25 : 5);
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[RZP_VERIFY_NOTICE] Order fetch fallback to order notes:', fetchErr);
+          }
+        }
       }
 
       // Idempotency protection: prevent duplicate upgrades for the same payment
       const isNewPayment = idempotencyStore.acquire(`rzp_payment:${razorpay_payment_id}`, {
         organizationId,
-        plan,
-        seats: numSeats
+        plan: authoritativePlan,
+        seats: authoritativeSeats
       });
 
       if (!isNewPayment) {
         return NextResponse.json({
           success: true,
           alreadyProcessed: true,
-          plan: plan || 'pro',
-          seats: numSeats
+          plan: authoritativePlan,
+          seats: authoritativeSeats
         });
       }
 
-      // Upgrade organization plan and seats in database
+      // Upgrade organization plan and seats in database using authoritative values
       if (organizationId) {
         await supabase
           .from('organizations')
           .update({
-            plan: plan || 'pro',
-            max_seats: plan === 'enterprise' ? numSeats : 5
+            plan: authoritativePlan,
+            max_seats: authoritativePlan === 'enterprise' ? authoritativeSeats : 5
           })
           .eq('id', organizationId);
       }
 
-      return NextResponse.json({ success: true, plan: plan || 'pro', seats: numSeats });
+      return NextResponse.json({ success: true, plan: authoritativePlan, seats: authoritativeSeats });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

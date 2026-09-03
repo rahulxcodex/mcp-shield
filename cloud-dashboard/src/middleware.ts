@@ -50,8 +50,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/guide') ||
-    pathname.startsWith('/api/v1/telemetry') ||
-    request.nextUrl.searchParams.get('demo') === 'true'
+    pathname.startsWith('/api/v1/telemetry')
   ) {
     return supabaseResponse;
   }
@@ -119,17 +118,13 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    // Master Admin route guard — project owner or master key elevated accounts can access /console/system-admin
-    const email = user.email || '';
-    const githubUsername = user.user_metadata?.user_name || '';
+    // Master Admin route guard — project owner accounts can access /console/system-admin
+    const email = (user.email || '').toLowerCase();
+    const githubUsername = (user.user_metadata?.user_name || '').toLowerCase();
     const metadataAccountType = (user.user_metadata?.account_type || '').toLowerCase();
-    const isMasterElevatedCookie = request.cookies.get('mcp_master_elevated')?.value === 'true';
     const isMasterAdmin =
-      email.toLowerCase() === 'rahulsahygupta24@gmail.com' ||
-      githubUsername.toLowerCase() === 'rahulxcodex' ||
-      user.user_metadata?.is_master === true ||
-      metadataAccountType === 'master_admin' ||
-      isMasterElevatedCookie;
+      email === 'rahulsahygupta24@gmail.com' ||
+      githubUsername === 'rahulxcodex';
 
     if (pathname.startsWith('/console/system-admin')) {
       if (!isMasterAdmin) {

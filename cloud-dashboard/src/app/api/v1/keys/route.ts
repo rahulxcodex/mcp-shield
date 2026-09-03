@@ -66,7 +66,11 @@ export async function POST(req: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Rate limiting: max 10 key creations per hour per IP / user
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limiting: max 10 key creations per hour per user
     const clientIp = getClientIp(req);
     const rateLimitKey = user ? `key_create:${user.id}` : `key_create:${clientIp}`;
     const rlCheck = globalRateLimiter.check(rateLimitKey, 10, 3600 * 1000);
@@ -300,35 +304,15 @@ export async function PUT(req: Request) {
     }
 
     const trimmedKey = rawKey.trim();
-    const isSpecialMasterKey =
-      trimmedKey === 'MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY' ||
-      trimmedKey.startsWith('MASTER_RGX_SHIELD_9999');
 
     // For mcp_live_* keys, extract prefix normally. For others, derive a prefix from hash.
     const isMcpFormat = validateApiKeyStructure(trimmedKey);
-    const keyPrefix = isSpecialMasterKey
-      ? 'mcp_master_omega'
-      : isMcpFormat
+    const keyPrefix = isMcpFormat
       ? extractKeyPrefix(trimmedKey)
       : `ext_${hashApiKey(trimmedKey).substring(0, 12)}`;
     const keyHash = hashApiKey(trimmedKey);
-    const displayName = isSpecialMasterKey ? 'OMEGA System Master Key' : name.trim();
+    const displayName = name.trim();
     const now = new Date().toISOString();
-
-    // If master key entered, elevate the user to master admin in Supabase Auth
-    if (isSpecialMasterKey && user) {
-      try {
-        await supabase.auth.updateUser({
-          data: {
-            account_type: 'master_admin',
-            is_master: true,
-            master_elevated_at: now,
-          },
-        });
-      } catch (elevErr) {
-        console.warn('[KEYS_PUT] User elevation warning:', elevErr);
-      }
-    }
 
     // Check for duplicate prefix
     const { data: orgs } = await supabase
@@ -396,25 +380,13 @@ export async function PUT(req: Request) {
 
     const response = NextResponse.json({
       success: true,
-      isMaster: isSpecialMasterKey,
       key: {
         id: inserted?.id || `key-import-${Date.now()}`,
         name: displayName,
         keyPrefix,
         status: 'active',
-        isMaster: isSpecialMasterKey,
       }
     });
-
-    if (isSpecialMasterKey) {
-      response.cookies.set('mcp_master_elevated', 'true', {
-        path: '/',
-        httpOnly: false,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 30, // 30 days
-      });
-    }
 
     return response;
   } catch (err: unknown) {
