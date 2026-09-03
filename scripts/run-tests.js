@@ -7,7 +7,7 @@ const args = process.argv.slice(2);
 
 console.log(`[TEST RUNNER] Executing Jest on Node ${process.version} (${process.platform})...`);
 
-const result = spawnSync(process.execPath, ['--expose-gc', jestBin, '--runInBand', '--verbose', ...args], {
+const result = spawnSync(process.execPath, ['--expose-gc', jestBin, '--runInBand', '--forceExit', ...args], {
   cwd: path.resolve(__dirname, '..'),
   env: { ...process.env, NODE_ENV: 'test' },
   stdio: 'inherit'
