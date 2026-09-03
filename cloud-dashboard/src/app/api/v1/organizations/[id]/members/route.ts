@@ -75,7 +75,19 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { email, role = 'member' } = body;
+    let { email, role = 'member' } = body;
+
+    const allowedRoles = ['owner', 'admin', 'member', 'viewer'];
+    if (!allowedRoles.includes(role)) {
+      return NextResponse.json({ error: `Invalid role. Allowed roles: ${allowedRoles.join(', ')}` }, { status: 400 });
+    }
+
+    // Admins cannot assign owner or admin roles — only owners can appoint admins or owners
+    if (userMembership.role !== 'owner' && (role === 'owner' || role === 'admin')) {
+      return NextResponse.json({
+        error: 'Forbidden: Only organization owners can assign admin or owner privileges.'
+      }, { status: 403 });
+    }
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });

@@ -246,10 +246,21 @@ export function getDashboardHtml(token: string, port: number): string {
          isSanitize ? 'bg-cyan-950/20 border-cyan-500/40 text-cyan-200' :
          'bg-slate-900/80 border-slate-800 text-slate-300');
 
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
       const time = new Date().toLocaleTimeString();
-      const tool = data.toolName ? '<span class="text-indigo-400 font-bold">' + data.toolName + '</span>' : '';
-      const reason = data.reason ? '<div class="mt-1 text-slate-400 text-[11px] break-all">' + data.reason + '</div>' : '';
-      const payload = data.payload ? '<div class="mt-1 text-slate-500 text-[10px] break-all overflow-x-auto">' + JSON.stringify(data.payload) + '</div>' : '';
+      const safeType = escapeHtml(type);
+      const tool = data.toolName ? '<span class="text-indigo-400 font-bold">' + escapeHtml(data.toolName) + '</span>' : '';
+      const reason = data.reason ? '<div class="mt-1 text-slate-400 text-[11px] break-all">' + escapeHtml(data.reason) + '</div>' : '';
+      const payload = data.payload ? '<div class="mt-1 text-slate-500 text-[10px] break-all overflow-x-auto">' + escapeHtml(JSON.stringify(data.payload)) + '</div>' : '';
 
       const badgeClass = isBlock ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
                          isSanitize ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
@@ -258,7 +269,7 @@ export function getDashboardHtml(token: string, port: number): string {
       card.innerHTML = 
         '<div class="flex items-center justify-between mb-1">' +
           '<div class="flex items-center gap-2">' +
-            '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold ' + badgeClass + '">' + type + '</span>' +
+            '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold ' + badgeClass + '">' + safeType + '</span>' +
             tool +
           '</div>' +
           '<span class="text-[10px] text-slate-500">' + time + '</span>' +

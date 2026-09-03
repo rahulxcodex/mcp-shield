@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/utils/supabase/server';
 
 interface EnterprisePolicyRule {
   id: string;
@@ -71,6 +72,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized: Enterprise credentials required' }, { status: 401 });
+    }
+
     const body = await req.json();
     if (!body.name || !body.category || !body.effect) {
       return NextResponse.json({ error: 'Missing required fields: name, category, effect' }, { status: 400 });
