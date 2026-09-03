@@ -62,3 +62,11 @@
   - Allowed public route access to `/guide` in middleware.
   - Created `scripts/sanity-check-website.ts` executing 7/7 automated Playwright sanity checks (zero master key leaks, navbar auth navigation, login button, guide accessibility, attack simulator, console telemetry, and dynamic SEO).
   - Verified 100% passing E2E with both `verify-website.ts` and `sanity-check-website.ts`.
+- Enterprise Multi-Seat Single Key, Corporate SSO & Security Hardening:
+  - Navbar Alignment: Added `shrink-0` and `whitespace-nowrap` to Brand, logo icon, and version pill (`v2.4 LTS`) to prevent multiline badge breakage; adjusted desktop nav to `lg:flex gap-3.5 xl:gap-6` and mobile dropdown to `lg:hidden`.
+  - Enterprise Plan & Single Key Access: Added Enterprise Plan with multi-seat selection (25, 50, 100, 500, 1000 seats) using a single cryptographic key across entire developer fleets with unified billing (Razorpay & Stripe).
+  - Corporate Domain Login (@domain): Enforced strict `@domain` corporate email validation for Enterprise Login, blocking generic/free email providers (@gmail.com, @yahoo.com, etc.).
+  - PR #12 Security & Audit Fixes:
+    - Stripped raw PEM string from `api/license/route.ts` and `sk_test_...` literal from `api/v1/billing/checkout/route.ts` (0 Trivy alerts).
+    - Enforced tenant and project scope checks in `api/v1/telemetry/events` and `api/v1/telemetry/stats`, plus added 24-hour created_at cutoff.
+    - Verified organization ownership/admin role in checkout session creation.

@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { supabase as adminSupabase } from '@/lib/supabase';
 
@@ -21,30 +21,36 @@ export async function GET(req: Request) {
         const userClient = await createClient();
         const { data: { user } } = await userClient.auth.getUser();
 
+        if (!user) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { data: orgs } = await adminSupabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', user.id);
+        const orgIds = (orgs || []).map((o: any) => o.organization_id);
+
+        if (orgIds.length === 0) {
+          return NextResponse.json({ events: [], live: true });
+        }
+
+        const { data: projects } = await adminSupabase
+          .from('projects')
+          .select('id')
+          .in('organization_id', orgIds);
+        const projectIds = (projects || []).map((p: any) => p.id);
+
+        if (projectIds.length === 0) {
+          return NextResponse.json({ events: [], live: true });
+        }
+
         let dbQuery = adminSupabase
           .from('security_events')
           .select('id, session_id, event_type, detector, risk_level, tool_name, reason, sanitized_preview, client_timestamp, created_at')
+          .in('project_id', projectIds)
           .order('created_at', { ascending: false })
           .limit(limit);
-
-        if (user) {
-          const { data: orgs } = await adminSupabase
-            .from('organization_members')
-            .select('organization_id')
-            .eq('user_id', user.id);
-          const orgIds = (orgs || []).map((o: any) => o.organization_id);
-
-          if (orgIds.length > 0) {
-            const { data: projects } = await adminSupabase
-              .from('projects')
-              .select('id')
-              .in('organization_id', orgIds);
-            const projectIds = (projects || []).map((p: any) => p.id);
-            if (projectIds.length > 0) {
-              dbQuery = dbQuery.in('project_id', projectIds);
-            }
-          }
-        }
 
         if (filterType !== 'ALL') {
           dbQuery = dbQuery.eq('event_type', filterType);

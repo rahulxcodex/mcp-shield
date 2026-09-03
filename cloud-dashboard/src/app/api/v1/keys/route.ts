@@ -65,6 +65,8 @@ export async function POST(req: Request) {
     const keyName = body.name?.trim() || 'MCP Agent Token';
     const clientType = body.clientType || 'Generic MCP Client';
     const expiresInDays = body.expiresInDays !== undefined && body.expiresInDays !== null ? Number(body.expiresInDays) : 90;
+    const seats = body.seats !== undefined && body.seats !== null ? Number(body.seats) : 1;
+    const displayName = seats > 1 ? `${keyName} (${clientType} - ${seats} Seats Single Key)` : `${keyName} (${clientType})`;
 
     // Generate cryptographically secure API key with a unique lookup prefix
     const prefixId = crypto.randomBytes(4).toString('hex'); // 8 unique hex characters
@@ -98,7 +100,7 @@ export async function POST(req: Request) {
 
         const { data: inserted } = await supabase.from('api_keys').insert([{
           project_id: projectId,
-          name: `${keyName} (${clientType})`,
+          name: displayName,
           key_prefix: keyPrefix,
           key_hash: apiKey,
           expires_at: expiresAt,
@@ -117,11 +119,12 @@ export async function POST(req: Request) {
       success: true,
       key: {
         id: keyId,
-        name: `${keyName} (${clientType})`,
+        name: displayName,
         keyPrefix,
         apiKey,
         created_at: now,
         expires_at: expiresAt,
+        seats,
         status: 'active'
       }
     });

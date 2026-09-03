@@ -164,6 +164,7 @@ export default function ConsolePage() {
   const [timelineData, setTimelineData] = useState(TIMELINE_DATA);
   const [vectorData, setVectorData] = useState(VECTOR_DATA);
   const [expiresInDays, setExpiresInDays] = useState<number>(30);
+  const [keySeats, setKeySeats] = useState<number>(25);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [liveConnected, setLiveConnected] = useState(true);
@@ -278,7 +279,7 @@ export default function ConsolePage() {
       const res = await fetch('/api/v1/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newKeyName, clientType: newKeyClient, expiresInDays }),
+        body: JSON.stringify({ name: newKeyName, clientType: newKeyClient, expiresInDays, seats: keySeats }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -874,6 +875,22 @@ export default function ConsolePage() {
                   <option value={90}>90 Days (Quarterly Rotation)</option>
                   <option value={365}>1 Year (Annual)</option>
                   <option value={0}>Never Expire (Service Account)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1.5">Single Key Seat Capacity</label>
+                <select
+                  value={keySeats}
+                  onChange={(e) => setKeySeats(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500/60"
+                >
+                  <option value={1}>1 Seat (Personal Developer / Agent)</option>
+                  <option value={25}>25 Seats (Enterprise Team - Single Key)</option>
+                  <option value={50}>50 Seats (Enterprise Growth - Single Key)</option>
+                  <option value={100}>100 Seats (Enterprise Fleet - Single Key)</option>
+                  <option value={500}>500 Seats (Enterprise Scale - Single Key)</option>
+                  <option value={1000}>1,000 Seats (Global Enterprise - Single Key)</option>
                 </select>
               </div>
 

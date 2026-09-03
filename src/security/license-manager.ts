@@ -53,7 +53,9 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
         throw new Error('Your MCP Shield trial/license has expired. Please purchase a new key.');
       }
 
-      console.log(`License Verified: Issued to ${licenseData.githubId} (Trial: ${licenseData.isTrial})`);
+      const seats = licenseData.seats || (licenseData.tier === 'enterprise' ? 25 : 1);
+      const tierDesc = licenseData.tier || (licenseData.isTrial ? 'Trial' : 'Production');
+      console.log(`License Verified: Issued to ${licenseData.githubId || 'Enterprise'} (${tierDesc}, ${seats} Seats)`);
       return true;
 
     } catch (error) {

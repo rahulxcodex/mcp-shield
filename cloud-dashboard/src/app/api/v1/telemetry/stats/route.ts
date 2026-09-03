@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { supabase as adminSupabase } from '@/lib/supabase';
 
@@ -16,28 +16,62 @@ export async function GET() {
         const userClient = await createClient();
         const { data: { user } } = await userClient.auth.getUser();
 
+        if (!user) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { data: orgs } = await adminSupabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', user.id);
+        const orgIds = (orgs || []).map((o: any) => o.organization_id);
+
+        const emptyTimeline = [
+          { time: '00:00', allowed: 0, threats: 0 },
+          { time: '04:00', allowed: 0, threats: 0 },
+          { time: '08:00', allowed: 0, threats: 0 },
+          { time: '12:00', allowed: 0, threats: 0 },
+          { time: '16:00', allowed: 0, threats: 0 },
+          { time: '20:00', allowed: 0, threats: 0 }
+        ];
+        const emptyVectors = [
+          { vector: 'AST Injection', count: 0, color: '#f43f5e' },
+          { vector: 'SSRF & Metadata', count: 0, color: '#fb923c' },
+          { vector: 'DLP Redacted', count: 0, color: '#22d3ee' },
+          { vector: 'Canary Tripped', count: 0, color: '#eab308' },
+          { vector: 'Rate Exceeded', count: 0, color: '#a855f7' },
+        ];
+
+        if (orgIds.length === 0) {
+          return NextResponse.json({
+            live: true,
+            summary: { attacksNeutralized: 0, secretsTokenized: 0, invocations: 0, activeGuardrails: 18, astLatencyMs: 0.12 },
+            timelineData: emptyTimeline,
+            vectorData: emptyVectors
+          });
+        }
+
+        const { data: projects } = await adminSupabase
+          .from('projects')
+          .select('id')
+          .in('organization_id', orgIds);
+        const projectIds = (projects || []).map((p: any) => p.id);
+
+        if (projectIds.length === 0) {
+          return NextResponse.json({
+            live: true,
+            summary: { attacksNeutralized: 0, secretsTokenized: 0, invocations: 0, activeGuardrails: 18, astLatencyMs: 0.12 },
+            timelineData: emptyTimeline,
+            vectorData: emptyVectors
+          });
+        }
+
+        const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
         let dbQuery = adminSupabase
           .from('security_events')
-          .select('id, event_type, detector, created_at');
-
-        if (user) {
-          const { data: orgs } = await adminSupabase
-            .from('organization_members')
-            .select('organization_id')
-            .eq('user_id', user.id);
-          const orgIds = (orgs || []).map((o: any) => o.organization_id);
-
-          if (orgIds.length > 0) {
-            const { data: projects } = await adminSupabase
-              .from('projects')
-              .select('id')
-              .in('organization_id', orgIds);
-            const projectIds = (projects || []).map((p: any) => p.id);
-            if (projectIds.length > 0) {
-              dbQuery = dbQuery.in('project_id', projectIds);
-            }
-          }
-        }
+          .select('id, event_type, detector, created_at')
+          .in('project_id', projectIds)
+          .gte('created_at', cutoff24h);
 
         const { data: events, error } = await dbQuery;
 

@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import crypto from 'crypto';
 
@@ -12,14 +12,25 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { action, organizationId, plan = 'pro', razorpay_payment_id, razorpay_order_id, razorpay_signature } = body;
+    const { action, organizationId, plan = 'pro', seats = 25, razorpay_payment_id, razorpay_order_id, razorpay_signature } = body;
 
     const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
+    // Multi-seat enterprise tier pricing in INR
+    const enterpriseSeatTiers: Record<number, number> = {
+      25: 39900,
+      50: 69900,
+      100: 119900,
+      500: 399900,
+      1000: 699900,
+    };
+    const numSeats = Number(seats) || 25;
+    const amount = plan === 'enterprise'
+      ? (enterpriseSeatTiers[numSeats] || 39900)
+      : 2400;
+
     if (action === 'create-order') {
-      const amount = plan === 'enterprise' ? 9900 : 2400; // in INR (e.g. ₹2,400 for Pro)
-      
       if (!keyId || !keySecret) {
         // Simulation order for staging/demo environments
         return NextResponse.json({
@@ -27,7 +38,9 @@ export async function POST(req: Request) {
           amount: amount * 100,
           currency: 'INR',
           keyId: keyId || 'rzp_test_placeholder',
-          simulation: true
+          simulation: true,
+          plan,
+          seats: numSeats
         });
       }
 
@@ -46,7 +59,8 @@ export async function POST(req: Request) {
           notes: {
             organizationId,
             userId: user.id,
-            plan
+            plan,
+            seats: String(numSeats)
           }
         })
       });
@@ -61,7 +75,9 @@ export async function POST(req: Request) {
         orderId: orderData.id,
         amount: orderData.amount,
         currency: orderData.currency,
-        keyId
+        keyId,
+        plan,
+        seats: numSeats
       });
     }
 
@@ -77,15 +93,18 @@ export async function POST(req: Request) {
         }
       }
 
-      // Upgrade organization plan in database
+      // Upgrade organization plan and seats in database
       if (organizationId) {
         await supabase
           .from('organizations')
-          .update({ plan: plan || 'pro' })
+          .update({
+            plan: plan || 'pro',
+            max_seats: plan === 'enterprise' ? numSeats : 5
+          })
           .eq('id', organizationId);
       }
 
-      return NextResponse.json({ success: true, plan: plan || 'pro' });
+      return NextResponse.json({ success: true, plan: plan || 'pro', seats: numSeats });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
