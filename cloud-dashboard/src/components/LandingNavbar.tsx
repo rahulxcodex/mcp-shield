@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ShieldCheck, Terminal, Menu, X, ArrowUpRight } from 'lucide-react';
+import { ShieldCheck, Terminal, Menu, X, ArrowUpRight, LogIn } from 'lucide-react';
 
 export default function LandingNavbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -57,6 +57,14 @@ export default function LandingNavbar() {
           </a>
 
           <Link
+            href="/login"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white hover:border-slate-700 transition"
+          >
+            <LogIn className="w-3.5 h-3.5 text-slate-400" />
+            <span>Sign In</span>
+          </Link>
+
+          <Link
             href="/console"
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-semibold text-xs shadow-lg shadow-emerald-500/20 hover:opacity-95 transition"
           >
@@ -67,6 +75,12 @@ export default function LandingNavbar() {
 
         {/* Mobile menu toggle */}
         <div className="md:hidden flex items-center gap-2">
+          <Link
+            href="/login"
+            className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 text-xs font-medium"
+          >
+            Sign In
+          </Link>
           <Link
             href="/console"
             className="px-2.5 py-1 rounded-lg bg-emerald-500 text-black text-xs font-bold"
@@ -135,19 +149,26 @@ export default function LandingNavbar() {
           >
             FAQ
           </a>
-          <div className="pt-2 border-t border-slate-800 flex gap-3">
+          <div className="pt-2 border-t border-slate-800 flex gap-2">
+            <Link
+              href="/login"
+              onClick={() => setMobileOpen(false)}
+              className="flex-1 text-center py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 font-semibold text-xs hover:border-slate-700"
+            >
+              Sign In
+            </Link>
             <Link
               href="/console"
               onClick={() => setMobileOpen(false)}
               className="flex-1 text-center py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-semibold text-xs"
             >
-              Launch Console
+              Console
             </Link>
             <a
               href="https://github.com/rahulxcodex/mcp-shield"
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-center px-4 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-white"
+              className="flex items-center justify-center px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-white"
             >
               GitHub
             </a>

@@ -93,9 +93,9 @@ If you wish to host an independent cloud proxy or persistent container runner on
 
 Once your website is deployed (e.g. at `https://your-app.vercel.app`), connect your local agent:
 
-1. **Activate Enterprise Master License**:
+1. **Activate Enterprise License**:
    ```bash
-   mcpshld license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY
+   mcpshld license <YOUR_LICENSE_KEY>
    ```
 
 2. **Pair your local CLI**:

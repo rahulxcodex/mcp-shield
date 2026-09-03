@@ -93,8 +93,11 @@ async function verify() {
   console.log(`  ✓ Guide Heading: "${guideH1}"`);
   if (!guideH1?.includes('Integration & Administration Guide')) throw new Error('Guide H1 invalid');
 
-  const masterKeyText = await page.locator('text=MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY').textContent();
-  console.log(`  ✓ Master Key Section Verified: "${masterKeyText?.trim()}"`);
+  const licenseCmdText = await page.locator('text=mcpshld license <YOUR_LICENSE_KEY>').textContent();
+  console.log(`  ✓ License Activation Command Verified: "${licenseCmdText?.trim()}"`);
+  const masterKeyCount = await page.locator('text=MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY').count();
+  if (masterKeyCount > 0) throw new Error('Security violation: Master key found exposed on website!');
+  console.log('  ✓ Verified NO master key leak on guide page');
 
   // Switch to Google Antigravity client tab
   const agTab = page.locator('button:has-text("Google Antigravity")');

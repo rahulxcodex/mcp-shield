@@ -87,8 +87,8 @@ export default function GuidePage() {
               <a href="#quickstart" className="block p-1.5 rounded hover:bg-slate-900 hover:text-emerald-400 transition">
                 1. Quickstart in 60s
               </a>
-              <a href="#master-license" className="block p-1.5 rounded hover:bg-slate-900 hover:text-emerald-400 transition font-medium text-emerald-300">
-                2. Master License Activation
+              <a href="#license-activation" className="block p-1.5 rounded hover:bg-slate-900 hover:text-emerald-400 transition font-medium text-emerald-300">
+                2. License & Trial Activation
               </a>
               <a href="#clients" className="block p-1.5 rounded hover:bg-slate-900 hover:text-emerald-400 transition">
                 3. Client Integrations
@@ -166,10 +166,10 @@ export default function GuidePage() {
             </div>
           </section>
 
-          {/* Section 2: Master License Key Activation */}
-          <section id="master-license" className="space-y-4">
+          {/* Section 2: License Key & Trial Activation */}
+          <section id="license-activation" className="space-y-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-2">
-              <span className="text-emerald-400 font-mono">02.</span> Enterprise Master License Activation
+              <span className="text-emerald-400 font-mono">02.</span> Enterprise License & Trial Activation
             </h2>
             <div className="p-5 rounded-2xl bg-gradient-to-tr from-emerald-950/30 to-cyan-950/20 border border-emerald-500/30 space-y-4 shadow-xl">
               <div className="flex items-center justify-between">
@@ -178,25 +178,25 @@ export default function GuidePage() {
                     <Key className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-white">Your Pre-Configured Master License Key</h3>
-                    <p className="text-xs text-slate-400">Permanently activates enterprise AST guardrails & unlimited hotpath evaluations</p>
+                    <h3 className="font-bold text-sm text-white">License Key Activation</h3>
+                    <p className="text-xs text-slate-400">Activate your license or 30-day trial key to unlock AST guardrails & cloud telemetry</p>
                   </div>
                 </div>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
-                  MASTER TIER
+                  AUTHENTICATED TIER
                 </span>
               </div>
 
               <p className="text-xs text-slate-300">
-                Execute this command in your terminal to write your authenticated master license credential to <code className="bg-black px-1.5 py-0.5 rounded text-emerald-400 font-mono">~/.mcp-shield/license.key</code>:
+                Execute this command with your issued key to write your license credential to <code className="bg-black px-1.5 py-0.5 rounded text-emerald-400 font-mono">~/.mcp-shield/license.key</code>:
               </p>
 
               <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 flex items-center justify-between font-mono text-xs text-emerald-300">
-                <span className="truncate mr-2">mcpshld license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY</span>
+                <span className="truncate mr-2">mcpshld license &lt;YOUR_LICENSE_KEY&gt;</span>
                 <button
-                  onClick={() => copyToClipboard('mcpshld license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY', 'master-key-cmd')}
+                  onClick={() => copyToClipboard('mcpshld license <YOUR_LICENSE_KEY>', 'master-key-cmd')}
                   className="p-1.5 text-slate-400 hover:text-white transition shrink-0"
-                  title="Copy Master Key Activation Command"
+                  title="Copy License Activation Command"
                 >
                   {copiedId === 'master-key-cmd' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </button>
@@ -205,7 +205,7 @@ export default function GuidePage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] text-slate-400 pt-1">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>Bypasses 14-day trial limit</span>
+                  <span>30-Day Free Trial Included</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -213,8 +213,15 @@ export default function GuidePage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>Unlimited cloud telemetry nodes</span>
+                  <span>Real-time cloud telemetry</span>
                 </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800/80 text-xs text-slate-400 flex items-center justify-between">
+                <span>Need a key? Sign in to the Console or pair via GitHub.</span>
+                <Link href="/login" className="text-emerald-400 hover:text-emerald-300 font-semibold underline underline-offset-4">
+                  Get License Key &rarr;
+                </Link>
               </div>
             </div>
           </section>
@@ -560,7 +567,7 @@ export default function GuidePage() {
                 <tbody className="divide-y divide-slate-800 text-slate-400 bg-slate-950/40">
                   <tr>
                     <td className="p-3 text-emerald-400 font-semibold">mcp-shield license &lt;key&gt;</td>
-                    <td className="p-3 font-sans">Activates enterprise license credential (e.g. MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY).</td>
+                    <td className="p-3 font-sans">Activates enterprise license credential (e.g. &lt;YOUR_LICENSE_KEY&gt;).</td>
                   </tr>
                   <tr>
                     <td className="p-3 text-emerald-400 font-semibold">mcp-shield protect</td>

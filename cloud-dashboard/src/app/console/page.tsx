@@ -375,12 +375,12 @@ export default function ConsolePage() {
                 <ShieldCheck className="w-5 h-5 text-black stroke-[2.5]" />
               </div>
               <div>
-                <div className="font-bold text-lg leading-tight flex items-center gap-2">
+                <h1 className="font-bold text-lg leading-tight flex items-center gap-2">
                   <span>MCP-SHIELD</span>
                   <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full font-mono font-medium">
                     CONSOLE
                   </span>
-                </div>
+                </h1>
                 <div className="text-[11px] text-slate-400">Zero-Trust Live Telemetry & Threat Center</div>
               </div>
             </Link>

@@ -184,12 +184,12 @@ mcp-shield wrap -- npx -y @modelcontextprotocol/server-filesystem /Users/dev/wor
 mcp-shield wrap -- python -m mcp_server_git
 ```
 
-### 4. Enterprise Master License Activation
+### 4. Enterprise License Activation
 
-Activate enterprise zero-trust guardrails and bypass trial restrictions using your master key:
+Activate enterprise zero-trust guardrails using your issued key:
 
 ```bash
-mcp-shield license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY
+mcp-shield license <YOUR_LICENSE_KEY>
 ```
 
 ---

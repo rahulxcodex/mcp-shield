@@ -56,16 +56,9 @@
   - Fixed P1 badge: Generated keys now store unique 8-character random hex prefixes (`mcp_live_${prefixId}`) and enforced `UNIQUE` constraint in database migration.
   - Scoped key queries and deletions strictly to user's organization projects.
   - Telemetry ingest now returns HTTP 500 on database insertion failures and enforces strict HMAC verification.
-- Website User Guide (`/guide`):
-  - Created interactive web user guide with Master License Activation (`MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY`), client tabs (Claude, Cursor, Antigravity, Cline, Windsurf), threat engine diagrams, and SOC2 walkthrough.
-  - Verified with Playwright MCP testing on live deployment.
-  - Render Keep-Alive: Added `.github/workflows/render-keepalive.yml` pinging free-tier instances every 10 mins.
-  - Vercel Live Deployment: Deployed to `https://mcp-shield-dashboard-d6jyrwkny-rahulsahgupta24-8925.vercel.app` and preview `https://mcp-shield-dashboard-oqexrgwja-rahulsahgupta24-8925.vercel.app`.
-  - GitHub Integration: Pushed `feat/console-keys-telemetry-guide` and opened PR #11 on `rahulxcodex/mcp-shield`.
-- Production End-to-End Workflow & Licensing Pipeline:
-  - Corrected NPM package naming from `mcp-shield` (unrelated third-party) to `mcpshld` (v1.0.9) with dual `mcpshld` / `mcp-shield` bin aliases.
-  - Implemented dynamic telemetry aggregation endpoints (`/api/v1/telemetry/stats` and `/api/v1/telemetry/events`), replacing mock constants in Console Recharts with live database metrics.
-  - Added API key expiration lifecycle (1-Month Free Trial / 30 Days default, 60d, 90d, 1y, continuous) and automatic expiration enforcement in telemetry ingestion.
-  - Fixed Vercel deployment crash in `rahulxcodex/mcp-shield-licensing` by adding build-time fallback placeholders in `src/lib/supabase.ts`.
-  - Configured 1-month trial duration (30 days) and 1-year GitHub account age gating in licensing API, supporting CEO master key `MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY`.
-  - Verified 40/40 test suites passing (671/671 unit, integration, and red-team tests). Deployed live on Vercel (`READY`).
+- Website User Guide & Security Hardening:
+  - Sanitized `/guide` and all markdown documentation: Completely stripped internal CEO master key (`MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY`) and replaced with `<YOUR_LICENSE_KEY>` and instructions to obtain license via Console / GitHub auth.
+  - Added dedicated "Sign In" button in desktop navbar and mobile navigation pointing directly to `/login`.
+  - Allowed public route access to `/guide` in middleware.
+  - Created `scripts/sanity-check-website.ts` executing 7/7 automated Playwright sanity checks (zero master key leaks, navbar auth navigation, login button, guide accessibility, attack simulator, console telemetry, and dynamic SEO).
+  - Verified 100% passing E2E with both `verify-website.ts` and `sanity-check-website.ts`.

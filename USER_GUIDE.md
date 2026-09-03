@@ -69,14 +69,14 @@ npm install -g mcpshld
 mcpshld --version
 ```
 
-### Enterprise Master License Activation
-To unlock unlimited enterprise AST guardrails, bypass trial constraints, and activate full telemetry capabilities, run:
+### Enterprise License Activation
+To unlock enterprise AST guardrails and activate full telemetry capabilities, run:
 
 ```bash
-mcp-shield license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY
+mcp-shield license <YOUR_LICENSE_KEY>
 ```
 
-This installs your authenticated enterprise license credential at `~/.mcp-shield/license.key` and activates all zero-trust subsystems permanently.
+This installs your authenticated enterprise license credential at `~/.mcp-shield/license.key` and activates all zero-trust subsystems.
 
 ### Auto-Protecting Existing MCP Clients
 Run the automated discovery engine to scan and protect all installed MCP clients on your machine:
@@ -242,7 +242,7 @@ If deploying a persistent background proxy daemon on Render's free tier:
 | Command | Description |
 | :--- | :--- |
 | `mcp-shield protect` | Auto-detects and patches Claude, Cursor, Cline, and Windsurf configurations. |
-| `mcp-shield license <key>` | Installs license credential (e.g. `MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY`). |
+| `mcp-shield license <key>` | Installs license credential (e.g. `<YOUR_LICENSE_KEY>`). |
 | `mcp-shield wrap -- <cmd> [args]` | Runs any MCP server inside the zero-trust security sandbox. |
 | `mcp-shield link --key <key>` | Pairs local machine with Cloud Console for real-time telemetry. |
 | `mcp-shield scan` | Audits installed MCP configurations for known CVEs and plaintext secrets. |
