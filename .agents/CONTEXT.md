@@ -1,72 +1,35 @@
-# MCP Shield - Project Context
+﻿# MCP Shield - Project Context
 
 ## Project Architecture
-- Core: Zero-Trust Security Proxy & Gateway for Model Context Protocol (MCP) and AI Agents.
-- Tech Stack: TypeScript, Node.js, Tree-sitter AST (Bash, PowerShell, Cmd, Python), eBPF SIMD fastpath, FPE bijective DLP, WORM cryptographic audit.
+- Core: Zero-Trust Security Gateway, AST Firewall & Bijective DLP Sanitizer for Model Context Protocol (MCP).
+- Package: `mcpshld` (v1.0.11 on npm) with CLI bin `mcp-shield` and `mcpshld`.
+- Tech Stack: TypeScript, Node.js, Tree-sitter AST, eBPF SIMD fastpath, FPE bijective DLP, WORM cryptographic audit.
 - Web Platform & Console: Next.js 16 (App Router), React 19, Tailwind CSS v4, Recharts, Lucide Icons, Supabase SSR & Auth.
-- Telemetry: Real-time HMAC-signed ingestion (`/api/v1/telemetry/ingest`), threat stream, guardrail metrics.
+- Telemetry: Real-time HMAC-SHA256 signed ingestion (`/api/v1/telemetry/ingest`), threat stream, guardrail metrics.
 
 ## Completed Milestones
-- Enterprise Marketing Website (`/`):
-  - SEO optimized with OpenGraph, Twitter Cards, Schema.org JSON-LD (SoftwareApplication, FAQPage, WebSite), dynamic `robots.txt`, and `sitemap.xml`.
-  - Interactive Zero-Day Attack Simulator with live AST verdict, latency stats, and payload preview.
-  - Drop-in installation guides with copyable configurations for Claude Desktop, Cursor, Antigravity, VSCode Cline, and Python/TS SDKs.
-  - Security comparison matrix and enterprise FAQ.
-- Real-Time Console (`/console`):
-  - Moved dashboard to `/console` with authentication check and demo/guest mode.
-  - Recharts visualizations (24h threat interception area chart, attack vector bar chart).
-  - Live intercept feed with category filtering, search, and "Simulate Live Attack" trigger.
-  - SOC2 JSON/CSV audit report exporter.
-- Telemetry Pipeline (`scripts/send-demo-telemetry.ts`):
-  - Signed HMAC-SHA256 telemetry ingestion verified with live Next.js endpoint.
+- Enterprise Marketing Website (`/`): Interactive Zero-Day Attack Simulator, copyable config for Claude/Cursor/Antigravity, JSON-LD SEO, sitemap.xml.
+- Console & Telemetry Center (`/console`):
+  - Connection health indicator (🟢 Live / 8s Polling / ⚪ Demo Mode) with real-time freshness ticker.
+  - Onboarding Checklist Banner & 4-step interactive Onboarding Wizard (`OnboardingWizard.tsx`).
+  - Workspace/Organization Switcher (`WorkspaceSwitcher.tsx`) with role and tier badges.
+  - Click-to-inspect Threat Event Detail Drawer (`EventDetailDrawer.tsx`) with AST analysis, payload viewer, and allowlist creation.
+  - Comprehensive filters: Environment (Prod/Staging/Dev), Date Range (1h/24h/7d/30d), Action Type, and Search.
+  - Multi-select bulk actions: Bulk acknowledge and CSV export.
+  - Metric calculation tooltips explaining Attacks Neutralized, AST latency, and Secrets Tokenized.
+- Enterprise Settings Suite (`/settings`):
+  - General: Key management table with prefixes, rotation, revocation, expiry, and reveal-once modal.
+  - Security: Device/session management, 2FA/MFA setup, IP allowlisting, and Enterprise SAML/OIDC SSO.
+  - Team: Organization members and role-based permissions (Owner, Admin, Member).
+  - Billing: Unified Stripe (Global USD) and Razorpay (India INR) checkout, seat usage meter, invoice history, and cancellation flow.
+  - Integrations: Outbound JSON-RPC / SIEM webhooks, Slack/Teams alerts, PagerDuty integration.
+  - Audit Logs: Privileged organization action logs with CSV export.
+- Compliance & Trust Center:
+  - `/compliance`: SOC 2 Type II audit-evidence export, Zero Customer Payload Storage guarantee, encryption specs, data residency.
+  - `/privacy`, `/terms`, `/security`, `/subprocessors`: Complete legal and security disclosure framework.
+- Security Invariants (14/14):
+  - SHA-256 hashed secret keys, constant-time HMAC comparison, rate-limiting, payment idempotency, CSRF protection, and fail-closed evaluation.
 - Verification & Deployment:
-  - Playwright E2E verification passed across landing page, simulator, console, sitemap, and robots.
-  - Free-tier deployment instructions documented in `DEPLOYMENT_GUIDE.md` and complete documentation in `USER_GUIDE.md`.
-  - Proxy Core Telemetry: Hooked `CloudTelemetryPublisher` into `ProxyServer.logAndBroadcast(...)` for live agent event streaming.
-  - Console Key Center: Built interactive API key generation and device pairing center in `/console` with modal creation and `/api/v1/keys` endpoint.
-  - Unique Key Lookup Prefix & Scoping:
-  - Fixed P1 badge: Generated keys now store unique 8-character random hex prefixes (`mcp_live_${prefixId}`) and enforced `UNIQUE` constraint in database migration.
-# MCP Shield - Project Context
-
-## Project Architecture
-- Core: Zero-Trust Security Proxy & Gateway for Model Context Protocol (MCP) and AI Agents.
-- Tech Stack: TypeScript, Node.js, Tree-sitter AST (Bash, PowerShell, Cmd, Python), eBPF SIMD fastpath, FPE bijective DLP, WORM cryptographic audit.
-- Web Platform & Console: Next.js 16 (App Router), React 19, Tailwind CSS v4, Recharts, Lucide Icons, Supabase SSR & Auth.
-- Telemetry: Real-time HMAC-signed ingestion (`/api/v1/telemetry/ingest`), threat stream, guardrail metrics.
-
-## Completed Milestones
-- Enterprise Marketing Website (`/`):
-  - SEO optimized with OpenGraph, Twitter Cards, Schema.org JSON-LD (SoftwareApplication, FAQPage, WebSite), dynamic `robots.txt`, and `sitemap.xml`.
-  - Interactive Zero-Day Attack Simulator with live AST verdict, latency stats, and payload preview.
-  - Drop-in installation guides with copyable configurations for Claude Desktop, Cursor, Antigravity, VSCode Cline, and Python/TS SDKs.
-  - Security comparison matrix and enterprise FAQ.
-- Real-Time Console (`/console`):
-  - Moved dashboard to `/console` with authentication check and demo/guest mode.
-  - Recharts visualizations (24h threat interception area chart, attack vector bar chart).
-  - Live intercept feed with category filtering, search, and "Simulate Live Attack" trigger.
-  - SOC2 JSON/CSV audit report exporter.
-- Telemetry Pipeline (`scripts/send-demo-telemetry.ts`):
-  - Signed HMAC-SHA256 telemetry ingestion verified with live Next.js endpoint.
-- Verification & Deployment:
-  - Playwright E2E verification passed across landing page, simulator, console, sitemap, and robots.
-  - Free-tier deployment instructions documented in `DEPLOYMENT_GUIDE.md` and complete documentation in `USER_GUIDE.md`.
-  - Proxy Core Telemetry: Hooked `CloudTelemetryPublisher` into `ProxyServer.logAndBroadcast(...)` for live agent event streaming.
-  - Console Key Center: Built interactive API key generation and device pairing center in `/console` with modal creation and `/api/v1/keys` endpoint.
-  - Unique Key Lookup Prefix & Scoping:
-  - Fixed P1 badge: Generated keys now store unique 8-character random hex prefixes (`mcp_live_${prefixId}`) and enforced `UNIQUE` constraint in database migration.
-  - Scoped key queries and deletions strictly to user's organization projects.
-  - Telemetry ingest now returns HTTP 500 on database insertion failures and enforces strict HMAC verification.
-- Website User Guide & Security Hardening:
-  - Sanitized `/guide` and all markdown documentation: Completely stripped internal CEO master key (`MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY`) and replaced with `<YOUR_LICENSE_KEY>` and instructions to obtain license via Console / GitHub auth.
-  - Added dedicated "Sign In" button in desktop navbar and mobile navigation pointing directly to `/login`.
-  - Allowed public route access to `/guide` in middleware.
-  - Created `scripts/sanity-check-website.ts` executing 7/7 automated Playwright sanity checks (zero master key leaks, navbar auth navigation, login button, guide accessibility, attack simulator, console telemetry, and dynamic SEO).
-  - Verified 100% passing E2E with both `verify-website.ts` and `sanity-check-website.ts`.
-- Enterprise Multi-Seat Single Key, Corporate SSO & Security Hardening:
-  - Navbar Alignment: Added `shrink-0` and `whitespace-nowrap` to Brand, logo icon, and version pill (`v2.4 LTS`) to prevent multiline badge breakage; adjusted desktop nav to `lg:flex gap-3.5 xl:gap-6` and mobile dropdown to `lg:hidden`.
-  - Enterprise Plan & Single Key Access: Added Enterprise Plan with multi-seat selection (25, 50, 100, 500, 1000 seats) using a single cryptographic key across entire developer fleets with unified billing (Razorpay & Stripe).
-  - Corporate Domain Login (@domain): Enforced strict `@domain` corporate email validation for Enterprise Login, blocking generic/free email providers (@gmail.com, @yahoo.com, etc.).
-  - PR #12 Security & Audit Fixes:
-    - Stripped raw PEM string from `api/license/route.ts` and `sk_test_...` literal from `api/v1/billing/checkout/route.ts` (0 Trivy alerts).
-    - Enforced tenant and project scope checks in `api/v1/telemetry/events` and `api/v1/telemetry/stats`, plus added 24-hour created_at cutoff.
-    - Verified organization ownership/admin role in checkout session creation.
+  - 40/40 test suites passed (671/671 unit & integration tests).
+  - 32/32 Next.js production routes compiled cleanly.
+  - Published to npm (`mcpshld@1.0.11`) and deployed to GitHub & Vercel.

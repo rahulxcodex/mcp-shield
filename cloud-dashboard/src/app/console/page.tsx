@@ -29,8 +29,21 @@ import {
   Check,
   X,
   CreditCard,
-  LogOut
+  LogOut,
+  RotateCw,
+  MessageSquare,
+  User,
+  LogIn,
+  HelpCircle,
+  CheckSquare,
+  Square,
+  Info
 } from 'lucide-react';
+import ThemeToggle from '@/components/ThemeToggle';
+import SupportModal from '@/components/SupportModal';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
+import OnboardingWizard from '@/components/OnboardingWizard';
+import EventDetailDrawer, { ThreatEvent } from '@/components/EventDetailDrawer';
 import {
   AreaChart,
   Area,
@@ -163,14 +176,46 @@ export default function ConsolePage() {
 
   const [timelineData, setTimelineData] = useState(TIMELINE_DATA);
   const [vectorData, setVectorData] = useState(VECTOR_DATA);
-  const [expiresInDays, setExpiresInDays] = useState<number>(30);
+  const [expiresInDays, setExpiresInDays] = useState<number>(90);
   const [keySeats, setKeySeats] = useState<number>(25);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [liveConnected, setLiveConnected] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [dismissOnboardingBanner, setDismissOnboardingBanner] = useState(false);
+  const [selectedDetailEvent, setSelectedDetailEvent] = useState<ThreatEvent | null>(null);
+  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
+  const [envFilter, setEnvFilter] = useState('ALL');
+  const [timeRangeFilter, setTimeRangeFilter] = useState('24h');
+  const [lastUpdatedSec, setLastUpdatedSec] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLastUpdatedSec((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const { createClient } = await import('@/utils/supabase/client');
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        setCurrentUser(user);
+      } catch {
+        setCurrentUser(null);
+      }
+    }
+    checkAuth();
+  }, []);
 
   const fetchTelemetry = async () => {
     try {
+      setLastUpdatedSec(0);
       const [statsRes, eventsRes, keysRes] = await Promise.all([
         fetch('/api/v1/telemetry/stats'),
         fetch(`/api/v1/telemetry/events?filter=${filterType}&query=${encodeURIComponent(searchQuery)}&limit=50`),
@@ -311,7 +356,40 @@ export default function ConsolePage() {
     try {
       await fetch(`/api/v1/keys?id=${id}&prefix=${prefix}`, { method: 'DELETE' });
     } catch {}
-    setApiKeys((prev) => prev.filter((k) => k.id !== id));
+    setApiKeys((prev) => prev.map((k) => k.id === id ? { ...k, status: 'revoked' } : k));
+  };
+
+  const handleRotateKey = async (id: string, prefix: string) => {
+    setRotatingKeyId(id);
+    try {
+      const res = await fetch('/api/v1/keys', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyId: id, keyPrefix: prefix, expiresInDays })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.newKey) {
+          setApiKeys((prev) => prev.map((k) => k.id === id ? { ...k, status: 'revoked' } : k));
+          setApiKeys((prev) => [
+            {
+              id: data.newKey.id,
+              name: data.newKey.name,
+              keyPrefix: data.newKey.keyPrefix,
+              apiKey: data.newKey.apiKey,
+              createdAt: 'Just now',
+              lastUsedAt: 'Never',
+              expiresAt: data.newKey.expires_at,
+              status: 'active'
+            },
+            ...prev
+          ]);
+          setJustCreatedKey(data.newKey.apiKey);
+        }
+      }
+    } catch {} finally {
+      setRotatingKeyId(null);
+    }
   };
 
   const handleSimulateBatch = () => {
@@ -385,13 +463,35 @@ export default function ConsolePage() {
                 <div className="text-[11px] text-slate-400">Zero-Trust Live Telemetry & Threat Center</div>
               </div>
             </Link>
+            <div className="hidden lg:block border-l border-slate-800 pl-3">
+              <WorkspaceSwitcher />
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Live connection badge */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Guided Onboarding Launch */}
+            <button
+              onClick={() => setIsOnboardingOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-semibold transition"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden md:inline">Onboarding Setup</span>
+            </button>
+
+            {/* Connection health indicator & ticker */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs text-slate-300">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Gateway Active</span>
+              <span>Live (8s)</span>
+              <span className="text-[10px] text-slate-500 font-mono">
+                {lastUpdatedSec === 0 ? 'just now' : `${lastUpdatedSec}s ago`}
+              </span>
+              <button
+                onClick={fetchTelemetry}
+                title="Refresh Telemetry Stream"
+                className="hover:text-white transition-colors"
+              >
+                <RefreshCw className="w-3 h-3 text-slate-400 hover:text-emerald-400" />
+              </button>
             </div>
 
             {/* Simulate button */}
@@ -422,24 +522,56 @@ export default function ConsolePage() {
               <span className="hidden lg:inline">Plans & Quota</span>
             </Link>
 
-            {/* User Guide link */}
-            <Link
-              href="/guide"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-semibold transition border border-slate-700"
-            >
-              <Key className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">User Guide & Master Key</span>
-            </Link>
-
-            {/* Sign Out button */}
+            {/* Support / Complaint button */}
             <button
-              onClick={handleSignOut}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/20 transition"
-              title="Sign Out of Console"
+              onClick={() => setIsSupportModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition border border-slate-700"
+              title="Report Issue or FAQ Inquiry"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Sign Out</span>
+              <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden md:inline">Feedback & Support</span>
             </button>
+
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
+            {/* Auth State: Show Sign Out ONLY if authenticated; show Demo mode badges & Sign In/Sign Up when in Demo mode */}
+            {currentUser ? (
+              <div className="flex items-center gap-2">
+                <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-300">
+                  <User className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="max-w-[130px] truncate">{currentUser.email}</span>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/20 transition"
+                  title="Sign Out of Console"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Sign Out</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold whitespace-nowrap">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Demo Mode</span>
+                </span>
+                <Link
+                  href="/login"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition shadow-md shadow-emerald-500/20"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Sign In / Sign Up</span>
+                </Link>
+                <Link
+                  href="/"
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700"
+                >
+                  Exit Demo
+                </Link>
+              </div>
+            )}
 
             <Link href="/" className="text-slate-400 hover:text-white transition p-1.5" title="Back to Website">
               <ArrowLeft className="w-4 h-4" />
@@ -450,49 +582,115 @@ export default function ConsolePage() {
 
       {/* Main Console Workspace */}
       <main className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+        {/* Onboarding Checklist Banner */}
+        {!dismissOnboardingBanner && (
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-950/60 to-slate-900 border border-blue-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400 shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="font-semibold text-white flex items-center gap-2">
+                  <span>Workspace Onboarding Checklist</span>
+                  <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-mono">
+                    2/4 Steps Completed
+                  </span>
+                </div>
+                <div className="text-slate-400 text-[11px] mt-0.5">
+                  ✓ Org Initialized • ✓ Project Active • Connect local CLI agent with <code>mcpshld wrap</code> • Verify Heartbeat
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <button
+                onClick={() => setIsOnboardingOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition shadow-md shadow-blue-500/20"
+              >
+                Resume Guided Setup →
+              </button>
+              <button
+                onClick={() => setDismissOnboardingBanner(true)}
+                className="p-1.5 text-slate-400 hover:text-white"
+                title="Dismiss Banner"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* KPI Scorecard Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl flex flex-col">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Security Health Score</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-emerald-400">{stats.healthScore}</span>
-              <span className="text-xs text-slate-500 font-mono">/ 100</span>
+          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Security Health Score</span>
+                <span title="Calculated from blocked vs total invocations over the last 24 hours (target: 95+)" className="cursor-help">
+                  <Info className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300" />
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold text-emerald-400">{stats.healthScore}</span>
+                <span className="text-xs text-slate-500 font-mono">/ 100</span>
+              </div>
             </div>
             <div className="mt-2 text-xs text-emerald-400/80 flex items-center gap-1">
               <Shield className="w-3.5 h-3.5" /> Zero-Trust AST Firewall Enforced
             </div>
           </div>
 
-          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl flex flex-col">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Attacks Neutralized</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-rose-400">{stats.attacksNeutralized}</span>
-              <span className="text-xs text-rose-500 font-mono">threats blocked</span>
+          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Attacks Neutralized</span>
+                <span title="Total count of blocked destructive commands, forbidden subshells, and SSRF loopback requests" className="cursor-help">
+                  <Info className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300" />
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold text-rose-400">{stats.attacksNeutralized}</span>
+                <span className="text-xs text-rose-500 font-mono">threats blocked</span>
+              </div>
             </div>
             <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
               <Ban className="w-3.5 h-3.5 text-rose-400" /> AST, SSRF, & Shell Evasions
             </div>
           </div>
 
-          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl flex flex-col">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Secrets Tokenized (DLP)</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-cyan-400">{stats.secretsTokenized}</span>
-              <span className="text-xs text-cyan-500 font-mono">keys redacted</span>
+          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Secrets Tokenized (DLP)</span>
+                <span title="Raw cloud credentials, API tokens, and PII converted to format-preserving surrogate tokens in memory" className="cursor-help">
+                  <Info className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300" />
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold text-cyan-400">{stats.secretsTokenized}</span>
+                <span className="text-xs text-cyan-500 font-mono">keys redacted</span>
+              </div>
             </div>
             <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
-              <Key className="w-3.5 h-3.5 text-cyan-400" /> Zero Plaintext Storage
+              <Key className="w-3.5 h-3.5 text-cyan-400" /> Bijective In-Memory FPE
             </div>
           </div>
 
-          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl flex flex-col">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Evaluated Invocations</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-indigo-400">{stats.invocations.toLocaleString()}</span>
-              <span className="text-xs text-indigo-500 font-mono">hotpath calls</span>
+          <div className="bg-[#0f111a] border border-slate-800/80 p-4 rounded-xl flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Evaluated Invocations</span>
+                <span title="Sub-millisecond latency added to hotpath MCP execution by Tree-sitter AST parsing" className="cursor-help">
+                  <Info className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300" />
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold text-indigo-400">{stats.invocations.toLocaleString()}</span>
+                <span className="text-xs text-indigo-500 font-mono">hotpath calls</span>
+              </div>
             </div>
             <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
-              <Zap className="w-3.5 h-3.5 text-indigo-400" /> <span>&lt; {stats.latency}</span> mean latency
+              <Zap className="w-3.5 h-3.5 text-indigo-400" /> <span>&lt; {stats.latency}</span> AST parse overhead
             </div>
           </div>
         </div>
@@ -590,83 +788,194 @@ export default function ConsolePage() {
           {/* Live Intercept Stream */}
           <div className="lg:col-span-2 bg-[#0f111a] border border-slate-800 rounded-xl flex flex-col h-[540px]">
             {/* Stream Header */}
-            <div className="px-4 py-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#131522]/50 rounded-t-xl">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                <span className="font-semibold text-sm text-slate-100">Live Intercept Stream</span>
-                <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full text-xs font-mono">
-                  {filteredEvents.length} events
-                </span>
+            <div className="px-4 py-3 border-b border-slate-800 flex flex-col gap-2.5 bg-[#131522]/50 rounded-t-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <span className="font-semibold text-sm text-slate-100">Live Intercept Stream</span>
+                  <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full text-xs font-mono">
+                    {filteredEvents.length} events
+                  </span>
+                </div>
+
+                {/* Bulk Actions Bar if items are selected */}
+                {selectedEventIds.length > 0 && (
+                  <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-lg px-2.5 py-1 text-xs">
+                    <span className="text-blue-300 font-semibold">{selectedEventIds.length} selected</span>
+                    <button
+                      onClick={() => {
+                        setEvents(events.filter(e => !selectedEventIds.includes(e.id)));
+                        setSelectedEventIds([]);
+                      }}
+                      className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-0.5 rounded font-medium"
+                    >
+                      Acknowledge
+                    </button>
+                    <button
+                      onClick={() => setSelectedEventIds([])}
+                      className="text-[11px] text-slate-400 hover:text-white"
+                    >
+                      Deselect
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Filters & Search */}
-              <div className="flex items-center gap-2">
-                <div className="relative">
+              {/* Filters & Search Bar */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="relative flex-1 min-w-[140px]">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filter events..."
-                    className="bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 w-36"
+                    placeholder="Search tool / payload..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700"
                   />
                 </div>
 
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none"
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-300 focus:outline-none"
                 >
-                  <option value="ALL">All Types</option>
-                  <option value="BLOCK">Blocked</option>
-                  <option value="SANITIZE">Sanitized</option>
-                  <option value="QUARANTINE">Quarantined</option>
+                  <option value="ALL">All Actions</option>
+                  <option value="BLOCK">Blocked Only</option>
+                  <option value="SANITIZE">Sanitized Only</option>
+                  <option value="QUARANTINE">Quarantined Only</option>
+                </select>
+
+                <select
+                  value={envFilter}
+                  onChange={(e) => setEnvFilter(e.target.value)}
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-300 focus:outline-none hidden sm:inline-block"
+                >
+                  <option value="ALL">All Envs</option>
+                  <option value="Production">Production</option>
+                  <option value="Staging">Staging</option>
+                  <option value="Development">Dev</option>
+                </select>
+
+                <select
+                  value={timeRangeFilter}
+                  onChange={(e) => setTimeRangeFilter(e.target.value)}
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-300 focus:outline-none hidden md:inline-block"
+                >
+                  <option value="1h">Last 1 Hour</option>
+                  <option value="24h">Last 24 Hours</option>
+                  <option value="7d">Last 7 Days</option>
+                  <option value="30d">Last 30 Days</option>
                 </select>
 
                 <button
-                  onClick={() => setEvents([])}
+                  onClick={() => {
+                    if (selectedEventIds.length === filteredEvents.length) {
+                      setSelectedEventIds([]);
+                    } else {
+                      setSelectedEventIds(filteredEvents.map(e => e.id));
+                    }
+                  }}
                   className="text-xs text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded px-2 py-1 transition"
+                  title="Toggle Select All"
                 >
-                  Clear
+                  {selectedEventIds.length === filteredEvents.length && filteredEvents.length > 0 ? "Deselect All" : "Select All"}
                 </button>
               </div>
             </div>
 
             {/* Event List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-xs">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 font-mono text-xs">
               {filteredEvents.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
+                <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-3 p-6 text-center">
                   <Radio className="w-8 h-8 text-slate-600 animate-pulse" />
-                  <p>Listening for agent MCP tool calls...</p>
-                  <p className="text-[11px] text-slate-600">Click &ldquo;Simulate Live Attack&rdquo; above or run your local MCP agent.</p>
+                  <div>
+                    <p className="text-slate-300 font-semibold text-xs">No Threat Interceptions Found</p>
+                    <p className="text-[11px] text-slate-500 mt-1">Your agents are operating clean, or no traffic matches active filters.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsOnboardingOpen(true)}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition"
+                    >
+                      Connect New Agent
+                    </button>
+                    <button
+                      onClick={handleSimulateBatch}
+                      disabled={isSimulating}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition border border-slate-700"
+                    >
+                      Simulate Test Attack
+                    </button>
+                  </div>
                 </div>
               ) : (
-                filteredEvents.map((evt) => (
-                  <div
-                    key={evt.id}
-                    className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 transition flex flex-col gap-1.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                            evt.eventType === 'BLOCK'
-                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                              : evt.eventType === 'SANITIZE'
-                              ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
-                              : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                          }`}
-                        >
-                          {evt.eventType}
+                filteredEvents.map((evt) => {
+                  const isSelected = selectedEventIds.includes(evt.id);
+                  return (
+                    <div
+                      key={evt.id}
+                      onClick={() => setSelectedDetailEvent({
+                        id: evt.id,
+                        timestamp: evt.timestamp,
+                        source: evt.detector,
+                        category: evt.toolName,
+                        action: evt.eventType === 'BLOCK' ? 'BLOCKED' : evt.eventType === 'SANITIZE' ? 'SANITIZED' : 'QUARANTINED',
+                        severity: evt.riskLevel,
+                        details: evt.reason,
+                        rawPayload: evt.reason,
+                        status: 'OPEN',
+                        assignee: 'Unassigned',
+                        astRule: evt.detector.includes('AST') ? 'AST_SUBTREE_DESTRUCTIVE_EXECUTION' : evt.detector.includes('SSRF') ? 'SSRF_EGRESS_METADATA_PROHIBITED' : 'DLP_SECRET_PATTERN_EXPOSURE',
+                        remediation: 'Inspect calling AI agent tool invocation parameters. If permitted, configure an allowlist expression in shield.config.yaml.'
+                      })}
+                      className={`p-3 rounded-xl border cursor-pointer transition flex flex-col gap-1.5 group ${
+                        isSelected 
+                          ? 'bg-blue-950/20 border-blue-500/50' 
+                          : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/90'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isSelected) {
+                                setSelectedEventIds(selectedEventIds.filter(id => id !== evt.id));
+                              } else {
+                                setSelectedEventIds([...selectedEventIds, evt.id]);
+                              }
+                            }}
+                            className="text-slate-500 hover:text-white"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+                            ) : (
+                              <Square className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                              evt.eventType === 'BLOCK'
+                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                : evt.eventType === 'SANITIZE'
+                                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+                                : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                            }`}
+                          >
+                            {evt.eventType}
+                          </span>
+                          <span className="text-slate-200 font-semibold">{evt.toolName}</span>
+                          <span className="text-[11px] text-slate-500">via {evt.detector}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 group-hover:text-blue-400 transition-colors">
+                          {evt.timestamp} • Inspect →
                         </span>
-                        <span className="text-slate-200 font-semibold">{evt.toolName}</span>
-                        <span className="text-[11px] text-slate-500">via {evt.detector}</span>
                       </div>
-                      <span className="text-[10px] text-slate-500">{evt.timestamp}</span>
+                      <div className="text-slate-400 text-[11px] pl-6 font-sans truncate">{evt.reason}</div>
                     </div>
-                    <div className="text-slate-400 text-[11px] pl-1 font-sans">{evt.reason}</div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -756,6 +1065,14 @@ export default function ConsolePage() {
                           ) : (
                             <Copy className="w-3.5 h-3.5" />
                           )}
+                        </button>
+                        <button
+                          onClick={() => handleRotateKey(k.id, k.keyPrefix)}
+                          disabled={rotatingKeyId === k.id || k.status === 'revoked'}
+                          className="p-1 text-slate-400 hover:text-amber-400 transition disabled:opacity-40"
+                          title="Rotate Key (Revoke old & issue new)"
+                        >
+                          <RotateCw className={`w-3.5 h-3.5 ${rotatingKeyId === k.id ? 'animate-spin text-amber-400' : ''}`} />
                         </button>
                         <button
                           onClick={() => handleRevokeKey(k.id, k.keyPrefix)}
@@ -870,6 +1187,7 @@ export default function ConsolePage() {
                   onChange={(e) => setExpiresInDays(Number(e.target.value))}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500/60"
                 >
+                  <option value={7}>7 Days (Rapid Testing / Staging)</option>
                   <option value={30}>1 Month (Free Trial / 30 Days)</option>
                   <option value={60}>60 Days (2 Months)</option>
                   <option value={90}>90 Days (Quarterly Rotation)</option>
@@ -896,28 +1214,30 @@ export default function ConsolePage() {
 
               <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 text-[11px] space-y-1">
                 <div className="font-medium text-slate-300 flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Zero-Plaintext Transmission
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Single Key Fleet Deployment
                 </div>
-                <div>All telemetry batches are signed with HMAC-SHA256. Plaintext secrets are never stored.</div>
+                <div>All {keySeats} seats share this single cryptographic key with centralized tokenization and DLP quota.</div>
               </div>
-            </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
-              <button
-                onClick={() => setIsCreateKeyOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white text-xs font-medium transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  handleGenerateKey();
-                  setIsCreateKeyOpen(false);
-                }}
-                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold transition shadow-lg shadow-emerald-600/20"
-              >
-                Generate Key
-              </button>
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateKeyOpen(false)}
+                  className="px-3.5 py-1.5 rounded-lg text-slate-400 hover:text-white text-xs font-medium transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleGenerateKey();
+                    setIsCreateKeyOpen(false);
+                  }}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold transition shadow-lg shadow-emerald-600/20"
+                >
+                  Generate Key
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -991,6 +1311,33 @@ export default function ConsolePage() {
           </div>
         </div>
       )}
+
+      {/* Support & Complaint Modal */}
+      <SupportModal
+        isOpen={isSupportModalOpen}
+        onClose={() => setIsSupportModalOpen(false)}
+        defaultType="Complaint"
+      />
+
+      {/* Guided Onboarding Wizard Modal */}
+      <OnboardingWizard
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+        onComplete={() => {
+          setIsOnboardingOpen(false);
+          setDismissOnboardingBanner(true);
+        }}
+      />
+
+      {/* Threat Event Detail Drawer */}
+      <EventDetailDrawer
+        event={selectedDetailEvent}
+        onClose={() => setSelectedDetailEvent(null)}
+        onUpdateEvent={(updated) => {
+          setEvents(events.map(e => e.id === updated.id ? { ...e, reason: updated.details } : e));
+          setSelectedDetailEvent(null);
+        }}
+      />
     </div>
   );
 }
