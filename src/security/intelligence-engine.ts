@@ -7,6 +7,14 @@
  * - Policy simulation engine
  */
 
+export interface RemoteIntelEvaluationResult {
+  riskScore: number;
+  verdict: 'ALLOW' | 'MONITOR' | 'CHALLENGE' | 'QUARANTINE' | 'BLOCK';
+  reasoningVector: string[];
+  recommendedAction: string;
+  source: 'REMOTE_ENTERPRISE_INTEL' | 'LOCAL_FALLBACK';
+}
+
 export interface SecurityNode {
   serverId: string;
   serverIdentityHash: string;
@@ -359,6 +367,95 @@ export class SecurityIntelligenceEngine {
         strict: simulatedAction === 'ALLOW' ? 'QUARANTINE' : simulatedAction,
         permissive: simulatedAction === 'BLOCK' ? 'SANITIZE' : simulatedAction,
       },
+    };
+  }
+
+  /**
+   * Delegates risk scoring to the proprietary Enterprise Intelligence Cloud API
+   * (hosted on Render/Cloud Run in the private mcp-shield-enterprise-intel service)
+   * Falls back seamlessly to deterministic local heuristic if unconfigured or offline.
+   */
+  public static async evaluateViaRemoteIntel(params: {
+    toolName: string;
+    serverFingerprint?: string;
+    astEntropy: number;
+    untrustedEgressRequested: boolean;
+    toolCallFrequencyInWindow?: number;
+    credentialCanaryHits?: number;
+    unverifiedBinaryDrift?: boolean;
+    recentAnomalySequences?: string[];
+    apiKey?: string;
+    endpointUrl?: string;
+  }): Promise<RemoteIntelEvaluationResult> {
+    const apiKey = params.apiKey || process.env.MCP_SHIELD_API_KEY;
+    const endpoint =
+      params.endpointUrl ||
+      process.env.ENTERPRISE_INTEL_ENDPOINT ||
+      'https://mcp-shield-enterprise-intel.onrender.com';
+
+    if (apiKey && apiKey.startsWith('mcpshld_live_')) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1200); // 1.2s bounded timeout
+
+        const response = await fetch(`${endpoint}/api/v1/intel/scoring`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            toolName: params.toolName,
+            serverFingerprint: params.serverFingerprint,
+            astEntropy: params.astEntropy,
+            untrustedEgressRequested: params.untrustedEgressRequested,
+            toolCallFrequencyInWindow: params.toolCallFrequencyInWindow || 1,
+            credentialCanaryHits: params.credentialCanaryHits || 0,
+            unverifiedBinaryDrift: params.unverifiedBinaryDrift || false,
+            recentAnomalySequences: params.recentAnomalySequences || [],
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (response.ok) {
+          const json = await response.json();
+          if (json.data && typeof json.data.riskScore === 'number') {
+            return {
+              riskScore: json.data.riskScore,
+              verdict: json.data.verdict,
+              reasoningVector: json.data.reasoningVector || [],
+              recommendedAction: json.data.recommendedAction || 'Enforce cloud policy',
+              source: 'REMOTE_ENTERPRISE_INTEL',
+            };
+          }
+        }
+      } catch {
+        // Fall through to local fallback on network error or timeout
+      }
+    }
+
+    // Local deterministic fallback
+    const localScore = this.calculateRiskScore({
+      serverId: params.serverFingerprint || 'local',
+      toolName: params.toolName,
+      actionType: 'local_eval',
+      payloadSnippet: params.untrustedEgressRequested ? 'https://untrusted-host' : undefined,
+    });
+
+    let verdict: RemoteIntelEvaluationResult['verdict'] = 'ALLOW';
+    if (localScore.compositeScore >= 80) verdict = 'BLOCK';
+    else if (localScore.compositeScore >= 60) verdict = 'QUARANTINE';
+    else if (localScore.compositeScore >= 40) verdict = 'CHALLENGE';
+    else if (localScore.compositeScore >= 20) verdict = 'MONITOR';
+
+    return {
+      riskScore: localScore.compositeScore,
+      verdict,
+      reasoningVector: localScore.rationale,
+      recommendedAction: 'Local policy evaluation',
+      source: 'LOCAL_FALLBACK',
     };
   }
 }
