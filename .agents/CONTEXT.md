@@ -85,5 +85,16 @@
   - Multi-source analytics API (`/api/v1/admin/analytics`).
   - Middleware route guards: `/console/system-admin` → master admin only, `/console/admin` → enterprise + master.
   - Removed GitHub 1-year account age check from license API.
-  - Published `mcpshld@1.0.14` to npm.
-  - Pushed to GitHub with PR #17 and Vercel preview deployment verified `READY`.
+- Step 10 VRIO AI Agent Runtime Security Platform Milestone:
+  - Step 1: Formal MCP protocol state machine (`src/core/mcp-protocol-state-machine.ts`) with fail-closed envelopes and initialize cancellation rejection.
+  - Step 2: Proprietary Agent Attack Corpus (`src/security/attack-corpus.ts`) across 7 categories with complete reasoning chains and `mcp-shield attack-corpus` CLI.
+  - Step 3: Security Intelligence Engine (`src/security/intelligence-engine.ts`) with unified capability graph, explainable risk scoring, and policy simulation.
+  - Step 4: Standardized Security Benchmark (`benchmarks/mcp-security-benchmark.ts`) yielding 100/100 score and `mcp-shield benchmark` CLI.
+  - Step 5: Multi-factor server identity fingerprinting, runtime drift detection (binary/schema/deps), and reputation graph (`src/security/server-identity.ts`).
+  - Step 6: Ecosystem distribution auto-discovery covering Claude, Cursor, Windsurf, Cline, Zed, and Roo Code (`src/cli/commands/protect.ts`).
+  - Step 7: Centralized Enterprise Control Plane APIs (`/api/v1/control-plane/policies`, `simulate`, `provenance`, `runtime`).
+  - Step 8: IP Architecture & Trade Secret specification (`docs/IP_ARCHITECTURE.md`) with patent disclosure for Bijective Safe Secret Restoration.
+  - Step 9: Independent trust verification suite (`scripts/verify-security-invariants.ts`) and reproducible test harness.
+  - Step 10: Protocol-agnostic AI Agent Runtime Security Platform (`src/core/ai-runtime-security.ts`) & Console UI (`/console/ai-runtime`) for MCP, Coding Agents, Browser Agents, and Multi-Agent Swarms.
+  - 42/42 test suites passing (691 tests).
+  - Published `mcpshld@1.0.15` to npm.
