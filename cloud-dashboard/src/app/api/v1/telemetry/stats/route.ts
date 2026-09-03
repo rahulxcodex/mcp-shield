@@ -75,6 +75,17 @@ export async function GET() {
 
         const { data: events, error } = await dbQuery;
 
+        // Check active agent instances for genuine live connection status
+        const sixtySecondsAgo = new Date(Date.now() - 60 * 1000).toISOString();
+        const { data: activeAgents } = await adminSupabase
+          .from('agent_instances')
+          .select('id, last_heartbeat_at')
+          .in('project_id', projectIds)
+          .gte('last_heartbeat_at', sixtySecondsAgo)
+          .limit(1);
+
+        const isLiveConnected = Boolean(activeAgents && activeAgents.length > 0);
+
         if (!error && events && events.length > 0) {
           let attacksNeutralized = 0;
           let secretsTokenized = 0;
@@ -86,6 +97,7 @@ export async function GET() {
           let dlpCount = 0;
           let canaryCount = 0;
           let rateCount = 0;
+          let promptCount = 0;
 
           // Hourly distribution buckets
           const buckets: Record<string, { allowed: number; threats: number }> = {
@@ -99,14 +111,16 @@ export async function GET() {
           };
 
           for (const ev of events) {
-            const isThreat = ev.event_type === 'BLOCK' || ev.event_type === 'QUARANTINE' || ev.event_type === 'RATE_LIMIT';
+            const isThreat = ev.event_type === 'BLOCK' || ev.event_type === 'QUARANTINE' || ev.event_type === 'RATE_LIMIT' || ev.event_type === 'PROMPT';
             const isDlp = ev.event_type === 'SANITIZE';
 
             if (isThreat) attacksNeutralized++;
             if (isDlp) secretsTokenized++;
 
             const detector = (ev.detector || '').toLowerCase();
-            if (detector.includes('ast') || detector.includes('tree-sitter') || detector.includes('syntax')) {
+            if (ev.event_type === 'PROMPT' || detector.includes('prompt') || detector.includes('injection')) {
+              promptCount++;
+            } else if (detector.includes('ast') || detector.includes('tree-sitter') || detector.includes('syntax')) {
               astCount++;
             } else if (detector.includes('ssrf') || detector.includes('metadata') || detector.includes('imds')) {
               ssrfCount++;
@@ -114,7 +128,7 @@ export async function GET() {
               dlpCount++;
             } else if (detector.includes('canary') || detector.includes('honey')) {
               canaryCount++;
-            } else if (detector.includes('rate') || detector.includes('burst')) {
+            } else if (ev.event_type === 'RATE_LIMIT' || detector.includes('rate') || detector.includes('burst')) {
               rateCount++;
             } else {
               astCount++;
@@ -149,10 +163,12 @@ export async function GET() {
             { vector: 'DLP Redacted', count: dlpCount, color: '#22d3ee' },
             { vector: 'Canary Tripped', count: canaryCount, color: '#eab308' },
             { vector: 'Rate Exceeded', count: rateCount, color: '#a855f7' },
+            { vector: 'Prompt Defense', count: promptCount, color: '#ec4899' },
           ];
 
           return NextResponse.json({
-            live: true,
+            live: isLiveConnected,
+            agentConnected: isLiveConnected,
             summary: {
               attacksNeutralized,
               secretsTokenized,

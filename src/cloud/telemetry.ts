@@ -12,14 +12,20 @@ export interface TelemetryConfig {
 }
 
 export interface SecurityTelemetryPayload {
+  eventId?: string;
+  sequenceNumber?: number;
   sessionId: string;
-  eventType: 'BLOCK' | 'SANITIZE' | 'QUARANTINE' | 'RATE_LIMIT' | 'PROMPT' | 'PASSTHROUGH';
+  eventType: 'BLOCK' | 'SANITIZE' | 'QUARANTINE' | 'RATE_LIMIT' | 'PROMPT' | 'PASSTHROUGH' | 'ERROR';
   detector: string;
   riskLevel: 'BENIGN' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   toolName: string;
   reason: string;
   sanitizedPreview?: any;
   clientTimestamp: string;
+  installationId?: string;
+  environment?: string;
+  clientName?: string;
+  serverName?: string;
 }
 
 export class CloudTelemetryPublisher {
@@ -27,18 +33,29 @@ export class CloudTelemetryPublisher {
   private timer: NodeJS.Timeout | null = null;
   private config: TelemetryConfig;
   private configPath: string;
+  private spoolPath: string;
+  private installationId: string;
+  private sequenceCounter = 0;
+  private droppedEventsCount = 0;
+  private isShuttingDown = false;
 
   constructor(config?: Partial<TelemetryConfig>) {
-    this.configPath = path.resolve(os.homedir(), '.mcp-shield', 'cloud.json');
+    const baseDir = path.resolve(os.homedir(), '.mcp-shield');
+    this.configPath = path.resolve(baseDir, 'cloud.json');
+    this.spoolPath = path.resolve(baseDir, 'spool', 'telemetry.json');
+    this.installationId = this.loadOrCreateInstallationId(baseDir);
     const storedConfig = this.loadStoredConfig();
 
     this.config = {
       enabled: config?.enabled ?? storedConfig.enabled ?? !!process.env.MCP_SHIELD_API_KEY,
-      cloudEndpoint: config?.cloudEndpoint || process.env.MCP_SHIELD_CLOUD_URL || storedConfig.cloudEndpoint || 'https://mcp-shield-dashboard-d6jyrwkny-rahulsahgupta24-8925.vercel.app/api/v1/telemetry/ingest',
+      cloudEndpoint: config?.cloudEndpoint || process.env.MCP_SHIELD_CLOUD_URL || storedConfig.cloudEndpoint || 'https://cloud.mcp-shield.com/api/v1/telemetry/ingest',
       apiKey: config?.apiKey || process.env.MCP_SHIELD_API_KEY || storedConfig.apiKey,
       batchIntervalMs: config?.batchIntervalMs || 5000,
       maxBatchSize: config?.maxBatchSize || 50
     };
+
+    this.recoverSpool();
+    this.registerShutdownHooks();
 
     if (this.config.enabled && this.config.apiKey) {
       this.startBatchTimer();
@@ -71,14 +88,73 @@ export class CloudTelemetryPublisher {
     }
   }
 
+  private loadOrCreateInstallationId(baseDir: string): string {
+    try {
+      if (!fs.existsSync(baseDir)) {
+        fs.mkdirSync(baseDir, { recursive: true });
+      }
+      const idFile = path.resolve(baseDir, 'installation_id');
+      if (fs.existsSync(idFile)) {
+        const id = fs.readFileSync(idFile, 'utf8').trim();
+        if (id) return id;
+      }
+      const newId = `inst_${crypto.randomBytes(8).toString('hex')}`;
+      fs.writeFileSync(idFile, newId, 'utf8');
+      return newId;
+    } catch {
+      return `inst_ephemeral_${crypto.randomBytes(4).toString('hex')}`;
+    }
+  }
+
+  public getInstallationId(): string {
+    return this.installationId;
+  }
+
   public trackEvent(event: SecurityTelemetryPayload): void {
     if (!this.config.enabled || !this.config.apiKey) {
       return;
     }
 
-    this.queue.push(event);
+    this.sequenceCounter += 1;
+    const sanitizedEvent: SecurityTelemetryPayload = {
+      ...event,
+      eventId: event.eventId || `evt_${this.installationId}_${Date.now()}_${this.sequenceCounter}`,
+      sequenceNumber: event.sequenceNumber ?? this.sequenceCounter,
+      installationId: this.installationId,
+      environment: event.environment || process.env.MCP_SHIELD_ENV || 'production',
+      toolName: CloudTelemetryPublisher.redactSensitiveData(event.toolName || 'unknown'),
+      reason: CloudTelemetryPublisher.redactSensitiveData(event.reason || 'Security policy evaluation'),
+      sanitizedPreview: event.sanitizedPreview ? CloudTelemetryPublisher.sanitizePreviewPayload(event.sanitizedPreview) : undefined
+    };
+
+    this.queue.push(sanitizedEvent);
     if (this.queue.length >= (this.config.maxBatchSize || 50)) {
-      this.flush();
+      this.flush().catch(() => {});
+    }
+  }
+
+  public static redactSensitiveData(input: string): string {
+    if (!input || typeof input !== 'string') return input;
+    let text = input;
+    // Redact Bearer / API keys
+    text = text.replace(/([A-Za-z0-9_-]{20,})/g, (match) => {
+      if (match.startsWith('mcp_live_') || match.startsWith('sk-') || match.startsWith('ghp_') || match.length >= 32) {
+        return match.substring(0, 8) + '...[REDACTED]';
+      }
+      return match;
+    });
+    // Redact absolute local user directories
+    text = text.replace(/(?:\/Users\/|[a-zA-Z]:\\Users\\)[^\\/\s"']+/g, '<USER_DIR>');
+    return text;
+  }
+
+  public static sanitizePreviewPayload(payload: any): any {
+    try {
+      const str = JSON.stringify(payload);
+      const redacted = CloudTelemetryPublisher.redactSensitiveData(str);
+      return JSON.parse(redacted);
+    } catch {
+      return { sanitized: true, preview: '[REDACTED_PREVIEW]' };
     }
   }
 
@@ -88,14 +164,69 @@ export class CloudTelemetryPublisher {
 
   public static extractKeyPrefix(apiKey: string): string {
     if (!apiKey) return '';
-    const parts = apiKey.split('_');
-    if (apiKey.startsWith('mcp_live_') && !apiKey.startsWith('mcp_live_sec_') && parts.length >= 3) {
+    const trimmed = apiKey.trim();
+    const match = trimmed.match(/^(mcp_live(?:_sec)?_[a-f0-9]{8})_[a-f0-9]{32}$/i);
+    if (match) {
+      return match[1];
+    }
+    const prefixMatch = trimmed.match(/^(mcp_live(?:_sec)?_[a-f0-9]{8})/i);
+    if (prefixMatch) {
+      return prefixMatch[1];
+    }
+    const parts = trimmed.split('_');
+    if (trimmed.startsWith('mcp_live_') && !trimmed.startsWith('mcp_live_sec_') && parts.length >= 3) {
       return parts.slice(0, 3).join('_');
     }
-    if (apiKey.startsWith('mcp_live_sec_') && parts.length >= 4) {
+    if (trimmed.startsWith('mcp_live_sec_') && parts.length >= 4) {
       return parts.slice(0, 4).join('_');
     }
-    return apiKey.substring(0, Math.min(apiKey.length, 20));
+    return trimmed.substring(0, Math.min(trimmed.length, 20));
+  }
+
+  private recoverSpool(): void {
+    try {
+      if (fs.existsSync(this.spoolPath)) {
+        const data = fs.readFileSync(this.spoolPath, 'utf8');
+        const spooled = JSON.parse(data);
+        if (Array.isArray(spooled) && spooled.length > 0) {
+          // Take at most 100 spooled events to prevent sudden huge bursts
+          const toRecover = spooled.slice(-100);
+          this.queue.push(...toRecover);
+          const remaining = spooled.slice(0, -100);
+          if (remaining.length > 0) {
+            fs.writeFileSync(this.spoolPath, JSON.stringify(remaining), 'utf8');
+          } else {
+            fs.unlinkSync(this.spoolPath);
+          }
+        }
+      }
+    } catch {
+      // Non-blocking spool recovery
+    }
+  }
+
+  private persistSpool(events: SecurityTelemetryPayload[]): void {
+    try {
+      const dir = path.dirname(this.spoolPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      let existing: SecurityTelemetryPayload[] = [];
+      if (fs.existsSync(this.spoolPath)) {
+        try {
+          existing = JSON.parse(fs.readFileSync(this.spoolPath, 'utf8'));
+        } catch {}
+      }
+      const combined = [...existing, ...events];
+      const maxSpoolLimit = 5000;
+      if (combined.length > maxSpoolLimit) {
+        this.droppedEventsCount += combined.length - maxSpoolLimit;
+        combined.splice(0, combined.length - maxSpoolLimit);
+      }
+      fs.writeFileSync(this.spoolPath, JSON.stringify(combined), 'utf8');
+    } catch {
+      // Non-blocking spool persistence
+    }
   }
 
   public async flush(): Promise<boolean> {
@@ -108,6 +239,14 @@ export class CloudTelemetryPublisher {
 
     const timestamp = Date.now();
     const payloadStr = JSON.stringify({
+      schemaVersion: 1,
+      clientVersion: '1.0.12',
+      eventVersion: 1,
+      installation: {
+        installationId: this.installationId,
+        environment: process.env.MCP_SHIELD_ENV || 'production',
+        droppedEvents: this.droppedEventsCount
+      },
       device: {
         hostname: os.hostname(),
         platform: os.platform(),
@@ -132,15 +271,33 @@ export class CloudTelemetryPublisher {
           },
           body: payloadStr
         });
-        return res.ok;
+        if (res.ok) {
+          return true;
+        }
       }
     } catch {
-      // Re-queue events on network failure (fallback buffer)
-      this.queue.unshift(...batch.slice(0, 100));
-      return false;
+      // Network failure
     }
 
-    return true;
+    // Persist to local disk spool on failure
+    this.persistSpool(batch);
+    return false;
+  }
+
+  private registerShutdownHooks(): void {
+    const handleExit = () => {
+      if (this.isShuttingDown) return;
+      this.isShuttingDown = true;
+      this.stop();
+      if (this.queue.length > 0) {
+        this.persistSpool(this.queue);
+        this.queue = [];
+      }
+    };
+
+    process.once('beforeExit', handleExit);
+    process.once('SIGINT', handleExit);
+    process.once('SIGTERM', handleExit);
   }
 
   private startBatchTimer(): void {

@@ -1,4 +1,4 @@
-﻿# MCP Shield - Project Context
+# MCP Shield - Project Context
 
 ## Project Architecture
 - Core: Zero-Trust Security Gateway, AST Firewall & Bijective DLP Sanitizer for Model Context Protocol (MCP).
@@ -27,9 +27,16 @@
 - Compliance & Trust Center:
   - `/compliance`: SOC 2 Type II audit-evidence export, Zero Customer Payload Storage guarantee, encryption specs, data residency.
   - `/privacy`, `/terms`, `/security`, `/subprocessors`: Complete legal and security disclosure framework.
-- Security Invariants (14/14):
-  - SHA-256 hashed secret keys, constant-time HMAC comparison, rate-limiting, payment idempotency, CSRF protection, and fail-closed evaluation.
+- Security Invariants & Cross-System Hardening:
+  - Canonical ApiKey contract shared across CLI, Next.js API, and Database.
+  - Zero development fallback in production mode; strict HMAC & SHA-256 validation.
+  - CLI `link` performs signed cryptographic handshake with `/api/v1/telemetry/verify` before confirming pairing.
+  - Telemetry strictly decoupled from MCP hot path with durable local disk spool (`~/.mcp-shield/spool/`), backpressure cap, and graceful shutdown flushing.
+  - Complete multi-tenant runtime identity (`installation_id`, `environment`, `sequence_number`, `eventId` deduplication).
+  - Pre-serialization telemetry sanitization scrubbing filesystem paths and credentials.
+  - Synchronized event taxonomy: BLOCK, SANITIZE, QUARANTINE, RATE_LIMIT, PASSTHROUGH, PROMPT, ERROR across UI, API, DB.
 - Verification & Deployment:
-  - 40/40 test suites passed (671/671 unit & integration tests).
-  - 32/32 Next.js production routes compiled cleanly.
-  - Published to npm (`mcpshld@1.0.11`) and deployed to GitHub & Vercel.
+  - 41/41 test suites passed (680/680 unit & integration tests).
+  - 33/33 Next.js production routes compiled cleanly.
+  - Packaged as `mcpshld@1.0.12`.
+

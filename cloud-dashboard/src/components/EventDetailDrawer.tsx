@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { 
@@ -22,8 +22,9 @@ export interface ThreatEvent {
   timestamp: string;
   source: string;
   category: string;
-  action: "BLOCKED" | "SANITIZED" | "ALLOWED" | "QUARANTINED";
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  action: "BLOCKED" | "SANITIZED" | "ALLOWED" | "QUARANTINED" | "RATE_LIMITED";
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "BENIGN";
+
   details: string;
   rawPayload?: string;
   status?: "OPEN" | "IN_REVIEW" | "RESOLVED";
