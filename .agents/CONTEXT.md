@@ -86,15 +86,16 @@
   - Middleware route guards: `/console/system-admin` → master admin only, `/console/admin` → enterprise + master.
   - Removed GitHub 1-year account age check from license API.
 - Step 10 VRIO AI Agent Runtime Security Platform Milestone:
-  - Step 1: Formal MCP protocol state machine (`src/core/mcp-protocol-state-machine.ts`) with fail-closed envelopes and initialize cancellation rejection.
-  - Step 2: Proprietary Agent Attack Corpus (`src/security/attack-corpus.ts`) across 7 categories with complete reasoning chains and `mcp-shield attack-corpus` CLI.
-  - Step 3: Security Intelligence Engine (`src/security/intelligence-engine.ts`) with unified capability graph, explainable risk scoring, and policy simulation.
-  - Step 4: Standardized Security Benchmark (`benchmarks/mcp-security-benchmark.ts`) yielding 100/100 score and `mcp-shield benchmark` CLI.
+  - Step 1: Formal MCP protocol state machine (`src/core/mcp-protocol-state-machine.ts`) with fail-closed envelopes, JSON-RPC 2.0 version validation, and handshake replay rejection.
+  - Step 2: Proprietary Agent Attack Corpus (`src/security/attack-corpus.ts`) expanded across 7 categories with `ATK-PROMPT-003`, `ATK-ABUSE-002`, and `ATK-ABUSE-003`.
+  - Step 3: Security Intelligence Engine (`src/security/intelligence-engine.ts`) with non-linear compounding risk scores and stateful n-gram sequence anomaly detection (`evaluateNGramAnomaly`).
+  - Step 4: Standardized Security Benchmark (`benchmarks/mcp-security-benchmark.ts`) yielding 100/100 score and verifiable badge generation (`SecurityComplianceHelper`).
   - Step 5: Multi-factor server identity fingerprinting, runtime drift detection (binary/schema/deps), and reputation graph (`src/security/server-identity.ts`).
-  - Step 6: Ecosystem distribution auto-discovery covering Claude, Cursor, Windsurf, Cline, Zed, and Roo Code (`src/cli/commands/protect.ts`).
+  - Step 6: Ecosystem distribution auto-discovery covering Claude, Cursor, Windsurf, Cline, Zed, Roo Code, and Goose.
   - Step 7: Centralized Enterprise Control Plane APIs (`/api/v1/control-plane/policies`, `simulate`, `provenance`, `runtime`).
-  - Step 8: IP Architecture & Trade Secret specification (`docs/IP_ARCHITECTURE.md`) with patent disclosure for Bijective Safe Secret Restoration.
-  - Step 9: Independent trust verification suite (`scripts/verify-security-invariants.ts`) and reproducible test harness.
-  - Step 10: Protocol-agnostic AI Agent Runtime Security Platform (`src/core/ai-runtime-security.ts`) & Console UI (`/console/ai-runtime`) for MCP, Coding Agents, Browser Agents, and Multi-Agent Swarms.
-  - 42/42 test suites passing (691 tests).
-  - Published `mcpshld@1.0.15` to npm.
+  - Step 8: Trade Secret Private Repo Boundary (`mcp-shield-enterprise-intel`) with authenticated `/api/v1/intel/*` endpoints shielding non-linear weights and reasoning trees.
+  - Step 9: Independent trust verification suite and reproducible invariant test harness.
+  - Step 10: Non-MCP AI Agent Runtime Security Platform (`src/core/ai-runtime-security.ts`) covering Aider, LangGraph, AutoGen, CrewAI, Coding Agents, and Multi-Agent Swarms.
+  - Patents: Strategic Patent Blueprint formulated in `docs/PATENT_STRATEGY.md` covering Bijective Safe Secret Restoration & Execution Boundary Isolation.
+  - Tests: 42/42 test suites passing (693/693 tests).
+  - Released `mcpshld@1.0.16` to npm.
