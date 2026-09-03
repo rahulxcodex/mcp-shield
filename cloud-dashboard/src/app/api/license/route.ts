@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import * as crypto from 'crypto';
 
-// The private key must be stored in a highly secure environment variable/KMS
-const PRIVATE_KEY = process.env.LICENSE_PRIVATE_KEY || `-----BEGIN PRIVATE KEY-----
+const getPrivateKey = () => {
+  const envKey = process.env.LICENSE_PRIVATE_KEY;
+  if (envKey) {
+    return envKey.replace(/\\n/g, '\n').trim();
+  }
+  return `-----BEGIN PRIVATE KEY-----
 MC4CAQAwBQYDK2VwBCIEIPDiiRpSCad7AEC3ne6CLtXEQZDgPnMMLiMDOBtIQHvI
 -----END PRIVATE KEY-----`;
+};
 
 export async function POST(req: Request) {
   try {
@@ -55,7 +60,7 @@ export async function POST(req: Request) {
     const b64Payload = Buffer.from(payloadString).toString('base64');
 
     // 4. Sign with Ed25519 (Military Grade Elliptic Curve)
-    const signature = crypto.sign(null, Buffer.from(payloadString), PRIVATE_KEY);
+    const signature = crypto.sign(null, Buffer.from(payloadString), getPrivateKey());
     const b64Signature = signature.toString('base64');
 
     // 5. Construct final license key

@@ -4,9 +4,20 @@ import * as path from 'path';
 
 export class LicenseManager {
   // Ed25519 Public Key hardcoded in the enterprise binary for verification
-  private readonly publicKey = `-----BEGIN PUBLIC KEY-----
+  private readonly defaultPublicKey = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
 -----END PUBLIC KEY-----`;
+
+  /**
+   * Retrieves the normalized Ed25519 public key, supporting environment override.
+   */
+  public getPublicKey(): string {
+    const envKey = process.env.MCP_SHIELD_PUBLIC_KEY || process.env.LICENSE_PUBLIC_KEY || process.env.NEXT_PUBLIC_LICENSE_PUBLIC_KEY;
+    if (envKey) {
+      return envKey.replace(/\\n/g, '\n').trim();
+    }
+    return this.defaultPublicKey;
+  }
 
   /**
    * Verifies the cryptographic authenticity of the MCP Shield product key.
@@ -27,7 +38,7 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
       const isVerified = crypto.verify(
         null,
         Buffer.from(payload),
-        this.publicKey,
+        this.getPublicKey(),
         signature
       );
 
