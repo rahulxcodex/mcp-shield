@@ -138,7 +138,7 @@ export default function ConsolePage() {
     {
       id: 'key-dev-101',
       name: 'Claude Desktop Agent',
-      keyPrefix: 'mcp_live_sec_89b21a',
+      keyPrefix: 'mcp_live_89b21a01',
       createdAt: '2026-09-01',
       lastUsedAt: '2 mins ago',
       status: 'active'
@@ -159,17 +159,20 @@ export default function ConsolePage() {
   });
 
   const handleGenerateKey = async () => {
-    const rawRandom = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    const prefixId = Array.from(crypto.getRandomValues(new Uint8Array(4)))
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
-    const fullSecret = `mcp_live_sec_${rawRandom}`;
-    const prefix = fullSecret.substring(0, 16);
+    const keyPrefix = `mcp_live_${prefixId}`;
+    const secretEntropy = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    const fullSecret = `${keyPrefix}_${secretEntropy}`;
     const assignedName = (newKeyName.trim() || 'Production MCP Gateway') + ` (${newKeyClient})`;
 
     const newKey: ApiKeyEntry = {
       id: `key-${Date.now()}`,
       name: assignedName,
-      keyPrefix: prefix,
+      keyPrefix: keyPrefix,
       apiKey: fullSecret,
       createdAt: 'Just now',
       lastUsedAt: 'Never',
@@ -294,6 +297,15 @@ export default function ConsolePage() {
               <Download className="w-3.5 h-3.5" />
               <span>Export SOC2 Log</span>
             </button>
+
+            {/* User Guide link */}
+            <Link
+              href="/guide"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-semibold transition border border-slate-700"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">User Guide & Master Key</span>
+            </Link>
 
             <Link href="/" className="text-slate-400 hover:text-white transition p-1.5" title="Back to Website">
               <ArrowLeft className="w-4 h-4" />

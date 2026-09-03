@@ -20,10 +20,11 @@ export async function POST(req: Request) {
 
     if (projErr) throw projErr;
 
-    // 2. Generate a secure API Key
-    const rawKey = crypto.randomBytes(32).toString('hex');
-    const apiKey = `mcp_live_${rawKey}`;
-    const keyPrefix = apiKey.substring(0, 12);
+    // 2. Generate a secure API Key with unique lookup prefix
+    const prefixId = crypto.randomBytes(4).toString('hex');
+    const keyPrefix = `mcp_live_${prefixId}`;
+    const rawKey = crypto.randomBytes(24).toString('hex');
+    const apiKey = `${keyPrefix}_${rawKey}`;
     
     // In a real app, hash the full key, but for this demo, we store raw so CLI can use it via fallback if needed
     // Actually, backend verifyHmacSignature uses apiKeyData.key (so we need to store the raw key in `key` column for this demo)

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -35,6 +35,9 @@ export default function LandingNavbar() {
             <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/30">INTERACTIVE</span>
           </a>
           <a href="#install" className="hover:text-emerald-400 transition">Installation</a>
+          <Link href="/guide" className="hover:text-emerald-400 text-emerald-400/90 transition flex items-center gap-1 font-semibold">
+            <span>User Guide</span>
+          </Link>
           <a href="#benchmarks" className="hover:text-emerald-400 transition">Benchmarks</a>
           <a href="#faq" className="hover:text-emerald-400 transition">FAQ</a>
         </nav>
@@ -111,6 +114,13 @@ export default function LandingNavbar() {
           >
             Installation Guides
           </a>
+          <Link
+            href="/guide"
+            onClick={() => setMobileOpen(false)}
+            className="block py-1 text-emerald-400 font-semibold"
+          >
+            User Guide (Complete Manual)
+          </Link>
           <a
             href="#benchmarks"
             onClick={() => setMobileOpen(false)}

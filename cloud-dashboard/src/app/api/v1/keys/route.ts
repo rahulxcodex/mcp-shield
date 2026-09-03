@@ -29,7 +29,7 @@ export async function GET() {
       {
         id: 'key-dev-101',
         name: 'Production Proxy (Default)',
-        key_prefix: 'mcp_live_sec_',
+        key_prefix: 'mcp_live_default01',
         created_at: new Date(Date.now() - 3600 * 1000 * 24 * 7).toISOString(),
         last_used_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
         status: 'active'
@@ -44,10 +44,11 @@ export async function POST(req: Request) {
     const keyName = body.name?.trim() || 'MCP Agent Token';
     const clientType = body.clientType || 'Generic MCP Client';
 
-    // Generate cryptographically secure API key
+    // Generate cryptographically secure API key with a unique lookup prefix
+    const prefixId = crypto.randomBytes(4).toString('hex'); // 8 unique hex characters
     const rawSecret = crypto.randomBytes(24).toString('hex');
-    const apiKey = `mcp_live_sec_${rawSecret}`;
-    const keyPrefix = apiKey.substring(0, 12);
+    const keyPrefix = `mcp_live_${prefixId}`;
+    const apiKey = `${keyPrefix}_${rawSecret}`;
     const keyId = `key_${crypto.randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
 

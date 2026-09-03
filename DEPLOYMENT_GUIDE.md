@@ -1,4 +1,4 @@
-﻿# Production Deployment & Setup Guide (100% Free Tier)
+# Production Deployment & Setup Guide (100% Free Tier)
 
 This guide provides step-by-step instructions to deploy the MCP Shield marketing website, the authenticated `/console` telemetry dashboard, and connect your local AI agents (Claude Desktop, Cursor, Antigravity) using exclusively free-tier services.
 
@@ -93,7 +93,12 @@ If you wish to host an independent cloud proxy or persistent container runner on
 
 Once your website is deployed (e.g. at `https://your-app.vercel.app`), connect your local agent:
 
-1. **Pair your local CLI**:
+1. **Activate Enterprise Master License**:
+   ```bash
+   mcp-shield license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY
+   ```
+
+2. **Pair your local CLI**:
    ```bash
    npx @rahulxcodex/mcp-shield link --url "https://your-app.vercel.app/api/v1/telemetry/ingest" --key "mcp_live_sec_89b21a"
    ```
