@@ -172,6 +172,11 @@ export function getDashboardHtml(token: string, port: number): string {
   <script>
     lucide.createIcons();
     const token = "${token}";
+    // Strip token from browser address bar immediately to prevent history/referrer leakage
+    if (window.history && window.history.replaceState && window.location.search.includes('token=')) {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
     const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     const wsUrl = wsProtocol + window.location.host + '/?token=' + token;
     let ws;

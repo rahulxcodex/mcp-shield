@@ -150,9 +150,42 @@ export class CloudTelemetryPublisher {
 
   public static sanitizePreviewPayload(payload: any): any {
     try {
-      const str = JSON.stringify(payload);
-      const redacted = CloudTelemetryPublisher.redactSensitiveData(str);
-      return JSON.parse(redacted);
+      if (payload === null || payload === undefined) return undefined;
+      
+      const scrubObject = (obj: any, depth = 0): any => {
+        if (depth > 4) return '[MAX_DEPTH]';
+        if (obj === null || obj === undefined) return obj;
+        if (typeof obj !== 'object') {
+          if (typeof obj === 'string') {
+            const redacted = CloudTelemetryPublisher.redactSensitiveData(obj);
+            return redacted.length > 256 ? redacted.substring(0, 256) + '...[TRUNCATED]' : redacted;
+          }
+          return obj;
+        }
+
+        if (Array.isArray(obj)) {
+          return obj.slice(0, 10).map(item => scrubObject(item, depth + 1));
+        }
+
+        const cleanObj: Record<string, any> = {};
+        const sensitiveKeyRegex = /(password|secret|token|auth|key|credential|bearer|session|cookie)/i;
+        for (const [k, v] of Object.entries(obj)) {
+          if (sensitiveKeyRegex.test(k)) {
+            cleanObj[k] = '[REDACTED]';
+          } else {
+            cleanObj[k] = scrubObject(v, depth + 1);
+          }
+        }
+        return cleanObj;
+      };
+
+      const cleaned = scrubObject(payload);
+      let str = JSON.stringify(cleaned);
+      if (str.length > 512) {
+        str = str.substring(0, 512) + '...[TRUNCATED_SIZE]';
+        return { preview: str, truncated: true };
+      }
+      return JSON.parse(str);
     } catch {
       return { sanitized: true, preview: '[REDACTED_PREVIEW]' };
     }

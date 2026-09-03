@@ -313,13 +313,20 @@ export class PolicyEngine {
       const rule = compiled.rule;
       let isTarget = false;
 
-      // Check tool names via precompiled regexes
-      if (compiled.toolMatchers) {
-        isTarget = compiled.toolMatchers.some(regex => regex.test(context.toolName));
-      } else if (rule.targetCapabilities && context.capabilities) {
-        // Check capabilities if targetTools is omitted
-        isTarget = rule.targetCapabilities.some(c => context.capabilities?.includes(c));
-      } else if (!rule.targetTools && !rule.targetCapabilities) {
+      // Check tool names and capabilities
+      const hasTools = !!compiled.toolMatchers && compiled.toolMatchers.length > 0;
+      const hasCaps = !!rule.targetCapabilities && rule.targetCapabilities.length > 0;
+
+      if (hasTools && hasCaps) {
+        // Both specified: Conjunction required
+        const matchesTool = compiled.toolMatchers!.some(regex => regex.test(context.toolName));
+        const matchesCap = !!context.capabilities && rule.targetCapabilities!.some(c => context.capabilities?.includes(c));
+        isTarget = matchesTool && matchesCap;
+      } else if (hasTools) {
+        isTarget = compiled.toolMatchers!.some(regex => regex.test(context.toolName));
+      } else if (hasCaps) {
+        isTarget = !!context.capabilities && rule.targetCapabilities!.some(c => context.capabilities?.includes(c));
+      } else {
         // Catch-all rule if both matchers are omitted
         isTarget = true;
       }
@@ -346,7 +353,16 @@ export class PolicyEngine {
           let pathMatched = false;
           for (const rawTarget of candidatePaths) {
             const normalizedTarget = this.normalizePathForMatching(rawTarget);
-            const isForbidden = compiled.pathMatchers.some(regex => regex.test(normalizedTarget));
+            let isForbidden = compiled.pathMatchers.some(regex => regex.test(normalizedTarget));
+            if (!isForbidden) {
+              // Also check resolved canonical path if target exists on filesystem
+              try {
+                if (fs.existsSync(rawTarget)) {
+                  const real = this.normalizePathForMatching(fs.realpathSync(rawTarget));
+                  isForbidden = compiled.pathMatchers.some(regex => regex.test(real));
+                }
+              } catch {}
+            }
             if (isForbidden) {
                pathMatched = true;
                reasonCode = 'PATH_FORBIDDEN';

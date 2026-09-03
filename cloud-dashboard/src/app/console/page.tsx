@@ -44,6 +44,8 @@ import SupportModal from '@/components/SupportModal';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import OnboardingWizard from '@/components/OnboardingWizard';
 import EventDetailDrawer, { ThreatEvent } from '@/components/EventDetailDrawer';
+import AccountDropdown from '@/components/AccountDropdown';
+import MoreDropdown from '@/components/MoreDropdown';
 import {
   AreaChart,
   Area,
@@ -454,15 +456,6 @@ export default function ConsolePage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Guided Onboarding Launch */}
-            <button
-              onClick={() => setIsOnboardingOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-semibold transition"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden md:inline">Onboarding Setup</span>
-            </button>
-
             {/* Connection health indicator & ticker */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs text-slate-300">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -479,63 +472,21 @@ export default function ConsolePage() {
               </button>
             </div>
 
-            {/* Simulate button */}
-            <button
-              onClick={handleSimulateBatch}
-              disabled={isSimulating}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition border border-slate-700"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSimulating ? 'animate-spin' : ''}`} />
-              <span className="hidden md:inline">Simulate Live Attack</span>
-            </button>
+            {/* More Dropdown — secondary actions */}
+            <MoreDropdown
+              onOpenOnboarding={() => setIsOnboardingOpen(true)}
+              onSimulateAttack={handleSimulateBatch}
+              isSimulating={isSimulating}
+              onExportSOC2={handleExportSOC2}
+              onOpenSupport={() => setIsSupportModalOpen(true)}
+            />
 
-            {/* Export SOC2 button */}
-            <button
-              onClick={handleExportSOC2}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold transition shadow-lg shadow-emerald-600/20"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export SOC2 Log</span>
-            </button>
-
-            {/* Billing / Upgrade */}
-            <Link
-              href="/settings/billing"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold transition border border-blue-500/30"
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">Plans & Quota</span>
-            </Link>
-
-            {/* Support / Complaint button */}
-            <button
-              onClick={() => setIsSupportModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition border border-slate-700"
-              title="Report Issue or FAQ Inquiry"
-            >
-              <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden md:inline">Feedback & Support</span>
-            </button>
-
-            {/* Theme Toggle */}
-            <ThemeToggle />
-
-            {/* Auth State: Show Sign Out ONLY if authenticated; show Demo mode badges & Sign In/Sign Up when in Demo mode */}
+            {/* Auth State */}
             {currentUser ? (
-              <div className="flex items-center gap-2">
-                <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-300">
-                  <User className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="max-w-[130px] truncate">{currentUser.email}</span>
-                </div>
-                <button
-                  onClick={handleSignOut}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/20 transition"
-                  title="Sign Out of Console"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Sign Out</span>
-                </button>
-              </div>
+              <AccountDropdown
+                user={currentUser}
+                onSignOut={handleSignOut}
+              />
             ) : (
               <div className="flex items-center gap-2">
                 <span className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold whitespace-nowrap">
@@ -557,10 +508,6 @@ export default function ConsolePage() {
                 </Link>
               </div>
             )}
-
-            <Link href="/" className="text-slate-400 hover:text-white transition p-1.5" title="Back to Website">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
           </div>
         </div>
       </header>

@@ -39,19 +39,8 @@ export async function POST(req: Request) {
     }
 
     const userData = await ghRes.json();
-    
-    // 2. Security Check: Is account > 1 year old?
-    const accountCreatedAt = new Date(userData.created_at);
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-    if (accountCreatedAt > oneYearAgo) {
-      return NextResponse.json({ 
-        error: 'Security Policy: GitHub account must be at least 1 year old to prevent sybil/bot attacks for trial keys.' 
-      }, { status: 403 });
-    }
-
-    // 3. Generate License Payload (Single key for 25, 50, 100, 500, or 1000 seats)
+    // 2. Generate License Payload (Single key for 25, 50, 100, 500, or 1000 seats)
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + 1);
 

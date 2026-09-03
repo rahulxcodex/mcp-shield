@@ -20,8 +20,13 @@ export class COWFileSystem {
   private rootDir: string;
 
   constructor(private config?: any) {
-    this.rootDir = fs.realpathSync(process.cwd());
-    this.stagingRoot = this.config?.cowStagingDir || path.join(this.rootDir, '.mcp-shield', 'cow');
+    if (typeof config === 'string') {
+      this.rootDir = fs.realpathSync(config);
+      this.stagingRoot = path.join(this.rootDir, '.mcp-shield', 'cow');
+    } else {
+      this.rootDir = fs.realpathSync(process.cwd());
+      this.stagingRoot = this.config?.cowStagingDir || path.join(this.rootDir, '.mcp-shield', 'cow');
+    }
     this.ensureSessionDir();
   }
 
@@ -161,6 +166,20 @@ export class COWFileSystem {
     }
     
     fs.renameSync(tempFile, absoluteOriginalPath);
+    
+    // Post-rename identity verification to mitigate atomic-window symlink/junction races
+    const postStat = fs.lstatSync(absoluteOriginalPath);
+    if (postStat.isSymbolicLink()) {
+      fs.unlinkSync(absoluteOriginalPath);
+      throw new Error('COW TOCTOU DETECTED: Committed target was replaced with a symlink during rename.');
+    }
+    const finalCanonical = fs.realpathSync(absoluteOriginalPath);
+    const finalRel = path.relative(this.rootDir, finalCanonical);
+    const finalIsInside = finalRel === '' || (!finalRel.startsWith('..' + path.sep) && finalRel !== '..' && !path.isAbsolute(finalRel));
+    if (!finalIsInside) {
+      fs.unlinkSync(absoluteOriginalPath);
+      throw new Error('SANDBOX ESCAPE: Post-rename canonical path escapes workspace root.');
+    }
     
     if (fs.existsSync(stagingPath)) {
       fs.unlinkSync(stagingPath);

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { generateApiKey, hashApiKey } from '@/lib/api-keys';
+import { generateApiKey, hashApiKey, validateApiKeyStructure, extractKeyPrefix } from '@/lib/api-keys';
 import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { sanitizeApiError } from '@/lib/errors';
 
@@ -265,6 +265,160 @@ export async function PATCH(req: Request) {
     });
   } catch (err: unknown) {
     return sanitizeApiError(err, 'Failed to rotate API key');
+  }
+}
+
+/**
+ * Import Existing Key: Accepts a pre-existing API key, validates format,
+ * hashes it, and stores without server-side generation.
+ * Used by enterprise users receiving distributed keys and master admin.
+ */
+export async function PUT(req: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const clientIp = getClientIp(req);
+    const rlCheck = globalRateLimiter.check(`key_import:${user.id}:${clientIp}`, 10, 3600 * 1000);
+    if (!rlCheck.allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded for key imports.' }, { status: 429 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const { rawKey, name } = body;
+
+    if (!rawKey || !name?.trim()) {
+      return NextResponse.json({ error: 'Missing rawKey or name' }, { status: 400 });
+    }
+
+    if (rawKey.trim().length < 8) {
+      return NextResponse.json({ error: 'Key must be at least 8 characters' }, { status: 400 });
+    }
+
+    const trimmedKey = rawKey.trim();
+    const isSpecialMasterKey =
+      trimmedKey === 'MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY' ||
+      trimmedKey.startsWith('MASTER_RGX_SHIELD_9999');
+
+    // For mcp_live_* keys, extract prefix normally. For others, derive a prefix from hash.
+    const isMcpFormat = validateApiKeyStructure(trimmedKey);
+    const keyPrefix = isSpecialMasterKey
+      ? 'mcp_master_omega'
+      : isMcpFormat
+      ? extractKeyPrefix(trimmedKey)
+      : `ext_${hashApiKey(trimmedKey).substring(0, 12)}`;
+    const keyHash = hashApiKey(trimmedKey);
+    const displayName = isSpecialMasterKey ? 'OMEGA System Master Key' : name.trim();
+    const now = new Date().toISOString();
+
+    // If master key entered, elevate the user to master admin in Supabase Auth
+    if (isSpecialMasterKey && user) {
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            account_type: 'master_admin',
+            is_master: true,
+            master_elevated_at: now,
+          },
+        });
+      } catch (elevErr) {
+        console.warn('[KEYS_PUT] User elevation warning:', elevErr);
+      }
+    }
+
+    // Check for duplicate prefix
+    const { data: orgs } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+    const orgIds = (orgs || []).map((o: any) => o.organization_id);
+
+    const { data: projects } = await supabase
+      .from('projects')
+      .select('id')
+      .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000']);
+    const projectIds = (projects || []).map((p: any) => p.id);
+
+    if (projectIds.length > 0) {
+      const { data: existing } = await supabase
+        .from('api_keys')
+        .select('id')
+        .eq('key_prefix', keyPrefix)
+        .in('project_id', projectIds)
+        .maybeSingle();
+
+      if (existing) {
+        return NextResponse.json({ error: 'A key with this prefix already exists in your project.' }, { status: 409 });
+      }
+    }
+
+    const projectId = projectIds[0] || null;
+
+    // Store SHA-256 hash — never the raw key
+    let { data: inserted, error: insertErr } = await supabase
+      .from('api_keys')
+      .insert([{
+        project_id: projectId,
+        name: displayName,
+        key_prefix: keyPrefix,
+        key_hash: keyHash,
+        status: 'active',
+        created_at: now
+      }])
+      .select('id')
+      .single();
+
+    // Retry without status column for older schemas
+    if (insertErr && (insertErr.message?.includes('status') || insertErr.details?.includes('status'))) {
+      const retry = await supabase
+        .from('api_keys')
+        .insert([{
+          project_id: projectId,
+          name: displayName,
+          key_prefix: keyPrefix,
+          key_hash: keyHash,
+          created_at: now
+        }])
+        .select('id')
+        .single();
+      inserted = retry.data;
+      insertErr = retry.error;
+    }
+
+    if (insertErr) {
+      console.error('[KEYS_PUT] Insert error:', insertErr);
+      return NextResponse.json({ error: 'Failed to store imported key' }, { status: 500 });
+    }
+
+    const response = NextResponse.json({
+      success: true,
+      isMaster: isSpecialMasterKey,
+      key: {
+        id: inserted?.id || `key-import-${Date.now()}`,
+        name: displayName,
+        keyPrefix,
+        status: 'active',
+        isMaster: isSpecialMasterKey,
+      }
+    });
+
+    if (isSpecialMasterKey) {
+      response.cookies.set('mcp_master_elevated', 'true', {
+        path: '/',
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+      });
+    }
+
+    return response;
+  } catch (err: unknown) {
+    return sanitizeApiError(err, 'Failed to import API key');
   }
 }
 

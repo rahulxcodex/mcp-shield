@@ -18,21 +18,27 @@ describe('ProxyServer.buildSafeEnv() Invariant & Security Verification', () => {
       CI: 'true'
     };
 
-    const safe = ProxyServer.buildSafeEnv(mockEnv);
+    const safeDefault = ProxyServer.buildSafeEnv(mockEnv);
 
-    expect(safe.PATH).toBe('/usr/local/bin:/usr/bin:/bin');
-    expect(safe.HOME).toBe('/home/runner');
-    expect(safe.USER).toBe('runner');
-    expect(safe.LOGNAME).toBe('runner');
-    expect(safe.SHELL).toBe('/bin/bash');
-    expect(safe.PWD).toBe('/home/runner/work/mcp-shield');
-    expect(safe.TMPDIR).toBe('/tmp');
-    expect(safe.LANG).toBe('en_US.UTF-8');
-    expect(safe.LC_ALL).toBe('en_US.UTF-8');
-    expect(safe.NODE_PATH).toBe('/usr/local/lib/node_modules');
-    expect(safe.SSL_CERT_FILE).toBe('/etc/ssl/certs/ca-certificates.crt');
-    expect(safe.TERM).toBe('xterm-256color');
-    expect(safe.CI).toBe('true');
+    expect(safeDefault.PATH).toBe('/usr/local/bin:/usr/bin:/bin');
+    expect(safeDefault.HOME).toBe('/home/runner');
+    expect(safeDefault.USER).toBe('runner');
+    expect(safeDefault.LOGNAME).toBe('runner');
+    expect(safeDefault.SHELL).toBe('/bin/bash');
+    expect(safeDefault.PWD).toBe('/home/runner/work/mcp-shield');
+    expect(safeDefault.TMPDIR).toBe('/tmp');
+    expect(safeDefault.LANG).toBe('en_US.UTF-8');
+    expect(safeDefault.LC_ALL).toBe('en_US.UTF-8');
+    // By default, NODE_PATH and SSL_CERT_FILE are scrubbed to prevent runtime/trust hijacking
+    expect(safeDefault.NODE_PATH).toBeUndefined();
+    expect(safeDefault.SSL_CERT_FILE).toBeUndefined();
+    expect(safeDefault.TERM).toBe('xterm-256color');
+    expect(safeDefault.CI).toBe('true');
+
+    // When explicitly permitted, trust overrides are retained
+    const safeOverridden = ProxyServer.buildSafeEnv(mockEnv, { allowTrustOverrides: true });
+    expect(safeOverridden.NODE_PATH).toBe('/usr/local/lib/node_modules');
+    expect(safeOverridden.SSL_CERT_FILE).toBe('/etc/ssl/certs/ca-certificates.crt');
   });
 
   it('sets safe defaults for stdio buffering and character encoding', () => {
