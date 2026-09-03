@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+﻿# MCP Shield Cloud Console & Marketing Platform
 
-## Getting Started
+Production Next.js 16 web platform, interactive attack simulator, real-time threat telemetry console, and key pairing hub for Model Context Protocol (MCP) and AI Agents.
 
-First, run the development server:
+## Tech Stack
+- **Framework**: Next.js 16 (App Router), React 19, Tailwind CSS v4
+- **Visualizations**: Recharts dynamic area and bar charts
+- **Auth & Database**: Supabase SSR (`@supabase/ssr`), PostgreSQL RLS
+- **Billing**: Stripe subscription checkout & webhook integration
+- **Telemetry**: Real-time HMAC-SHA256 ingestion pipeline (`/api/v1/telemetry/ingest`)
 
+## Key Pages & Routes
+- `/`: Enterprise landing page, SEO metadata, interactive zero-day attack simulator, client setup tabs
+- `/console`: Authenticated real-time threat console, 24h evaluation timeline, vector breakdown, API key center
+- `/guide`: Complete user guide with master key activation, configuration snippets for Claude, Cursor, Antigravity, Cline, Windsurf
+- `/settings/billing`: Subscription plans, Pro upgrade, quota management
+- `/api/v1/telemetry/stats`: 24-hour timeline aggregations and attack vector categorization
+- `/api/v1/telemetry/events`: Paginated, filterable security events
+- `/api/v1/keys`: Cryptographically secure client API key generation with configurable expiration (30d, 60d, 90d, 1y)
+
+## Local Development
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
+Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Production Build
+```bash
+npm run build
+```

@@ -152,10 +152,10 @@ Install MCP-Shield globally or use it via `npx`:
 
 ```bash
 # Global installation via npm
-npm install -g mcp-shield
+npm install -g mcpshld
 
 # Or run directly with npx
-npx mcp-shield --help
+npx -y mcpshld --help
 ```
 
 ### 2. Auto-Discover & Protect Your IDEs (Dual-Mode)
@@ -184,12 +184,12 @@ mcp-shield wrap -- npx -y @modelcontextprotocol/server-filesystem /Users/dev/wor
 mcp-shield wrap -- python -m mcp_server_git
 ```
 
-### 4. Enterprise Master License Activation
+### 4. Enterprise License Activation
 
-Activate enterprise zero-trust guardrails and bypass trial restrictions using your master key:
+Activate enterprise zero-trust guardrails using your issued key:
 
 ```bash
-mcp-shield license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY
+mcp-shield license <YOUR_LICENSE_KEY>
 ```
 
 ---

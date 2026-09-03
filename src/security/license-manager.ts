@@ -4,9 +4,20 @@ import * as path from 'path';
 
 export class LicenseManager {
   // Ed25519 Public Key hardcoded in the enterprise binary for verification
-  private readonly publicKey = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAA1/j0J8fH8P2u7x2r0V7Xg9t0Yx1B9oN5h+T4L6M4=
+  private readonly defaultPublicKey = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
 -----END PUBLIC KEY-----`;
+
+  /**
+   * Retrieves the normalized Ed25519 public key, supporting environment override.
+   */
+  public getPublicKey(): string {
+    const envKey = process.env.MCP_SHIELD_PUBLIC_KEY || process.env.LICENSE_PUBLIC_KEY || process.env.NEXT_PUBLIC_LICENSE_PUBLIC_KEY;
+    if (envKey) {
+      return envKey.replace(/\\n/g, '\n').trim();
+    }
+    return this.defaultPublicKey;
+  }
 
   /**
    * Verifies the cryptographic authenticity of the MCP Shield product key.
@@ -27,7 +38,7 @@ MCowBQYDK2VwAyEAA1/j0J8fH8P2u7x2r0V7Xg9t0Yx1B9oN5h+T4L6M4=
       const isVerified = crypto.verify(
         null,
         Buffer.from(payload),
-        this.publicKey,
+        this.getPublicKey(),
         signature
       );
 
@@ -42,7 +53,9 @@ MCowBQYDK2VwAyEAA1/j0J8fH8P2u7x2r0V7Xg9t0Yx1B9oN5h+T4L6M4=
         throw new Error('Your MCP Shield trial/license has expired. Please purchase a new key.');
       }
 
-      console.log(`License Verified: Issued to ${licenseData.githubId} (Trial: ${licenseData.isTrial})`);
+      const seats = licenseData.seats || (licenseData.tier === 'enterprise' ? 25 : 1);
+      const tierDesc = licenseData.tier || (licenseData.isTrial ? 'Trial' : 'Production');
+      console.log(`License Verified: Issued to ${licenseData.githubId || 'Enterprise'} (${tierDesc}, ${seats} Seats)`);
       return true;
 
     } catch (error) {

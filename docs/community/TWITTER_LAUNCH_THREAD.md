@@ -97,7 +97,7 @@ Submit a reproducible PoC via our GitHub issue template and get permanently feat
 MCP-Shield is 100% free and open-source under MIT.
 
 ⭐️ Star the repo on GitHub: https://github.com/rahulxcodex/mcp-shield
-📦 Install via npm: `npm install -g mcp-shield`
+📦 Install via npm: `npm install -g mcpshld`
 
 Let's make autonomous AI agents safe for every developer machine. 🛡️ 10/10
 

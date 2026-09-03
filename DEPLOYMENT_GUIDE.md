@@ -93,22 +93,22 @@ If you wish to host an independent cloud proxy or persistent container runner on
 
 Once your website is deployed (e.g. at `https://your-app.vercel.app`), connect your local agent:
 
-1. **Activate Enterprise Master License**:
+1. **Activate Enterprise License**:
    ```bash
-   mcp-shield license MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY
+   mcpshld license <YOUR_LICENSE_KEY>
    ```
 
 2. **Pair your local CLI**:
    ```bash
-   npx @rahulxcodex/mcp-shield link --url "https://your-app.vercel.app/api/v1/telemetry/ingest" --key "mcp_live_sec_89b21a"
+   npx -y mcpshld link --url "https://your-app.vercel.app/api/v1/telemetry/ingest" --key "mcp_live_sec_89b21a"
    ```
 
-2. **Run a simulated attack batch to test live streaming**:
+3. **Run a simulated attack batch to test live streaming**:
    ```bash
    MCP_SHIELD_CLOUD_URL="https://your-app.vercel.app/api/v1/telemetry/ingest" npm run telemetry:demo
    ```
 
-3. **Configure Claude Desktop** (`claude_desktop_config.json`):
+4. **Configure Claude Desktop or Cursor** (`claude_desktop_config.json`):
    ```json
    {
      "mcpServers": {
@@ -116,18 +116,20 @@ Once your website is deployed (e.g. at `https://your-app.vercel.app`), connect y
          "command": "npx",
          "args": [
            "-y",
-           "@rahulxcodex/mcp-shield",
-           "proxy",
-           "--cloud-telemetry",
+           "mcpshld",
+           "wrap",
            "--",
            "npx",
            "-y",
            "@modelcontextprotocol/server-filesystem",
            "/Users/username/Desktop"
-         ]
+         ],
+         "env": {
+           "MCP_SHIELD_API_KEY": "mcp_live_YOUR_KEY_HERE"
+         }
        }
      }
    }
    ```
 
-4. Open `https://your-app.vercel.app/console` to watch all attacks, blocks, and DLP tokenizations stream live with sub-millisecond metrics!
+5. Open `https://your-app.vercel.app/console` to watch all attacks, blocks, and DLP tokenizations stream live with sub-millisecond metrics!

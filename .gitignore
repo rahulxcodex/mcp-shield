@@ -2,7 +2,9 @@ node_modules/
 dist/
 .mcp-shield/
 *.log
-.env
+.env*
+*.env
+vercel.env
 .DS_Store
 scratch/
 coverage/

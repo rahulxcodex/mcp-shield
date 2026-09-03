@@ -27,7 +27,9 @@ import {
   Trash2,
   Copy,
   Check,
-  X
+  X,
+  CreditCard,
+  LogOut
 } from 'lucide-react';
 import {
   AreaChart,
@@ -59,6 +61,7 @@ interface ApiKeyEntry {
   apiKey?: string;
   createdAt: string;
   lastUsedAt?: string;
+  expiresAt?: string | null;
   status: 'active' | 'revoked';
 }
 
@@ -158,6 +161,97 @@ export default function ConsolePage() {
     latency: '0.18ms',
   });
 
+  const [timelineData, setTimelineData] = useState(TIMELINE_DATA);
+  const [vectorData, setVectorData] = useState(VECTOR_DATA);
+  const [expiresInDays, setExpiresInDays] = useState<number>(30);
+  const [keySeats, setKeySeats] = useState<number>(25);
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [liveConnected, setLiveConnected] = useState(true);
+
+  const fetchTelemetry = async () => {
+    try {
+      const [statsRes, eventsRes, keysRes] = await Promise.all([
+        fetch('/api/v1/telemetry/stats'),
+        fetch(`/api/v1/telemetry/events?filter=${filterType}&query=${encodeURIComponent(searchQuery)}&limit=50`),
+        fetch('/api/v1/keys')
+      ]);
+
+      if (statsRes.ok) {
+        const data = await statsRes.json();
+        if (data?.timelineData) setTimelineData(data.timelineData);
+        if (data?.vectorData) setVectorData(data.vectorData);
+        if (data?.summary) {
+          setStats((prev) => ({
+            ...prev,
+            attacksNeutralized: data.summary.attacksNeutralized,
+            secretsTokenized: data.summary.secretsTokenized,
+            invocations: data.summary.invocations,
+            latency: `${data.summary.astLatencyMs}ms`
+          }));
+        }
+      }
+
+      if (eventsRes.ok) {
+        const data = await eventsRes.json();
+        if (data?.events && Array.isArray(data.events) && data.events.length > 0) {
+          setEvents(data.events);
+          if (data.live) setLiveConnected(true);
+        }
+      }
+
+      if (keysRes.ok) {
+        const data = await keysRes.json();
+        if (data?.keys && Array.isArray(data.keys)) {
+          setApiKeys(data.keys.map((k: any) => ({
+            id: k.id,
+            name: k.name,
+            keyPrefix: k.key_prefix,
+            apiKey: k.apiKey,
+            createdAt: k.created_at ? new Date(k.created_at).toLocaleDateString() : 'Active',
+            lastUsedAt: k.last_used_at ? 'Active' : 'Never',
+            expiresAt: k.expires_at,
+            status: k.status || 'active'
+          })));
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchTelemetry();
+    const timer = setInterval(fetchTelemetry, 8000);
+    return () => clearInterval(timer);
+  }, [filterType, searchQuery]);
+
+  const handleSignOut = async () => {
+    try {
+      const { createClient } = await import('@/utils/supabase/client');
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {}
+    window.location.href = '/login';
+  };
+
+  const handleUpgradePlan = async () => {
+    setIsUpgrading(true);
+    try {
+      const res = await fetch('/api/v1/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId: 'price_mcp_pro_monthly' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.url) {
+          window.location.href = data.url;
+        }
+      }
+    } catch {} finally {
+      setIsUpgrading(false);
+    }
+  };
+
   const handleGenerateKey = async () => {
     const prefixId = Array.from(crypto.getRandomValues(new Uint8Array(4)))
       .map((b) => b.toString(16).padStart(2, '0'))
@@ -168,6 +262,7 @@ export default function ConsolePage() {
       .join('');
     const fullSecret = `${keyPrefix}_${secretEntropy}`;
     const assignedName = (newKeyName.trim() || 'Production MCP Gateway') + ` (${newKeyClient})`;
+    const defaultExpiresAt = expiresInDays > 0 ? new Date(Date.now() + expiresInDays * 24 * 3600 * 1000).toISOString() : null;
 
     const newKey: ApiKeyEntry = {
       id: `key-${Date.now()}`,
@@ -176,6 +271,7 @@ export default function ConsolePage() {
       apiKey: fullSecret,
       createdAt: 'Just now',
       lastUsedAt: 'Never',
+      expiresAt: defaultExpiresAt,
       status: 'active',
     };
 
@@ -183,7 +279,7 @@ export default function ConsolePage() {
       const res = await fetch('/api/v1/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newKeyName, clientType: newKeyClient }),
+        body: JSON.stringify({ name: newKeyName, clientType: newKeyClient, expiresInDays, seats: keySeats }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -195,6 +291,7 @@ export default function ConsolePage() {
             apiKey: data.key.apiKey || fullSecret,
             createdAt: 'Just now',
             lastUsedAt: 'Never',
+            expiresAt: data.key.expires_at || defaultExpiresAt,
             status: 'active',
           };
           setApiKeys((prev) => [persistedKey, ...prev]);
@@ -279,12 +376,12 @@ export default function ConsolePage() {
                 <ShieldCheck className="w-5 h-5 text-black stroke-[2.5]" />
               </div>
               <div>
-                <div className="font-bold text-lg leading-tight flex items-center gap-2">
+                <h1 className="font-bold text-lg leading-tight flex items-center gap-2">
                   <span>MCP-SHIELD</span>
                   <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full font-mono font-medium">
                     CONSOLE
                   </span>
-                </div>
+                </h1>
                 <div className="text-[11px] text-slate-400">Zero-Trust Live Telemetry & Threat Center</div>
               </div>
             </Link>
@@ -316,6 +413,15 @@ export default function ConsolePage() {
               <span>Export SOC2 Log</span>
             </button>
 
+            {/* Billing / Upgrade */}
+            <Link
+              href="/settings/billing"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold transition border border-blue-500/30"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Plans & Quota</span>
+            </Link>
+
             {/* User Guide link */}
             <Link
               href="/guide"
@@ -324,6 +430,16 @@ export default function ConsolePage() {
               <Key className="w-3.5 h-3.5" />
               <span className="hidden md:inline">User Guide & Master Key</span>
             </Link>
+
+            {/* Sign Out button */}
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/20 transition"
+              title="Sign Out of Console"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Sign Out</span>
+            </button>
 
             <Link href="/" className="text-slate-400 hover:text-white transition p-1.5" title="Back to Website">
               <ArrowLeft className="w-4 h-4" />
@@ -400,7 +516,7 @@ export default function ConsolePage() {
 
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={TIMELINE_DATA}>
+                <AreaChart data={timelineData}>
                   <defs>
                     <linearGradient id="colorAllowed" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
@@ -440,7 +556,7 @@ export default function ConsolePage() {
 
               <div className="h-52 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={VECTOR_DATA} layout="vertical">
+                  <BarChart data={vectorData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                     <XAxis type="number" stroke="#64748b" fontSize={10} />
                     <YAxis dataKey="vector" type="category" stroke="#94a3b8" fontSize={10} width={90} />
@@ -613,8 +729,12 @@ export default function ConsolePage() {
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-slate-200">{k.name}</span>
-                      <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 rounded font-mono">
-                        {k.status.toUpperCase()}
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono border ${
+                        k.expiresAt && new Date(k.expiresAt).getTime() < Date.now()
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      }`}>
+                        {k.expiresAt && new Date(k.expiresAt).getTime() < Date.now() ? 'EXPIRED' : k.status.toUpperCase()}
                       </span>
                     </div>
 
@@ -623,7 +743,7 @@ export default function ConsolePage() {
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => {
-                            const cmd = `mcp-shield link --key ${k.apiKey || k.keyPrefix}`;
+                            const cmd = `mcpshld link --key ${k.apiKey || k.keyPrefix}`;
                             navigator.clipboard.writeText(cmd);
                             setCopiedKeyId(k.id);
                             setTimeout(() => setCopiedKeyId(null), 2000);
@@ -646,6 +766,11 @@ export default function ConsolePage() {
                         </button>
                       </div>
                     </div>
+
+                    <div className="text-[10px] text-slate-500 flex items-center justify-between">
+                      <span>{k.expiresAt ? (new Date(k.expiresAt).getTime() < Date.now() ? 'Trial Expired' : `Expires: ${new Date(k.expiresAt).toLocaleDateString()}`) : 'No Expiry'}</span>
+                      <Link href="/settings/billing" className="text-blue-400 hover:underline">Renew / Upgrade</Link>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -656,10 +781,10 @@ export default function ConsolePage() {
                   <Terminal className="w-3.5 h-3.5 text-slate-400" /> Quick CLI Pair Command
                 </div>
                 <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono text-emerald-300 flex items-center justify-between">
-                  <span className="truncate">mcp-shield link --key {apiKeys[0]?.keyPrefix || 'mcp_live_...'}</span>
+                  <span className="truncate">mcpshld link --key {apiKeys[0]?.keyPrefix || 'mcp_live_...'}</span>
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(`mcp-shield link --key ${apiKeys[0]?.apiKey || apiKeys[0]?.keyPrefix || 'mcp_live_sec_demo'}`);
+                      navigator.clipboard.writeText(`mcpshld link --key ${apiKeys[0]?.apiKey || apiKeys[0]?.keyPrefix || 'mcp_live_sec_demo'}`);
                       setCopiedKey(true);
                       setTimeout(() => setCopiedKey(false), 2000);
                     }}
@@ -738,6 +863,37 @@ export default function ConsolePage() {
                 </select>
               </div>
 
+              <div>
+                <label className="block text-slate-300 font-medium mb-1.5">Key Expiration Duration</label>
+                <select
+                  value={expiresInDays}
+                  onChange={(e) => setExpiresInDays(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500/60"
+                >
+                  <option value={30}>1 Month (Free Trial / 30 Days)</option>
+                  <option value={60}>60 Days (2 Months)</option>
+                  <option value={90}>90 Days (Quarterly Rotation)</option>
+                  <option value={365}>1 Year (Annual)</option>
+                  <option value={0}>Never Expire (Service Account)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1.5">Single Key Seat Capacity</label>
+                <select
+                  value={keySeats}
+                  onChange={(e) => setKeySeats(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500/60"
+                >
+                  <option value={1}>1 Seat (Personal Developer / Agent)</option>
+                  <option value={25}>25 Seats (Enterprise Team - Single Key)</option>
+                  <option value={50}>50 Seats (Enterprise Growth - Single Key)</option>
+                  <option value={100}>100 Seats (Enterprise Fleet - Single Key)</option>
+                  <option value={500}>500 Seats (Enterprise Scale - Single Key)</option>
+                  <option value={1000}>1,000 Seats (Global Enterprise - Single Key)</option>
+                </select>
+              </div>
+
               <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 text-[11px] space-y-1">
                 <div className="font-medium text-slate-300 flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Zero-Plaintext Transmission
@@ -808,10 +964,10 @@ export default function ConsolePage() {
               <div>
                 <div className="text-[11px] font-medium text-slate-400 mb-1">Terminal Pairing Command:</div>
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between font-mono text-xs text-slate-200">
-                  <span className="truncate mr-2">mcp-shield link --key {justCreatedKey}</span>
+                  <span className="truncate mr-2">mcpshld link --key {justCreatedKey}</span>
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(`mcp-shield link --key ${justCreatedKey}`);
+                      navigator.clipboard.writeText(`mcpshld link --key ${justCreatedKey}`);
                       setCopiedKey(true);
                       setTimeout(() => setCopiedKey(false), 2000);
                     }}

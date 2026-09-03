@@ -1,4 +1,4 @@
-﻿import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
@@ -15,6 +15,7 @@ export async function middleware(request: NextRequest) {
     pathname === '/robots.txt' ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth') ||
+    pathname.startsWith('/guide') ||
     pathname.startsWith('/api/v1/telemetry') ||
     request.nextUrl.searchParams.get('demo') === 'true'
   ) {

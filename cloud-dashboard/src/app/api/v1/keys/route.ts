@@ -27,7 +27,7 @@ export async function GET() {
 
       let query = supabase
         .from('api_keys')
-        .select('id, name, key_prefix, created_at, last_used_at');
+        .select('id, name, key_prefix, created_at, last_used_at, expires_at');
       
       if (projectIds.length > 0) {
         query = query.in('project_id', projectIds);
@@ -52,6 +52,7 @@ export async function GET() {
         key_prefix: 'mcp_live_default01',
         created_at: new Date(Date.now() - 3600 * 1000 * 24 * 7).toISOString(),
         last_used_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
+        expires_at: new Date(Date.now() + 3600 * 1000 * 24 * 90).toISOString(),
         status: 'active'
       }
     ]
@@ -63,6 +64,9 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const keyName = body.name?.trim() || 'MCP Agent Token';
     const clientType = body.clientType || 'Generic MCP Client';
+    const expiresInDays = body.expiresInDays !== undefined && body.expiresInDays !== null ? Number(body.expiresInDays) : 90;
+    const seats = body.seats !== undefined && body.seats !== null ? Number(body.seats) : 1;
+    const displayName = seats > 1 ? `${keyName} (${clientType} - ${seats} Seats Single Key)` : `${keyName} (${clientType})`;
 
     // Generate cryptographically secure API key with a unique lookup prefix
     const prefixId = crypto.randomBytes(4).toString('hex'); // 8 unique hex characters
@@ -71,6 +75,7 @@ export async function POST(req: Request) {
     const apiKey = `${keyPrefix}_${rawSecret}`;
     let keyId = `key_${crypto.randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
+    const expiresAt = expiresInDays > 0 ? new Date(Date.now() + expiresInDays * 24 * 3600 * 1000).toISOString() : null;
 
     try {
       const supabase = await createClient();
@@ -95,9 +100,10 @@ export async function POST(req: Request) {
 
         const { data: inserted } = await supabase.from('api_keys').insert([{
           project_id: projectId,
-          name: `${keyName} (${clientType})`,
+          name: displayName,
           key_prefix: keyPrefix,
           key_hash: apiKey,
+          expires_at: expiresAt,
           created_at: now
         }]).select('id').single();
 
@@ -113,10 +119,12 @@ export async function POST(req: Request) {
       success: true,
       key: {
         id: keyId,
-        name: `${keyName} (${clientType})`,
+        name: displayName,
         keyPrefix,
         apiKey,
         created_at: now,
+        expires_at: expiresAt,
+        seats,
         status: 'active'
       }
     });

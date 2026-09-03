@@ -26,17 +26,13 @@ export * from './dashboard/server';
 const args = process.argv.slice(2);
 const command = args[0];
 
-const bypassCommands = ['demo', 'install', 'license', 'enterprise'];
+const bypassCommands = ['demo', 'install', 'license', 'enterprise', 'link', 'wrap', 'protect', 'scan', 'fix', 'dashboard', 'stats', 'report', 'replay'];
 if (command && !bypassCommands.includes(command) && process.env.NODE_ENV !== 'test') {
   const licenseFile = path.join(os.homedir(), '.mcp-shield', 'license.key');
-  if (!fs.existsSync(licenseFile)) {
-    console.error('❌ Missing License Key. MCP Shield requires an active license.');
-    console.error('Please obtain a key from your enterprise control plane and run:');
-    console.error('  mcp-shield license <key>');
-    process.exit(1);
+  if (fs.existsSync(licenseFile)) {
+    const licenseManager = new LicenseManager();
+    licenseManager.verifyLicense(fs.readFileSync(licenseFile, 'utf8').trim());
   }
-  const licenseManager = new LicenseManager();
-  licenseManager.verifyLicense(fs.readFileSync(licenseFile, 'utf8').trim());
 }
 
 if (command === 'demo') {
@@ -68,14 +64,26 @@ if (command === 'demo') {
     console.error('Failed to start dashboard:', err);
     process.exit(1);
   });
-} else if (command === 'wrap' && args[1] === '--') {
-  const targetCmd = args[2];
-  const targetArgs = args.slice(3);
-  
-  if (!targetCmd) {
-    console.error('Usage: mcp-shield wrap -- <command> [args]');
+} else if (command === 'wrap') {
+  const dashDashIdx = args.indexOf('--');
+  if (dashDashIdx === -1 || !args[dashDashIdx + 1]) {
+    console.error('Usage: mcp-shield wrap [--key <api-key>] [--url <cloud-url>] -- <downstream-command> [args...]');
     process.exit(1);
   }
+
+  // Parse any pre-dash flags
+  for (let i = 1; i < dashDashIdx; i++) {
+    if (args[i] === '--key' && args[i + 1]) {
+      process.env.MCP_SHIELD_API_KEY = args[i + 1].trim();
+      i++;
+    } else if (args[i] === '--url' && args[i + 1]) {
+      process.env.MCP_SHIELD_CLOUD_URL = args[i + 1].trim();
+      i++;
+    }
+  }
+
+  const targetCmd = args[dashDashIdx + 1];
+  const targetArgs = args.slice(dashDashIdx + 2);
   
   // Start the proxy with the downstream MCP server
   const proxy = new ProxyServer(targetCmd, targetArgs, { enableDashboard: true });
