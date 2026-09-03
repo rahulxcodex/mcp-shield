@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
@@ -70,10 +70,14 @@ export async function POST(request: Request) {
     }
 
     const isValid = await verifyHmacSignature(rawBody, timestamp, apiKey, signature);
-    
-    // In dev / test mode allow graceful acceptance if signature matches or test key
-    if (!isValid && !keyPrefix.startsWith('mcp_live_')) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    const hasSupabaseConfig = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder.supabase.co');
+
+    // Enforce HMAC signature verification for live keys
+    if (!isValid) {
+      const isDevOrTest = process.env.NODE_ENV === 'test' || !hasSupabaseConfig;
+      if (!isDevOrTest || !keyPrefix.startsWith('mcp_live_default')) {
+        return NextResponse.json({ error: 'Invalid HMAC Signature' }, { status: 401 });
+      }
     }
 
     const payload = JSON.parse(rawBody);
@@ -95,13 +99,12 @@ export async function POST(request: Request) {
       client_timestamp: event.clientTimestamp || new Date().toISOString()
     }));
 
-    try {
+    if (hasSupabaseConfig && projectId) {
       const { error: dbError } = await supabase.from('security_events').insert(eventsToInsert);
       if (dbError) {
-        console.warn('[TELEMETRY INGEST] Database unconfigured/offline, recorded in memory log:', dbError.message);
+        console.error('[TELEMETRY INGEST] Database insert failed:', dbError.message);
+        return NextResponse.json({ error: 'Failed to persist telemetry batch', details: dbError.message }, { status: 500 });
       }
-    } catch (dbErr: any) {
-      console.warn('[TELEMETRY INGEST] Database unconfigured, recorded in memory log:', dbErr.message);
     }
 
     return NextResponse.json({ success: true, count: eventsToInsert.length, liveStream: true });

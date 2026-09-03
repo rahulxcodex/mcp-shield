@@ -10,10 +10,30 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      const { data: keys, error } = await supabase
+      // Find projects owned by user's organization
+      const { data: orgs } = await supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id);
+      
+      const orgIds = (orgs || []).map((o: any) => o.organization_id);
+      
+      const { data: projects } = await supabase
+        .from('projects')
+        .select('id')
+        .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000']);
+      
+      const projectIds = (projects || []).map((p: any) => p.id);
+
+      let query = supabase
         .from('api_keys')
-        .select('id, name, key_prefix, created_at, last_used_at')
-        .order('created_at', { ascending: false });
+        .select('id, name, key_prefix, created_at, last_used_at');
+      
+      if (projectIds.length > 0) {
+        query = query.in('project_id', projectIds);
+      }
+
+      const { data: keys, error } = await query.order('created_at', { ascending: false });
 
       if (!error && keys && keys.length > 0) {
         return NextResponse.json({ keys });
@@ -49,7 +69,7 @@ export async function POST(req: Request) {
     const rawSecret = crypto.randomBytes(24).toString('hex');
     const keyPrefix = `mcp_live_${prefixId}`;
     const apiKey = `${keyPrefix}_${rawSecret}`;
-    const keyId = `key_${crypto.randomUUID().slice(0, 8)}`;
+    let keyId = `key_${crypto.randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
 
     try {
@@ -57,22 +77,33 @@ export async function POST(req: Request) {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
-        // Optional project binding
+        // Scope project binding to user's organization
+        const { data: orgs } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', user.id);
+        const orgIds = (orgs || []).map((o: any) => o.organization_id);
+
         const { data: project } = await supabase
           .from('projects')
           .select('id')
+          .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000'])
           .limit(1)
           .maybeSingle();
 
         const projectId = project?.id || null;
 
-        await supabase.from('api_keys').insert([{
+        const { data: inserted } = await supabase.from('api_keys').insert([{
           project_id: projectId,
           name: `${keyName} (${clientType})`,
           key_prefix: keyPrefix,
           key_hash: apiKey,
           created_at: now
-        }]);
+        }]).select('id').single();
+
+        if (inserted?.id) {
+          keyId = inserted.id;
+        }
       }
     } catch {
       // Graceful offline fallback
@@ -109,7 +140,22 @@ export async function DELETE(req: Request) {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
+        // Scope delete to caller's projects only
+        const { data: orgs } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', user.id);
+        const orgIds = (orgs || []).map((o: any) => o.organization_id);
+        const { data: projects } = await supabase
+          .from('projects')
+          .select('id')
+          .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000']);
+        const projectIds = (projects || []).map((p: any) => p.id);
+
         let query = supabase.from('api_keys').delete();
+        if (projectIds.length > 0) {
+          query = query.in('project_id', projectIds);
+        }
         if (id) query = query.eq('id', id);
         else if (prefix) query = query.eq('key_prefix', prefix);
         await query;

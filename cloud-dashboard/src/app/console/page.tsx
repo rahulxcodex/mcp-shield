@@ -180,11 +180,29 @@ export default function ConsolePage() {
     };
 
     try {
-      await fetch('/api/v1/keys', {
+      const res = await fetch('/api/v1/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newKeyName, clientType: newKeyClient }),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.key) {
+          const persistedKey: ApiKeyEntry = {
+            id: data.key.id || newKey.id,
+            name: data.key.name || assignedName,
+            keyPrefix: data.key.keyPrefix || keyPrefix,
+            apiKey: data.key.apiKey || fullSecret,
+            createdAt: 'Just now',
+            lastUsedAt: 'Never',
+            status: 'active',
+          };
+          setApiKeys((prev) => [persistedKey, ...prev]);
+          setJustCreatedKey(data.key.apiKey || fullSecret);
+          setNewKeyName('');
+          return;
+        }
+      }
     } catch {}
 
     setApiKeys((prev) => [newKey, ...prev]);
