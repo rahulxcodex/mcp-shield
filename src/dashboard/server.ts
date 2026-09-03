@@ -121,8 +121,13 @@ export class DashboardServer {
   public stop(): Promise<void> {
     return new Promise((resolve) => {
       for (const client of this.clients) {
-        client.close();
+        try { client.close(); } catch {}
       }
+      try {
+        if (typeof (this.server as any).closeAllConnections === 'function') {
+          (this.server as any).closeAllConnections();
+        }
+      } catch {}
       this.wss.close(() => {
         this.server.close(() => resolve());
       });
