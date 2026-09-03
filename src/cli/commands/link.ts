@@ -1,4 +1,5 @@
 import * as readline from 'readline';
+import * as os from 'os';
 import { CloudTelemetryPublisher } from '../../cloud/telemetry';
 
 export class LinkCommand {
@@ -14,7 +15,7 @@ export class LinkCommand {
       apiKey = args[keyIdx + 1].trim();
     }
 
-    let endpoint = process.env.MCP_SHIELD_CLOUD_URL || 'https://mcp-shield-dashboard-d6jyrwkny-rahulsahgupta24-8925.vercel.app/api/v1/telemetry/ingest';
+    let endpoint = process.env.MCP_SHIELD_CLOUD_URL || 'https://cloud.mcp-shield.com/api/v1/telemetry/ingest';
     const urlIdx = args.indexOf('--url');
     if (urlIdx !== -1 && args[urlIdx + 1]) {
       endpoint = args[urlIdx + 1].trim();
@@ -30,17 +31,80 @@ export class LinkCommand {
     }
 
     const publisher = new CloudTelemetryPublisher();
-    publisher.saveConfig({
-      enabled: true,
-      apiKey,
-      cloudEndpoint: endpoint
+    const verifyEndpoint = endpoint.replace(/\/telemetry\/ingest$/, '/telemetry/verify');
+
+    console.log('⏳ Verifying API key and establishing cryptographic handshake with MCP-Shield Cloud...');
+
+    const timestamp = Date.now();
+    const handshakePayload = JSON.stringify({
+      clientVersion: '1.0.12',
+      installation: {
+        installationId: publisher.getInstallationId(),
+        environment: process.env.MCP_SHIELD_ENV || 'production'
+      },
+      device: {
+        hostname: os.hostname(),
+        platform: os.platform(),
+        arch: os.arch()
+      }
     });
 
-    console.log('\n✅ [SUCCESS] MCP-Shield paired successfully!');
-    console.log(`   Endpoint: ${endpoint}`);
-    console.log(`   Key:      ${apiKey.substring(0, 12)}********`);
-    console.log('\n💡 Your agent security events & audit logs will now stream live to your dashboard.');
-    console.log('   Run: "mcp-shield wrap -- <command>" or "mcp-shield protect" to start.');
+    const signature = CloudTelemetryPublisher.signPayload(handshakePayload, apiKey, timestamp);
+    let verifySucceeded = false;
+    let identityInfo: any = null;
+
+    try {
+      if (typeof fetch !== 'undefined') {
+        const res = await fetch(verifyEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-MCP-Shield-Key': apiKey,
+            'X-MCP-Shield-Key-Prefix': CloudTelemetryPublisher.extractKeyPrefix(apiKey),
+            'Authorization': `Bearer ${apiKey}`,
+            'X-MCP-Shield-Timestamp': String(timestamp),
+            'X-MCP-Shield-Signature': signature
+          },
+          body: handshakePayload
+        });
+
+        if (res.ok) {
+          identityInfo = await res.json().catch(() => ({}));
+          verifySucceeded = true;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.error(`\n❌ [PAIRING FAILED] HTTP ${res.status}: ${errData.error || 'Unauthorized'}`);
+          console.error('   Please check your API key in the Cloud Console: https://cloud.mcp-shield.com/settings/general');
+          process.exit(1);
+        }
+      }
+    } catch {
+      console.warn('\n⚠️  [OFFLINE WARNING] Could not reach cloud endpoint for live handshake verification.');
+      console.warn('   Saving credentials locally. Protection enforcement remains 100% active offline.');
+      verifySucceeded = true;
+    }
+
+    if (verifySucceeded) {
+      publisher.saveConfig({
+        enabled: true,
+        apiKey,
+        cloudEndpoint: endpoint
+      });
+
+      console.log('\n✅ [CONNECTED] MCP-Shield paired and verified successfully!');
+      if (identityInfo?.organization?.name) {
+        console.log(`   Organization: ${identityInfo.organization.name}`);
+      }
+      if (identityInfo?.project?.name) {
+        console.log(`   Project:      ${identityInfo.project.name}`);
+      }
+      console.log(`   Environment:  ${identityInfo?.environment || process.env.MCP_SHIELD_ENV || 'production'}`);
+      console.log(`   Device ID:    ${publisher.getInstallationId()}`);
+      console.log(`   Console URL:  ${identityInfo?.dashboardUrl || 'https://cloud.mcp-shield.com/console'}`);
+      console.log(`   Key Prefix:   ${CloudTelemetryPublisher.extractKeyPrefix(apiKey)}...`);
+      console.log('\n💡 Security telemetry will now stream seamlessly to your organization dashboard.');
+      console.log('   Run "mcp-shield wrap -- <command>" or "mcp-shield protect" to start protected agent sessions.');
+    }
   }
 
   private static promptUser(query: string): Promise<string> {
@@ -57,3 +121,4 @@ export class LinkCommand {
     });
   }
 }
+

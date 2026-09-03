@@ -59,13 +59,18 @@ import {
 
 interface SecurityEvent {
   id: string;
+  eventId?: string;
   timestamp: string;
-  eventType: 'BLOCK' | 'SANITIZE' | 'QUARANTINE' | 'PASSTHROUGH';
+  eventType: 'BLOCK' | 'SANITIZE' | 'QUARANTINE' | 'RATE_LIMIT' | 'PASSTHROUGH' | 'PROMPT' | 'ERROR';
   toolName: string;
   detector: string;
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  riskLevel: 'BENIGN' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   reason: string;
+  sequenceNumber?: number;
+  installationId?: string;
+  environment?: string;
 }
+
 
 interface ApiKeyEntry {
   id: string;
@@ -298,28 +303,6 @@ export default function ConsolePage() {
   };
 
   const handleGenerateKey = async () => {
-    const prefixId = Array.from(crypto.getRandomValues(new Uint8Array(4)))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    const keyPrefix = `mcp_live_${prefixId}`;
-    const secretEntropy = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    const fullSecret = `${keyPrefix}_${secretEntropy}`;
-    const assignedName = (newKeyName.trim() || 'Production MCP Gateway') + ` (${newKeyClient})`;
-    const defaultExpiresAt = expiresInDays > 0 ? new Date(Date.now() + expiresInDays * 24 * 3600 * 1000).toISOString() : null;
-
-    const newKey: ApiKeyEntry = {
-      id: `key-${Date.now()}`,
-      name: assignedName,
-      keyPrefix: keyPrefix,
-      apiKey: fullSecret,
-      createdAt: 'Just now',
-      lastUsedAt: 'Never',
-      expiresAt: defaultExpiresAt,
-      status: 'active',
-    };
-
     try {
       const res = await fetch('/api/v1/keys', {
         method: 'POST',
@@ -330,27 +313,29 @@ export default function ConsolePage() {
         const data = await res.json();
         if (data?.key) {
           const persistedKey: ApiKeyEntry = {
-            id: data.key.id || newKey.id,
-            name: data.key.name || assignedName,
-            keyPrefix: data.key.keyPrefix || keyPrefix,
-            apiKey: data.key.apiKey || fullSecret,
+            id: data.key.id,
+            name: data.key.name,
+            keyPrefix: data.key.keyPrefix,
+            apiKey: data.key.apiKey, // Authentically created and returned ONCE by server
             createdAt: 'Just now',
             lastUsedAt: 'Never',
-            expiresAt: data.key.expires_at || defaultExpiresAt,
+            expiresAt: data.key.expires_at || null,
             status: 'active',
           };
           setApiKeys((prev) => [persistedKey, ...prev]);
-          setJustCreatedKey(data.key.apiKey || fullSecret);
+          setJustCreatedKey(data.key.apiKey);
           setNewKeyName('');
           return;
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Failed to generate key: ${errData.error || 'Server error'}`);
       }
-    } catch {}
-
-    setApiKeys((prev) => [newKey, ...prev]);
-    setJustCreatedKey(fullSecret);
-    setNewKeyName('');
+    } catch {
+      alert('Network error communicating with key provisioning server.');
+    }
   };
+
 
   const handleRevokeKey = async (id: string, prefix: string) => {
     try {

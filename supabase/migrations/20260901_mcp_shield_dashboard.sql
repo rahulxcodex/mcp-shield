@@ -75,10 +75,14 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 
 CREATE TABLE IF NOT EXISTS security_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id TEXT UNIQUE,
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
     agent_instance_id UUID REFERENCES agent_instances(id) ON DELETE SET NULL,
+    installation_id TEXT,
+    environment TEXT DEFAULT 'production',
     session_id TEXT NOT NULL,
-    event_type TEXT CHECK (event_type IN ('BLOCK', 'SANITIZE', 'QUARANTINE', 'RATE_LIMIT', 'PROMPT', 'PASSTHROUGH')) NOT NULL,
+    sequence_number BIGINT DEFAULT 0,
+    event_type TEXT CHECK (event_type IN ('BLOCK', 'SANITIZE', 'QUARANTINE', 'RATE_LIMIT', 'PROMPT', 'PASSTHROUGH', 'ERROR')) NOT NULL,
     detector TEXT NOT NULL,
     risk_level TEXT CHECK (risk_level IN ('BENIGN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL')) NOT NULL,
     tool_name TEXT NOT NULL,
@@ -89,6 +93,8 @@ CREATE TABLE IF NOT EXISTS security_events (
 );
 CREATE INDEX IF NOT EXISTS idx_security_events_project_time ON security_events(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_security_events_risk ON security_events(project_id, risk_level);
+CREATE INDEX IF NOT EXISTS idx_security_events_event_id ON security_events(event_id);
+
 
 CREATE TABLE IF NOT EXISTS policy_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -65,3 +65,40 @@ export function generateApiKey(options: {
     seats: options.seats || 25,
   };
 }
+
+/**
+ * Extracts canonical lookup prefix from API key string.
+ */
+export function extractKeyPrefix(key: string): string {
+  if (!key) return '';
+  const trimmed = key.trim();
+  const match = trimmed.match(/^(mcp_live(?:_sec)?_[a-f0-9]{8})_[a-f0-9]{32}$/i);
+  if (match) {
+    return match[1];
+  }
+  const prefixMatch = trimmed.match(/^(mcp_live(?:_sec)?_[a-f0-9]{8})/i);
+  if (prefixMatch) {
+    return prefixMatch[1];
+  }
+  return trimmed.substring(0, Math.min(trimmed.length, 20));
+}
+
+/**
+ * Validates cryptographic structure and entropy format of an API key.
+ */
+export function validateApiKeyStructure(key: string): boolean {
+  if (!key) return false;
+  return /^(mcp_live(?:_sec)?_[a-f0-9]{8})_[a-f0-9]{32}$/i.test(key.trim());
+}
+
+/**
+ * Parses an API key into its canonical prefix and secret entropy components.
+ */
+export function parseApiKey(key: string): { prefix: string; secret: string; isValid: boolean } {
+  const isValid = validateApiKeyStructure(key);
+  const prefix = extractKeyPrefix(key);
+  const parts = key.trim().split('_');
+  const secret = parts[parts.length - 1] || '';
+  return { prefix, secret, isValid };
+}
+

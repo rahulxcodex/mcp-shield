@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 
         let dbQuery = adminSupabase
           .from('security_events')
-          .select('id, session_id, event_type, detector, risk_level, tool_name, reason, sanitized_preview, client_timestamp, created_at')
+          .select('id, event_id, session_id, event_type, detector, risk_level, tool_name, reason, sanitized_preview, client_timestamp, created_at, sequence_number, installation_id, environment')
           .in('project_id', projectIds)
           .order('created_at', { ascending: false })
           .limit(limit);
@@ -58,15 +58,30 @@ export async function GET(req: Request) {
 
         const { data: events, error } = await dbQuery;
 
+        // Check active agent instances for genuine live connection status
+        const sixtySecondsAgo = new Date(Date.now() - 60 * 1000).toISOString();
+        const { data: activeAgents } = await adminSupabase
+          .from('agent_instances')
+          .select('id, last_heartbeat_at')
+          .in('project_id', projectIds)
+          .gte('last_heartbeat_at', sixtySecondsAgo)
+          .limit(1);
+
+        const isLiveConnected = Boolean(activeAgents && activeAgents.length > 0);
+
         if (!error && events && events.length > 0) {
           let filtered = events.map((e: any) => ({
             id: e.id,
+            eventId: e.event_id || e.id,
             timestamp: formatTimeAgo(e.created_at || e.client_timestamp),
             eventType: e.event_type,
             toolName: e.tool_name,
             detector: e.detector,
             riskLevel: e.risk_level,
             reason: e.reason,
+            sequenceNumber: e.sequence_number,
+            installationId: e.installation_id,
+            environment: e.environment || 'production',
             rawTimestamp: e.created_at || e.client_timestamp
           }));
 
@@ -79,11 +94,11 @@ export async function GET(req: Request) {
             );
           }
 
-          return NextResponse.json({ events: filtered, live: true });
+          return NextResponse.json({ events: filtered, live: isLiveConnected, agentConnected: isLiveConnected });
         }
 
         // Authenticated user with zero events: return real empty events (NEVER fake demo data)
-        return NextResponse.json({ events: [], live: true });
+        return NextResponse.json({ events: [], live: isLiveConnected, agentConnected: isLiveConnected });
       } catch (err: any) {
         console.warn('[TELEMETRY_EVENTS] Database lookup warning:', err?.message);
         return NextResponse.json({ events: [], live: true });

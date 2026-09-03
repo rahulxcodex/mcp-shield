@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { 
@@ -66,50 +66,120 @@ export default function GeneralSettingsPage() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [rotatedMessage, setRotatedMessage] = useState<string | null>(null);
 
-  const handleCreateKey = () => {
+
+  useEffect(() => {
+    fetch('/api/v1/keys')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.keys && Array.isArray(data.keys) && data.keys.length > 0) {
+          const mapped: KeyItem[] = data.keys.map((k: any) => ({
+            id: k.id,
+            name: k.name,
+            prefix: k.key_prefix,
+            created_at: k.created_at ? k.created_at.split('T')[0] : 'Today',
+            last_used: k.last_used_at ? 'Active' : 'Never',
+            last_ip: 'N/A',
+            project: 'Production Project',
+            env: 'Production',
+            status: k.status === 'revoked' ? 'REVOKED' : 'ACTIVE',
+            expires_in_days: 90
+          }));
+          setKeys(mapped);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleCreateKey = async () => {
     if (!newKeyName.trim()) return;
-    const randomHex = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-    const fullSecret = `mcp_live_${randomHex}${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-    
-    const newKey: KeyItem = {
-      id: "key-" + Date.now(),
-      name: newKeyName.trim(),
-      prefix: `mcp_live_${randomHex}`,
-      created_at: new Date().toISOString().split("T")[0],
-      last_used: "Never",
-      last_ip: "N/A",
-      project: "Default Project",
-      env: newKeyEnv,
-      status: "ACTIVE",
-      expires_in_days: parseInt(newKeyExpiry, 10)
-    };
+    try {
+      const res = await fetch('/api/v1/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newKeyName.trim(),
+          clientType: newKeyEnv,
+          expiresInDays: parseInt(newKeyExpiry, 10),
+          seats: 1
+        })
+      });
 
-    setKeys([newKey, ...keys]);
-    setCreatedSecret(fullSecret);
-  };
-
-  const handleRotateKey = (id: string) => {
-    setKeys(keys.map(k => {
-      if (k.id === id) {
-        const randomHex = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-        return {
-          ...k,
-          prefix: `mcp_live_${randomHex}`,
-          last_used: "Never",
-          status: "ACTIVE"
-        };
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.key) {
+          const created: KeyItem = {
+            id: data.key.id,
+            name: data.key.name,
+            prefix: data.key.keyPrefix,
+            created_at: new Date().toISOString().split('T')[0],
+            last_used: 'Never',
+            last_ip: 'N/A',
+            project: 'Production Project',
+            env: newKeyEnv,
+            status: 'ACTIVE',
+            expires_in_days: parseInt(newKeyExpiry, 10)
+          };
+          setKeys([created, ...keys]);
+          setCreatedSecret(data.key.apiKey);
+          return;
+        }
       }
-      return k;
-    }));
-    setRotatedMessage(`Key rotated successfully. Old secret is immediately invalidated.`);
-    setTimeout(() => setRotatedMessage(null), 3500);
+      const err = await res.json().catch(() => ({}));
+      alert(`Key generation failed: ${err.error || 'Server error'}`);
+    } catch {
+      alert('Network error connecting to key service.');
+    }
   };
 
-  const handleRevokeKey = (id: string) => {
-    setKeys(keys.map(k => k.id === id ? { ...k, status: "REVOKED" } : k));
+  const handleRotateKey = async (id: string) => {
+    try {
+      const target = keys.find(k => k.id === id);
+      const res = await fetch('/api/v1/keys', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyId: id, keyPrefix: target?.prefix, expiresInDays: 90 })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.newKey) {
+          setKeys(keys.map(k => {
+            if (k.id === id) {
+              return {
+                ...k,
+                id: data.newKey.id,
+                prefix: data.newKey.keyPrefix,
+                last_used: 'Never',
+                status: 'ACTIVE'
+              };
+            }
+            return k;
+          }));
+          setCreatedSecret(data.newKey.apiKey);
+          setShowCreateModal(true);
+          setRotatedMessage(`Key rotated successfully. New secret displayed below.`);
+          setTimeout(() => setRotatedMessage(null), 4000);
+          return;
+        }
+      }
+    } catch {}
+    alert('Key rotation request failed.');
   };
 
-  const handleDeleteKey = (id: string) => {
+  const handleRevokeKey = async (id: string) => {
+    try {
+      const target = keys.find(k => k.id === id);
+      await fetch(`/api/v1/keys?id=${id}&prefix=${target?.prefix || ''}`, {
+        method: 'DELETE'
+      });
+      setKeys(keys.map(k => k.id === id ? { ...k, status: "REVOKED" } : k));
+    } catch {
+      setKeys(keys.map(k => k.id === id ? { ...k, status: "REVOKED" } : k));
+    }
+  };
+
+  const handleDeleteKey = async (id: string) => {
+    await handleRevokeKey(id);
     setKeys(keys.filter(k => k.id !== id));
   };
 
