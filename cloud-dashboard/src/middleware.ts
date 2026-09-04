@@ -66,8 +66,20 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // If Supabase environment is not configured, allow graceful developer access to console
+  // In development, if Supabase is unconfigured, allow developer preview only if explicitly enabled
+  const isProd = process.env.NODE_ENV === 'production';
+  const allowDevBypass = process.env.ALLOW_DEV_AUTH_BYPASS === 'true';
+
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (isProd || !allowDevBypass) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Service Unavailable: Authentication infrastructure unconfigured' }, { status: 503 });
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('error', 'auth_unconfigured');
+      return NextResponse.redirect(url);
+    }
     return supabaseResponse;
   }
 
@@ -135,14 +147,12 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Master Admin route guard — strictly rely on verified immutable email or server-managed app_metadata.
-    // Client-writable user_metadata is forbidden for authorization checks.
-    const email = (user.email || '').toLowerCase();
-    const adminEmail = (process.env.MASTER_ADMIN_EMAIL || 'rahulsahygupta24@gmail.com').toLowerCase();
+    // Master Admin route guard — strictly rely on server-managed role in app_metadata or validated user ID.
+    // Client-writable user_metadata or unverified email fallbacks are forbidden.
     const isMasterAdmin =
-      email === adminEmail ||
       user.app_metadata?.role === 'master_admin' ||
-      user.id === process.env.MASTER_ADMIN_USER_ID;
+      (Boolean(process.env.MASTER_ADMIN_USER_ID) && user.id === process.env.MASTER_ADMIN_USER_ID) ||
+      (Boolean(process.env.MASTER_ADMIN_EMAIL) && (user.email || '').toLowerCase() === (process.env.MASTER_ADMIN_EMAIL || '').toLowerCase());
 
     if (pathname.startsWith('/console/system-admin')) {
       if (!isMasterAdmin) {
@@ -165,7 +175,22 @@ export async function middleware(request: NextRequest) {
       }
     }
   } catch (err) {
-    // If Supabase check fails in dev/test, proceed to avoid blocking evaluator
+    // P0.1: Authentication infrastructure failure must fail-closed (503 / 401) in production
+    const isProd = process.env.NODE_ENV === 'production';
+    const allowDevBypass = process.env.ALLOW_DEV_AUTH_BYPASS === 'true';
+
+    if (isProd || !allowDevBypass) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Service Unavailable: Authentication service failure' },
+          { status: 503 }
+        );
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('error', 'auth_service_failure');
+      return NextResponse.redirect(url);
+    }
     return supabaseResponse;
   }
 

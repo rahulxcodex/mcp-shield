@@ -80,6 +80,28 @@
 - **Environment-Specific Attack Discovery**: `src/security/graph/environment-scanner.ts` scans customer MCP tool manifests, enumerates dangerous multi-tool compositions, and generates synthetic attack payloads and remediation instructions.
 - **Proprietary Attack Corpus & Adversarial Learning Loop**: `src/security/ml/proprietary-attack-corpus.ts` and `src/security/ml/adversarial-learning-loop.ts` store confirmed security incidents, mine hard negatives from reviewed decisions, synthesize adversarial attack variants, and prevent unreviewed model poisoning.
 - **Privacy-Preserving Telemetry**: `src/security/ml/privacy-telemetry.ts` transmits capability vectors and feature digests instead of raw payload bodies across 4 enterprise modes (`cloud-intel`, `private-telemetry`, `self-hosted`, `air-gapped`).
-- **Rigorous Evaluation & Version Identity**: `src/security/ml/evaluation/model-evaluator.ts` implements temporal, server, and attack-family holdout splits, ROC-AUC/PR-AUC, and Brier calibration scores. `SecurityIntelligenceRegistry` cryptographically fingerprints deployed intelligence builds.
+- **Rigorous Evaluation & Version Identity**: `src/security/ml/evaluation/model-evaluator.ts` implements temporal, server, and attack-family holdout splits, ROC-AUC/PR-AUC, and Brier calibration scores.
+- **Colab & Production ML Pipeline**: `notebooks/mcp_shield_ml_training.ipynb` (Colab), `scripts/ml/` (VIF < 2.3, Breusch-Pagan heteroscedasticity p < 1e-300, 5-fold isotonic calibration), `deployment/` (FastAPI / Hugging Face Spaces / Render free tier).
 - **Protocol-Neutral Agent Security Kernel**: `src/security/kernel/agent-security-kernel.ts` with pluggable adapters (`McpProtocolAdapter`, `BrowserProtocolAdapter`, `CodingProtocolAdapter`), executing unified security controls across AI agent ecosystems.
 - **Verification Gate**: 85 suites / 898 tests passing cleanly with zero regressions.
+
+## 8. v2.0.0 Production Hardening, Intelligence Bus & Attack Coverage (Complete)
+- **Fail-Closed Auth & Zero Fallbacks**: `cloud-dashboard/src/middleware.ts` fails closed on auth backend errors in production (503/401); all hardcoded credential strings purged; `src/security/authz/authorization-service.ts` and `cloud-dashboard/src/lib/authz.ts` enforce 14 standard actions and multi-tenant isolation across all dashboard routes.
+- **Canonical Security Decision**: `src/security/decision.ts` provides immutable internal contract (`requestId`, `action`, `riskScore`, `detectorIds`, `attackPathIds`, `capabilities`, `provenance`, `redactions`, `modelSignals`, `enforcementSource`).
+- **Production Merkle Audit Ledger**: `src/security/audit-ledger.ts` implements monotonic sequence numbers, chained HMAC digests ($H_n = \text{HMAC}(H_{n-1} \parallel \dots)$), periodic rolling Merkle tree roots, durable sink interfaces, and mathematical integrity verification utility.
+- **Cryptographic JIT Quorum**: `src/security/authorization.ts` implements real asymmetric/HMAC signature verification, nonce replay prevention, action/org binding, and four-eyes quorum enforcement.
+- **Authoritative Egress Engine**: `src/security/egress/egress-engine.ts` provides pre-flight DNS resolution, DNS rebinding attack defense, socket IP pinning, and redirect chain inspection.
+- **Blast-Radius & Provenance Engine**: `src/security/blast-radius/blast-radius-engine.ts` computes 7-vector blast radius; `src/security/provenance/provenance-manager.ts` tracks package identity, binary digest, and incident history.
+- **Policy-Aware Schema Drift**: `src/security/ml/schema-drift-detector.ts` classifies drift into 8 categories (`CREDENTIAL_EXPANSION`, `NETWORK_EXPANSION`, `EXECUTION_EXPANSION`, etc.) mapped to policy actions.
+- **Security Intelligence Bus & Signal Fusion**: `src/security/intelligence/intelligence-bus.ts` defines typed `SecuritySignal` and deterministic fusion with hard-block precedence.
+- **Model Governance Registry**: `src/security/ml/governance/model-registry.ts` manages model promotion lifecycle (`SHADOW` -> `CANARY` -> `PRODUCTION`), cryptographic digests, performance gates, and zero-downtime rollback.
+- **Security Replay Engine**: `src/security/replay/security-replay-engine.ts` evaluates historical `.jsonl` traffic; exposed via CLI command `mcp-shield replay-eval <log>`.
+- **Distributed State & Tenant Isolation Tests**: `src/cloud/state/distributed-state-adapter.ts`, `cloud-dashboard/tests/auth/route-auth-matrix.test.ts`, and `cloud-dashboard/tests/tenancy/tenant-isolation.test.ts`.
+- **Release Verification**: 97 suites / 941 tests passing ($100\%$), 46/46 attack-family matrix checks passing ($100\%$), and 9/9 mutation operators killed ($100\%$).
+
+## 9. Multi-Model ML Suite, Deployment Keep-Alive & Direct Mail API (v1.0.24)
+- **4-Model ML Intelligence Suite**: Aligned with `ML_ROADMAP_GOOGLE_COLAB.md`. Model A (Calibrated Tabular Risk, Brier=0.0003), Model B (Attack Family Classifier across 10 families, 100% accuracy), Model C (Behavioral Sequence Trajectory Risk, ROC-AUC=0.8125), and Model D (Novelty & Outlier Anomaly Isolation Forest).
+- **Hugging Face Spaces & Gradio 6.0**: Multi-model visualization tabs and programmatic `/api/predict` endpoint in `deployment/app.py` with zero deprecated parameter warnings.
+- **Deployment Keep-Alive Automation**: `.github/workflows/render-keepalive.yml` runs every 10 minutes (`*/10 * * * *`) pinging Render Enterprise Intel and Hugging Face Spaces with cold-start retry tolerances.
+- **Direct Mail API Transition**: `cloud-dashboard/src/lib/email-service.ts` dispatches support inquiries directly via Resend REST API (`RESEND_API_KEY`) and SendGrid API with Apps Script fallback.
+- **Trade Secret Boundaries**: Delineated and strictly isolated across the 3 repositories (`mcp-shield` public, `mcp-shield-enterprise-intel` private on Render, `mcp-shield-licensing` private on Vercel).

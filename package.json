@@ -1,6 +1,6 @@
 {
   "name": "mcpshld",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "description": "The Zero-Trust Security Gateway, AST Firewall & Secret Sanitizer for Model Context Protocol (MCP) and AI Agents.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -42,6 +42,7 @@
     "test:security-gate": "node --expose-gc -r ts-node/register scripts/security-regression-gate.ts",
     "test:mutations": "ts-node scripts/mutation-test-runner.ts",
     "test:coverage-gate": "ts-node scripts/security-coverage-gate.ts",
+    "test:attack-coverage": "node -r ts-node/register scripts/attack-family-coverage-gate.ts",
     "fuzz": "ts-node scripts/fuzz.ts",
     "bench": "ts-node benchmarks/proxy-latency.bench.ts",
     "bench:stages": "ts-node benchmarks/stage-level-pipeline.bench.ts",
@@ -51,6 +52,8 @@
     "demo:verify": "ts-node scripts/demo-verify.ts",
     "telemetry:demo": "ts-node scripts/send-demo-telemetry.ts",
     "sbom": "cyclonedx-npm --output-format JSON --output-file mcp-shield.sbom.json",
+    "ml:data": "python scripts/ml/mcp_dataset_builder.py",
+    "ml:train": "python scripts/ml/statistical_diagnostics.py",
     "prepack": "npm run build"
   },
   "keywords": [

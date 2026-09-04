@@ -6,6 +6,7 @@ import { generateApiKey, hashApiKey, validateApiKeyStructure, extractKeyPrefix }
 import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { sanitizeApiError } from '@/lib/errors';
 import { FEATURE_FLAGS } from '@/config/plans';
+import { authorizeRoute } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
@@ -135,6 +136,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const orgHeader = req.headers.get('x-organization-id') || undefined;
+    const authzResult = authorizeRoute(user, 'key.create', undefined, orgHeader);
+    if (!authzResult.authorized) {
+      return NextResponse.json({ error: `Forbidden: ${authzResult.reason || 'Insufficient permissions'}` }, { status: 403 });
+    }
+
     // Rate limiting: max 10 key creations per hour per user
     const clientIp = getClientIp(req);
     const rateLimitKey = user ? `key_create:${user.id}` : `key_create:${clientIp}`;
@@ -257,6 +264,12 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const orgHeader = req.headers.get('x-organization-id') || undefined;
+    const authzResult = authorizeRoute(user, 'key.rotate', undefined, orgHeader);
+    if (!authzResult.authorized) {
+      return NextResponse.json({ error: `Forbidden: ${authzResult.reason || 'Insufficient permissions'}` }, { status: 403 });
+    }
+
     const clientIp = getClientIp(req);
     const rlCheck = globalRateLimiter.check(`key_rotate:${user.id}:${clientIp}`, 10, 3600 * 1000);
     if (!rlCheck.allowed) {
@@ -354,6 +367,12 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const orgHeader = req.headers.get('x-organization-id') || undefined;
+    const authzResult = authorizeRoute(user, 'key.create', undefined, orgHeader);
+    if (!authzResult.authorized) {
+      return NextResponse.json({ error: `Forbidden: ${authzResult.reason || 'Insufficient permissions'}` }, { status: 403 });
+    }
+
     const clientIp = getClientIp(req);
     const rlCheck = globalRateLimiter.check(`key_import:${user.id}:${clientIp}`, 10, 3600 * 1000);
     if (!rlCheck.allowed) {
@@ -367,12 +386,12 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Missing rawKey or name' }, { status: 400 });
     }
 
-    if (rawKey.trim().length < 8) {
+    const trimmedKey = rawKey.trim();
+    if (trimmedKey.length < 8) {
       return NextResponse.json({ error: 'Key must be at least 8 characters' }, { status: 400 });
     }
 
-    const trimmedKey = rawKey.trim();
-    const envMasterKey = (process.env.MCP_SHIELD_MASTER_KEY || 'MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY').trim();
+    const envMasterKey = (process.env.MCP_SHIELD_MASTER_KEY || '').trim();
     let isMaster = false;
     if (envMasterKey && trimmedKey.length === envMasterKey.length) {
       try {
@@ -533,6 +552,16 @@ export async function DELETE(req: Request) {
 
     const supabase = await createClient();
     const user = await getAuthUser(req, supabase);
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const orgHeader = req.headers.get('x-organization-id') || undefined;
+    const authzResult =  authorizeRoute(user, 'key.revoke', undefined, orgHeader);
+    if (!authzResult.authorized) {
+      return NextResponse.json({ error: `Forbidden: ${authzResult.reason || 'Insufficient permissions'}` }, { status: 403 });
+    }
 
     if (user) {
       // Scope delete/revocation to caller's projects only

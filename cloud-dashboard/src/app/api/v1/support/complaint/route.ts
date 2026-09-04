@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { sanitizeApiError } from '@/lib/errors';
+import { sendSupportEmail } from '@/lib/email-service';
 import crypto from 'crypto';
 
 export async function POST(req: Request) {
@@ -35,43 +36,26 @@ export async function POST(req: Request) {
     const ticketId = `MCP-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const targetEmail = process.env.SUPPORT_ROUTING_EMAIL || 'support@mcpshield.com';
 
-    const appsScriptUrl = process.env.APPS_SCRIPT_WEBHOOK_URL;
-    let dispatchedViaAppsScript = false;
+    const dispatchResult = await sendSupportEmail({
+      ticketId,
+      name: safeName,
+      email,
+      type,
+      priority,
+      subject,
+      message,
+      recipient: targetEmail,
+      timestamp: new Date().toISOString()
+    });
 
-    if (appsScriptUrl) {
-      try {
-        const scriptRes = await fetch(appsScriptUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ticketId,
-            name: safeName,
-            email,
-            type,
-            priority,
-            subject,
-            message,
-            recipient: targetEmail,
-            timestamp: new Date().toISOString()
-          })
-        });
-        if (scriptRes.ok) {
-          dispatchedViaAppsScript = true;
-        }
-      } catch (scriptErr) {
-        console.warn('[SUPPORT_DISPATCH] Apps Script forward warning:', scriptErr);
-      }
-    }
-
-    // Always log receipt on server
-    console.log(`[SUPPORT_TICKET_CREATED] [ID: ${ticketId}] Type: ${type} | Recipient: ${targetEmail} | From: ${email} | Subject: ${subject}`);
+    console.log(`[SUPPORT_TICKET_CREATED] [ID: ${ticketId}] Type: ${type} | Provider: ${dispatchResult.provider} | Recipient: ${targetEmail} | From: ${email} | Subject: ${subject}`);
 
     return NextResponse.json({
       success: true,
       ticketId,
-      dispatchedViaAppsScript,
+      provider: dispatchResult.provider,
       recipient: targetEmail,
-      message: `Your ${type.toLowerCase()} has been logged and queued for review.`
+      message: `Your ${type.toLowerCase()} has been logged and dispatched.`
     });
   } catch (err: unknown) {
     return sanitizeApiError(err, 'Failed to submit complaint/inquiry');

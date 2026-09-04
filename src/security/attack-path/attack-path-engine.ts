@@ -108,8 +108,7 @@ export class AttackPathEngine {
       const caps = step.capabilities.map(c => c.toLowerCase());
 
       if (
-        caps.includes('read') ||
-        caps.includes('database') ||
+        caps.some(c => c.includes('read') || c.includes('database') || c.includes('secret') || c.includes('filesystem')) ||
         name.includes('read') ||
         name.includes('db') ||
         name.includes('fetch_secret')
@@ -119,8 +118,7 @@ export class AttackPathEngine {
       }
 
       if (
-        caps.includes('transform') ||
-        caps.includes('compress') ||
+        caps.some(c => c.includes('transform') || c.includes('compress') || c.includes('encode')) ||
         name.includes('export') ||
         name.includes('transform') ||
         name.includes('zip')
@@ -130,11 +128,10 @@ export class AttackPathEngine {
       }
 
       if (
-        caps.includes('network') ||
-        caps.includes('upload') ||
-        caps.includes('egress') ||
+        caps.some(c => c.includes('network') || c.includes('upload') || c.includes('egress') || c.includes('http') || c.includes('curl')) ||
         name.includes('upload') ||
         name.includes('http') ||
+        name.includes('curl') ||
         name.includes('send')
       ) {
         hasEgress = true;
