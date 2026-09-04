@@ -1,0 +1,7 @@
+Contact: mailto:security@mcpshield.com
+Contact: https://mcp-shield-dashboard.vercel.app/console
+Expires: 2027-09-04T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://mcp-shield-dashboard.vercel.app/.well-known/security.txt
+Policy: https://mcp-shield-dashboard.vercel.app/terms
+Acknowledgments: https://github.com/rahulxcodex/mcp-shield/security/advisories

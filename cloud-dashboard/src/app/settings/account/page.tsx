@@ -76,7 +76,7 @@ export default function AccountSettingsPage() {
   const githubUser = metadata.user_name || 'rahulxcodex';
   const fullName = metadata.full_name || 'Rahul Gupta';
   const accountType = metadata.account_type || (email.includes('rahulsahygupta24') ? 'Master Admin' : 'Enterprise User');
-  const isMaster = metadata.is_master || email.includes('rahulsahygupta24') || githubUser === 'rahulxcodex';
+  const isMaster = user?.app_metadata?.role === 'master_admin' || email.includes('rahulsahygupta24');
 
   return (
     <div className="max-w-4xl space-y-6">
