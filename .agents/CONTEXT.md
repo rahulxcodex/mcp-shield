@@ -35,10 +35,12 @@
 - **Zero Backdoors**: All test keys and plaintext secret fallbacks purged; constant-time comparison enforced across all auth boundaries.
 
 ## 3. Deployment & Release Matrix
-- **npm**: `mcpshld` v1.0.23 published with public access (circular dependency removed, exports map configured).
-- **GitHub**: All 3 repositories synced and audited; PR #31 merged to `main` (`cf45a47`); 55 suites / 780 tests passing cleanly.
-- **Vercel**: `mcp-shield-dashboard` deployed in READY state (`dpl_44ReRsnLP23n8LEYjJ4BKFkMNTZE`), `mcp-shield-licensing` verified and building cleanly with Turbopack.
-- **Render**: `mcp-shield-enterprise-intel` live with commit `43cc006`, exposing authenticated threat corpus, behavioral kill-chain, and risk scoring APIs.
+- **npm**: `mcpshld` v1.0.24 published with public access (circular dependency removed, exports map configured).
+- **GitHub**: All 3 repositories synced and audited; PR #34 merged to `main` (`3bfc1a1`); 103 suites / 981 tests passing cleanly (100%) across Linux, macOS, and Windows.
+- **Vercel**: `mcp-shield-dashboard` deployed in READY state (`dpl_AHZVsxN1MGmU7VSZ8SrvWAVeuUqc`), `mcp-shield-licensing` deployed in READY state with SSO protection (`dpl_282ig2Thm2x39gHvpGW6RZcbLF5P`).
+- **Render**: `mcp-shield-enterprise-intel` live with commit `82ec23f` (`dep-dadje53bc2fs73bkjl4g`), exposing authenticated threat corpus, behavioral kill-chain, and risk scoring APIs.
+- **Hugging Face Spaces**: `rahulrgx/mcp-shield-risk-api` live and RUNNING at commit `a46e10a` with ZeroGPU support and Gradio multi-model UI.
+- **Supabase**: `magfptvxgxscmlzphhlq.supabase.co` verified active and reachable via authenticated REST API with schema validation.
 
 ## 4. Commercial Architecture, Referral Engine & Customer Verification
 - **Pricing & Tiering Logic**: Defined in `src/config/plans.ts`. Starter plan configured at 10 USD/year (or 1 USD/month). Active payment gateways kept dormant in code (`SHOW_PAYMENT_GATEWAYS: false`) during the introductory free access rollout (`FREE_ACCESS_LIMITED_PERIOD: true`).
@@ -114,3 +116,11 @@
 - **Heuristics & Decision Consolidation**: Token-anchored boundaries in `capabilities.ts`, `network-extractor.ts`, `intelligence-engine.ts`, and IR parsers; consolidated `SecurityDecision` pipeline.
 - **Credibility & Transparency**: Reframed advisories `ADV-2026-001..003` (`MCP-SHIELD-VULN-001..003`) in `SECURITY.md`, `SECURITY_AUDIT.md`, `README.md`, `LAUNCH_KIT.md` with transparent CNA registration disclosures.
 - **Verification Gate**: 103 suites / 981 tests passing cleanly (100%).
+
+## 11. Production-Readiness Master Engineering (Phases 0-29 Complete)
+- **Phase 0 Contract & Checklist**: `docs/PRODUCTION_READINESS.md` and `docs/production-checklist.json` established and automated via `scripts/check-production-readiness.ts` (28/28 controls passing).
+- **Enterprise Intel Hardening (`mcp-shield-enterprise-intel`)**: Opaque `POST /api/v1/decision` contract; trade-secret protection (403 Forbidden for standard clients on raw corpus/chains); scoped auth (`intel:decide`, `intel:corpus:read`, `intel:admin`); sliding-window rate limiting; Zod schema validation; mathematical score saturation [0, 100] and NaN neutralization; structured JSON audit logging; 13/13 tests passing.
+- **Licensing Control Plane Hardening (`mcp-shield-licensing`)**: Replaced plaintext `key_hash` with SHA-256 verifiers; per-project HMAC telemetry auth with 5-minute clock-skew check and nonce replay defense; DLP privacy redactions on preview telemetry; server-authoritative Stripe billing lifecycle with idempotency event store; signed Ed25519 policy sync manifests with ETag caching; RBAC hierarchy and atomic rollback on org creation failure; 6/6 tests passing.
+- **MCP Shield Core Hardening (`mcp-shield`)**: Remote intel CircuitBreaker (`src/security/circuit-breaker.ts`) with high-risk fail-closed semantics; signed policy bundle sync; 103 suites / 981 tests passing (100%); security regression gate passing (100% mutation score, 16/16 attack corpus variants, P50=306us latency); machine-readable certification report `reports/production-certification.json` certified.
+- **Production Status**: `PRODUCTION READY — WITH DOCUMENTED RESIDUAL RISKS`.
+
