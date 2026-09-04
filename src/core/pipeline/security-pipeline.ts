@@ -3,6 +3,13 @@ import { ToolCapabilities, CapabilityInferencer, CapabilityEvidence } from '../.
 import { UnicodeNormalizer } from '../../security/unicode-normalizer';
 import { UnifiedInterpreterClassifier } from '../../security/interpreter-analyzer';
 import { PathSecurityResolver } from '../../security/path-resolver';
+import { FeatureExtractor, FeatureVector } from '../../security/ml/feature-extractor';
+import { TabularRiskModel, ModelAPrediction } from '../../security/ml/models/tabular-risk-model';
+import { TextSecurityClassifier, TextClassificationResult } from '../../security/ml/models/text-security-classifier';
+import { BehaviorAnomalyDetector, AnomalyDetectionResult } from '../../security/ml/models/behavior-anomaly-detector';
+import { NoveltyScorer, NoveltyReport } from '../../security/ml/novelty-scorer';
+import { SchemaDriftDetector, SchemaDriftEvent } from '../../security/ml/schema-drift-detector';
+import { SecurityIntelligenceRegistry, SecurityIntelligenceVersion } from '../../security/ml/intelligence-version';
 
 export interface JsonRpcMessage {
   jsonrpc: string;
@@ -19,6 +26,7 @@ export interface NormalizedInput {
   rawArgs: Record<string, any>;
   candidateCommands: string[];
   candidatePaths: string[];
+  candidateUrls: string[];
   isShellTool: boolean;
 }
 
@@ -54,6 +62,16 @@ export interface SecurityContext {
   risk: RiskAssessment;
   decision?: SecurityDecision;
   signal?: AbortSignal;
+  mlInsights?: {
+    features?: FeatureVector;
+    modelAPrediction?: ModelAPrediction;
+    modelBClassification?: TextClassificationResult;
+    modelCAnomaly?: AnomalyDetectionResult;
+    novelty?: NoveltyReport;
+    schemaDrift?: SchemaDriftEvent | null;
+    intelligenceVersion?: SecurityIntelligenceVersion;
+    shadowMode?: boolean;
+  };
 }
 
 export interface SecurityDetector {
@@ -64,9 +82,33 @@ export interface SecurityDetector {
 export class SecurityPipeline {
   private detectors: SecurityDetector[] = [];
   private interpreterClassifier = new UnifiedInterpreterClassifier();
+  private noveltyScorer = new NoveltyScorer();
+  private anomalyDetector = new BehaviorAnomalyDetector();
+  private driftDetector = new SchemaDriftDetector();
+  private shadowMode: boolean = false;
 
   public registerDetector(detector: SecurityDetector): void {
     this.detectors.push(detector);
+  }
+
+  public setShadowMode(enabled: boolean): void {
+    this.shadowMode = enabled;
+  }
+
+  public isShadowMode(): boolean {
+    return this.shadowMode;
+  }
+
+  public getNoveltyScorer(): NoveltyScorer {
+    return this.noveltyScorer;
+  }
+
+  public getAnomalyDetector(): BehaviorAnomalyDetector {
+    return this.anomalyDetector;
+  }
+
+  public getDriftDetector(): SchemaDriftDetector {
+    return this.driftDetector;
   }
 
   public async evaluate(
@@ -103,10 +145,13 @@ export class SecurityPipeline {
     // Stage 4: Attack-path & Interpreter Analysis
     this.runAttackPathAnalysis(context);
 
-    // Stage 5: Risk Scoring
+    // Stage 5: ML Intelligence & Novelty Analysis
+    this.runMlIntelligenceStage(context);
+
+    // Stage 6: Risk Scoring & Hybrid Fusion
     this.scoreRiskStage(context);
 
-    // Stage 6: Policy Decision
+    // Stage 7: Policy Decision
     this.makePolicyDecisionStage(context);
 
     return context;
@@ -119,12 +164,17 @@ export class SecurityPipeline {
 
     const candidateCommands: string[] = [];
     const candidatePaths: string[] = [];
+    const candidateUrls: string[] = [];
 
     const extractStrings = (obj: any, depth = 0) => {
       if (!obj || depth > 8) return;
       if (typeof obj === 'string') {
         const trimmed = obj.trim();
-        if (trimmed) candidateCommands.push(trimmed);
+        if (trimmed) {
+          candidateCommands.push(trimmed);
+          const urls = trimmed.match(/https?:\/\/[^\s"'>]+/gi);
+          if (urls) candidateUrls.push(...urls);
+        }
         return;
       }
       if (Array.isArray(obj)) {
@@ -136,8 +186,14 @@ export class SecurityPipeline {
           const lower = k.toLowerCase();
           if (['command', 'cmd', 'script', 'code', 'exec', 'shell', 'payload', 'args'].includes(lower)) {
             if (typeof v === 'string' && v.trim()) candidateCommands.push(v.trim());
-          } else if (['path', 'file', 'filename', 'filepath', 'dest', 'destination', 'targetpath'].includes(lower)) {
+          } else if (['path', 'file', 'filename', 'filepath'].includes(lower)) {
             if (typeof v === 'string' && v.trim()) candidatePaths.push(v.trim());
+          } else if (['url', 'uri', 'endpoint', 'dest', 'destination', 'webhook', 'target'].includes(lower)) {
+            if (typeof v === 'string' && v.trim()) candidateUrls.push(v.trim());
+          }
+          if (typeof v === 'string') {
+            const urls = v.match(/https?:\/\/[^\s"'>]+/gi);
+            if (urls) candidateUrls.push(...urls);
           }
           if (typeof v === 'object' && v !== null) {
             extractStrings(v, depth + 1);
@@ -154,6 +210,7 @@ export class SecurityPipeline {
       rawArgs,
       candidateCommands,
       candidatePaths,
+      candidateUrls,
       isShellTool: /shell|bash|exec|terminal|run_command|eval/i.test(toolName)
     };
   }
@@ -234,11 +291,86 @@ export class SecurityPipeline {
     }
   }
 
+  private runMlIntelligenceStage(context: SecurityContext): void {
+    const input = context.normalizedInput;
+    const schema = (input.raw?.params?._schema) || {};
+    const desc = input.raw?.params?.description || '';
+
+    // 1. Schema Drift Check
+    const drift = input.toolName ? this.driftDetector.evaluateDrift(input.toolName, schema, desc) : null;
+    if (drift && drift.evidence) {
+      context.evidence.push(drift.evidence);
+    }
+
+    // 2. Online Novelty Scoring
+    const novelty = this.noveltyScorer.evaluate({
+      toolName: input.toolName,
+      schema,
+      capabilities: Object.entries(context.capabilities.effective)
+        .filter(([_, v]) => v)
+        .map(([k]) => k)
+    });
+
+    // 3. Feature Extraction
+    const features = FeatureExtractor.extractFeatures({
+      tool: {
+        toolName: input.toolName,
+        schema,
+        effectiveCapabilities: context.capabilities.effective,
+        declaredCapabilities: context.capabilities.declared,
+        inferredCapabilities: context.capabilities.inferred,
+        hasSchemaDrift: Boolean(drift?.isHighRiskDrift)
+      },
+      request: {
+        rawBody: input.rawArgs,
+        extractedCommands: input.candidateCommands,
+        extractedPaths: input.candidatePaths,
+        candidateUrls: input.candidateUrls
+      },
+      behavior: {
+        toolHistory: []
+      }
+    });
+
+    // 4. Model A: Tabular Risk Model
+    const modelAPrediction = TabularRiskModel.predict(features);
+
+    // 5. Model B: Text Security Classifier
+    const stringifiedArgs = JSON.stringify(input.rawArgs);
+    const modelBClassification = TextSecurityClassifier.classify(stringifiedArgs, 'parameter');
+    if (modelBClassification.evidence) {
+      context.evidence.push(modelBClassification.evidence);
+    }
+
+    // 6. Model C: Behavioral Anomaly Detection
+    const modelCAnomaly = this.anomalyDetector.evaluateAction({
+      currentTool: input.toolName,
+      currentCapabilities: Object.entries(context.capabilities.effective)
+        .filter(([_, v]) => v)
+        .map(([k]) => k)
+    });
+    if (modelCAnomaly.evidence) {
+      context.evidence.push(modelCAnomaly.evidence);
+    }
+
+    context.mlInsights = {
+      features,
+      modelAPrediction,
+      modelBClassification,
+      modelCAnomaly,
+      novelty,
+      schemaDrift: drift,
+      intelligenceVersion: SecurityIntelligenceRegistry.getActiveVersion(),
+      shadowMode: this.shadowMode
+    };
+  }
+
   private scoreRiskStage(context: SecurityContext): void {
     let maxSeverity = 0.0;
     let hardBlock = false;
     let primaryViolation: string | undefined;
 
+    // Evaluate deterministic evidence first
     for (const ev of context.evidence) {
       if (ev.severity > maxSeverity) {
         maxSeverity = ev.severity;
@@ -250,6 +382,18 @@ export class SecurityPipeline {
       }
     }
 
+    // Incorporate ML Model A score if active and not in shadow mode
+    if (context.mlInsights?.modelAPrediction) {
+      const mlScoreNormalized = context.mlInsights.modelAPrediction.riskScore / 100.0;
+      // Fundamental Invariant: ML may increase suspicion, never override hard block
+      if (!this.shadowMode && mlScoreNormalized > maxSeverity) {
+        maxSeverity = mlScoreNormalized;
+        if (context.mlInsights.modelAPrediction.primarySignals.length > 0) {
+          primaryViolation = context.mlInsights.modelAPrediction.primarySignals[0];
+        }
+      }
+    }
+
     context.risk = {
       score: maxSeverity,
       hardBlockTriggered: hardBlock,
@@ -258,6 +402,7 @@ export class SecurityPipeline {
   }
 
   private makePolicyDecisionStage(context: SecurityContext): void {
+    // Invariant: Deterministic hard block is strictly authoritative
     if (context.risk.hardBlockTriggered || context.risk.score >= 0.8) {
       context.decision = {
         action: 'BLOCK',
@@ -269,9 +414,19 @@ export class SecurityPipeline {
         reason: context.risk.primaryViolation || 'High-risk operation requires human authorization'
       };
     } else {
-      context.decision = {
-        action: 'ALLOW'
-      };
+      // Check if ML recommends stronger non-blocking action (SANDBOX or MONITOR)
+      const mlAction = context.mlInsights?.modelAPrediction?.recommendedAction;
+      if (!this.shadowMode && mlAction === 'SANDBOX') {
+        context.decision = {
+          action: 'SANDBOX',
+          reason: 'ML risk model recommended sandboxed execution'
+        };
+      } else {
+        context.decision = {
+          action: 'ALLOW'
+        };
+      }
     }
   }
 }
+

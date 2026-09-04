@@ -486,3 +486,22 @@ export class IpClassifier {
     return { isBlocked: false };
   }
 }
+
+/**
+ * Detects special, non-standard, or obfuscated IP representations (octal, hex, dword)
+ */
+export function isSpecialIpRepresentation(ipStr: string): boolean {
+  if (!ipStr) return false;
+  const clean = ipStr.trim().toLowerCase();
+  if (/^0x[0-9a-f]+/i.test(clean)) return true;
+  if (/^0[0-7]{2,}/.test(clean)) return true;
+  if (/^\d{8,11}$/.test(clean) && !clean.includes('.')) return true;
+  if (clean.includes('.')) {
+    const parts = clean.split('.');
+    for (const part of parts) {
+      if (/^0[0-7]+$/.test(part) && part.length > 1) return true;
+      if (/^0x[0-9a-f]+$/i.test(part)) return true;
+    }
+  }
+  return false;
+}

@@ -14,7 +14,10 @@ export async function middleware(request: NextRequest) {
     // Exempt cryptographic webhook endpoints and HMAC-signed telemetry ingest
     const isExempt = pathname === '/api/v1/billing/webhook' || pathname === '/api/v1/telemetry/ingest';
     
-    if (!isExempt) {
+    const authHeader = request.headers.get('authorization');
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : undefined;
+
+    if (!isExempt && !bearerToken) {
       const origin = request.headers.get('origin');
       const host = request.headers.get('host');
       const secFetchSite = request.headers.get('sec-fetch-site');
@@ -115,9 +118,12 @@ export async function middleware(request: NextRequest) {
       }
     )
 
+    const authHeaderUser = request.headers.get('authorization');
+    const bearerTokenUser = authHeaderUser?.startsWith('Bearer ') ? authHeaderUser.substring(7).trim() : undefined;
+
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabase.auth.getUser(bearerTokenUser)
 
     if (!user) {
       if (pathname.startsWith('/api/')) {

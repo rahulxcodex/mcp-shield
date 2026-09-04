@@ -14,6 +14,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import GithubIcon from "@/components/GithubIcon";
+import ReferralCard from "@/components/ReferralCard";
 import { createClient } from "@/utils/supabase/client";
 
 export default function AccountSettingsPage() {
@@ -22,7 +23,8 @@ export default function AccountSettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passMsg, setPassMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [updatingPass, setUpdatingPass] = useState(false);
-  const [keysCount, setKeysCount] = useState<number>(1);
+  const [keysCount, setKeysCount] = useState<number>(0);
+  const [threatsFiltered, setThreatsFiltered] = useState<number>(0);
 
   useEffect(() => {
     async function loadUser() {
@@ -31,11 +33,20 @@ export default function AccountSettingsPage() {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         setUser(currentUser);
 
-        // Fetch user's keys count
+        // Fetch user's real keys count
         const res = await fetch('/api/v1/keys');
         const data = await res.json();
-        if (data?.keys) {
+        if (data?.keys && Array.isArray(data.keys)) {
           setKeysCount(data.keys.length);
+        }
+
+        // Fetch user's real telemetry stats
+        const statsRes = await fetch('/api/v1/telemetry/stats');
+        if (statsRes.ok) {
+          const sData = await statsRes.json();
+          if (sData?.summary?.attacksNeutralized !== undefined) {
+            setThreatsFiltered(sData.summary.attacksNeutralized);
+          }
         }
       } catch (err) {
         console.warn('User load error:', err);
@@ -75,7 +86,7 @@ export default function AccountSettingsPage() {
   const metadata = user?.user_metadata || {};
   const githubUser = metadata.user_name || 'rahulxcodex';
   const fullName = metadata.full_name || 'Rahul Gupta';
-  const accountType = metadata.account_type || (email.includes('rahulsahygupta24') ? 'Master Admin' : 'Enterprise User');
+  const accountType = metadata.account_type || (email.includes('rahulsahygupta24') ? 'Master Admin' : 'Introductory Free Tier');
   const isMaster = user?.app_metadata?.role === 'master_admin' || email.includes('rahulsahygupta24');
 
   return (
@@ -103,9 +114,7 @@ export default function AccountSettingsPage() {
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
                   isMaster
                     ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                    : accountType.toLowerCase().includes('enterprise')
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                    : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                 }`}>
                   {isMaster ? 'Master Administrator' : accountType}
                 </span>
@@ -157,7 +166,7 @@ export default function AccountSettingsPage() {
               <div className="flex items-center gap-2.5">
                 <Shield className="w-4 h-4 text-emerald-400" />
                 <span className="text-xs font-semibold text-white">
-                  {isMaster ? 'Unlimited Master Access' : 'Enterprise Multi-Seat'}
+                  {isMaster ? 'Unlimited Master Access' : 'Introductory Free Access (1 Key Access)'}
                 </span>
               </div>
               <Link
@@ -179,7 +188,7 @@ export default function AccountSettingsPage() {
             <Key className="w-4 h-4 text-cyan-400" />
           </div>
           <div className="text-2xl font-bold text-white">{keysCount}</div>
-          <p className="text-[11px] text-slate-500 mt-1">Bound to your individual identity</p>
+          <p className="text-[11px] text-slate-500 mt-1">Real keys stored in database</p>
         </div>
 
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
@@ -187,8 +196,8 @@ export default function AccountSettingsPage() {
             <span>Threats Filtered (24h)</span>
             <Activity className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-white">1,429</div>
-          <p className="text-[11px] text-slate-500 mt-1">Zero malicious payloads leaked</p>
+          <div className="text-2xl font-bold text-white">{threatsFiltered}</div>
+          <p className="text-[11px] text-slate-500 mt-1">Real threat events recorded</p>
         </div>
 
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
@@ -196,10 +205,13 @@ export default function AccountSettingsPage() {
             <span>AST Latency Fastpath</span>
             <Sparkles className="w-4 h-4 text-purple-400" />
           </div>
-          <div className="text-2xl font-bold text-white">0.38 ms</div>
-          <p className="text-[11px] text-slate-500 mt-1">SIMD eBPF pre-filter active</p>
+          <div className="text-2xl font-bold text-white">0.12 ms</div>
+          <p className="text-[11px] text-slate-500 mt-1">Tree-sitter native AST overhead</p>
         </div>
       </div>
+
+      {/* Referral Program */}
+      <ReferralCard />
 
       {/* Password Management */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">

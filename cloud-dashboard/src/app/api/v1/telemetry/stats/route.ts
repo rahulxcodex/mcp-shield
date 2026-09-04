@@ -216,31 +216,31 @@ export async function GET() {
     console.error('[TELEMETRY_STATS] Route error:', err);
   }
 
-  // Realistic baseline telemetry metrics ONLY for unauthenticated public demo/sandbox
+  // Return genuine zero metrics (never fake random numbers)
   return NextResponse.json({
     live: false,
     summary: {
-      attacksNeutralized: 1420,
-      secretsTokenized: 894,
-      invocations: 128450,
+      attacksNeutralized: 0,
+      secretsTokenized: 0,
+      invocations: 0,
       activeGuardrails: 18,
       astLatencyMs: 0.12
     },
     timelineData: [
-      { time: '00:00', allowed: 120, threats: 4 },
-      { time: '04:00', allowed: 90, threats: 2 },
-      { time: '08:00', allowed: 340, threats: 15 },
-      { time: '12:00', allowed: 610, threats: 28 },
-      { time: '16:00', allowed: 840, threats: 34 },
-      { time: '20:00', allowed: 520, threats: 19 },
-      { time: 'Now', allowed: 480, threats: 12 },
+      { time: '00:00', allowed: 0, threats: 0 },
+      { time: '04:00', allowed: 0, threats: 0 },
+      { time: '08:00', allowed: 0, threats: 0 },
+      { time: '12:00', allowed: 0, threats: 0 },
+      { time: '16:00', allowed: 0, threats: 0 },
+      { time: '20:00', allowed: 0, threats: 0 },
+      { time: 'Now', allowed: 0, threats: 0 },
     ],
     vectorData: [
-      { vector: 'AST Injection', count: 42, color: '#f43f5e' },
-      { vector: 'SSRF & Metadata', count: 28, color: '#fb923c' },
-      { vector: 'DLP Redacted', count: 65, color: '#22d3ee' },
-      { vector: 'Canary Tripped', count: 11, color: '#eab308' },
-      { vector: 'Rate Exceeded', count: 19, color: '#a855f7' },
+      { vector: 'AST Injection', count: 0, color: '#f43f5e' },
+      { vector: 'SSRF & Metadata', count: 0, color: '#fb923c' },
+      { vector: 'DLP Redacted', count: 0, color: '#22d3ee' },
+      { vector: 'Canary Tripped', count: 0, color: '#eab308' },
+      { vector: 'Rate Exceeded', count: 0, color: '#a855f7' },
     ]
   });
 }

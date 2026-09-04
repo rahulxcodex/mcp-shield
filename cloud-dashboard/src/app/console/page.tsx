@@ -37,7 +37,8 @@ import {
   HelpCircle,
   CheckSquare,
   Square,
-  Info
+  Info,
+  Upload
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import SupportModal from '@/components/SupportModal';
@@ -46,6 +47,7 @@ import OnboardingWizard from '@/components/OnboardingWizard';
 import EventDetailDrawer, { ThreatEvent } from '@/components/EventDetailDrawer';
 import AccountDropdown from '@/components/AccountDropdown';
 import MoreDropdown from '@/components/MoreDropdown';
+import ReferralCard from '@/components/ReferralCard';
 import {
   AreaChart,
   Area,
@@ -85,70 +87,24 @@ interface ApiKeyEntry {
   status: 'active' | 'revoked';
 }
 
-const INITIAL_EVENTS: SecurityEvent[] = [
-  {
-    id: 'evt-101',
-    timestamp: 'Just now',
-    eventType: 'BLOCK',
-    toolName: 'execute_command',
-    detector: 'Tree-sitter AST',
-    riskLevel: 'CRITICAL',
-    reason: 'Root destruction command rm -rf / detected in binary_expression',
-  },
-  {
-    id: 'evt-102',
-    timestamp: '2m ago',
-    eventType: 'SANITIZE',
-    toolName: 'read_env_file',
-    detector: 'Bijective FPE DLP',
-    riskLevel: 'HIGH',
-    reason: 'Tokenized AWS_SECRET_ACCESS_KEY (wJalrXUt...) with surrogate token',
-  },
-  {
-    id: 'evt-103',
-    timestamp: '5m ago',
-    eventType: 'BLOCK',
-    toolName: 'fetch_http',
-    detector: 'SSRF / Cloud Metadata',
-    riskLevel: 'CRITICAL',
-    reason: 'Egress blocked to AWS IMDS 169.254.169.254/latest/meta-data',
-  },
-  {
-    id: 'evt-104',
-    timestamp: '12m ago',
-    eventType: 'QUARANTINE',
-    toolName: 'sql_query',
-    detector: 'Canary Honeytoken',
-    riskLevel: 'CRITICAL',
-    reason: 'Agent context accessed decoy honeytoken mcp_honey_decoy_k8s_9921',
-  },
-  {
-    id: 'evt-105',
-    timestamp: '18m ago',
-    eventType: 'BLOCK',
-    toolName: 'bash_run',
-    detector: 'Tree-sitter AST',
-    riskLevel: 'HIGH',
-    reason: 'PowerShell encoded command IEX [System.Text.Encoding]::Unicode blocked',
-  },
-];
+const INITIAL_EVENTS: SecurityEvent[] = [];
 
 const TIMELINE_DATA = [
-  { time: '00:00', allowed: 120, threats: 4 },
-  { time: '04:00', allowed: 90, threats: 2 },
-  { time: '08:00', allowed: 340, threats: 15 },
-  { time: '12:00', allowed: 610, threats: 28 },
-  { time: '16:00', allowed: 840, threats: 34 },
-  { time: '20:00', allowed: 520, threats: 19 },
-  { time: 'Now', allowed: 480, threats: 12 },
+  { time: '00:00', allowed: 0, threats: 0 },
+  { time: '04:00', allowed: 0, threats: 0 },
+  { time: '08:00', allowed: 0, threats: 0 },
+  { time: '12:00', allowed: 0, threats: 0 },
+  { time: '16:00', allowed: 0, threats: 0 },
+  { time: '20:00', allowed: 0, threats: 0 },
+  { time: 'Now', allowed: 0, threats: 0 },
 ];
 
 const VECTOR_DATA = [
-  { vector: 'AST Injection', count: 42, color: '#f43f5e' },
-  { vector: 'SSRF & Metadata', count: 28, color: '#fb923c' },
-  { vector: 'DLP Redacted', count: 65, color: '#22d3ee' },
-  { vector: 'Canary Tripped', count: 11, color: '#eab308' },
-  { vector: 'Rate Exceeded', count: 19, color: '#a855f7' },
+  { vector: 'AST Injection', count: 0, color: '#f43f5e' },
+  { vector: 'SSRF & Metadata', count: 0, color: '#fb923c' },
+  { vector: 'DLP Redacted', count: 0, color: '#22d3ee' },
+  { vector: 'Canary Tripped', count: 0, color: '#eab308' },
+  { vector: 'Rate Exceeded', count: 0, color: '#a855f7' },
 ];
 
 export default function ConsolePage() {
@@ -157,28 +113,25 @@ export default function ConsolePage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
-  const [apiKeys, setApiKeys] = useState<ApiKeyEntry[]>([
-    {
-      id: 'key-dev-101',
-      name: 'Claude Desktop Agent',
-      keyPrefix: 'mcp_live_89b21a01',
-      createdAt: '2026-09-01',
-      lastUsedAt: '2 mins ago',
-      status: 'active'
-    }
-  ]);
+  const [apiKeys, setApiKeys] = useState<ApiKeyEntry[]>([]);
   const [isCreateKeyOpen, setIsCreateKeyOpen] = useState(false);
+  const [isAddExistingOpen, setIsAddExistingOpen] = useState(false);
+  const [addExistingKey, setAddExistingKey] = useState('');
+  const [addExistingName, setAddExistingName] = useState('');
+  const [addExistingError, setAddExistingError] = useState<string | null>(null);
+  const [addExistingSuccess, setAddExistingSuccess] = useState<string | null>(null);
+  const [addExistingLoading, setAddExistingLoading] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyClient, setNewKeyClient] = useState('Claude Desktop');
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null);
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
 
   const [stats, setStats] = useState({
-    healthScore: 98,
-    attacksNeutralized: 165,
-    secretsTokenized: 84,
-    invocations: 3000,
-    latency: '0.18ms',
+    healthScore: 100,
+    attacksNeutralized: 0,
+    secretsTokenized: 0,
+    invocations: 0,
+    latency: '0.12ms',
   });
 
   const [timelineData, setTimelineData] = useState(TIMELINE_DATA);
@@ -378,6 +331,72 @@ export default function ConsolePage() {
       setRotatingKeyId(null);
     }
   };
+
+  const handleImportExistingKey = async () => {
+    const trimmedKey = addExistingKey.trim();
+    const trimmedName = addExistingName.trim() || 'Master Key';
+
+    if (!trimmedKey) {
+      setAddExistingError('Please enter an API key or Master Key.');
+      return;
+    }
+    if (trimmedKey.length < 8) {
+      setAddExistingError('Key must be at least 8 characters long.');
+      return;
+    }
+
+    setAddExistingLoading(true);
+    setAddExistingError(null);
+
+    try {
+      const res = await fetch('/api/v1/keys', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawKey: trimmedKey, name: trimmedName })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setAddExistingError(data.error || 'Failed to import key.');
+        return;
+      }
+
+      if (data?.key) {
+        const importedEntry: ApiKeyEntry = {
+          id: data.key.id,
+          name: data.key.name,
+          keyPrefix: data.key.keyPrefix,
+          createdAt: new Date().toLocaleDateString(),
+          lastUsedAt: 'Active',
+          status: 'active'
+        };
+        setApiKeys((prev) => [importedEntry, ...prev.map((k) => ({ ...k, status: 'revoked' as const }))]);
+        setAddExistingSuccess(data.message || (data.isMaster ? 'Master Key Accepted! Master Admin Privileges Granted.' : 'Key imported successfully!'));
+
+        if (data.isMaster) {
+          document.cookie = "mcp_master_elevated=true; path=/; max-age=2592000";
+          try {
+            localStorage.setItem('mcp_master_elevated', 'true');
+          } catch {}
+        }
+
+        setTimeout(() => {
+          setIsAddExistingOpen(false);
+          setAddExistingKey('');
+          setAddExistingName('');
+          setAddExistingSuccess(null);
+          if (data.isMaster) {
+            window.location.reload();
+          }
+        }, 1200);
+      }
+    } catch {
+      setAddExistingError('Network error connecting to key service.');
+    } finally {
+      setAddExistingLoading(false);
+    }
+  };
+
 
   const handleSimulateBatch = () => {
     setIsSimulating(true);
@@ -626,6 +645,9 @@ export default function ConsolePage() {
             </div>
           </div>
         </div>
+
+        {/* Referral Program Card */}
+        <ReferralCard />
 
         {/* Analytics Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -947,23 +969,73 @@ export default function ConsolePage() {
             <div className="bg-[#0f111a] border border-slate-800 rounded-xl p-4 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                 <div className="font-semibold text-sm flex items-center gap-2 text-slate-100">
-                  <Key className="w-4 h-4 text-emerald-400" /> API Keys & Device Pairing
+                  <Key className="w-4 h-4 text-emerald-400" /> API Keys & Access
+                  {apiKeys.length > 0 && (
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                      {apiKeys.length} {apiKeys.length === 1 ? 'Key' : 'Keys'}
+                    </span>
+                  )}
                 </div>
-                <button
-                  onClick={() => setIsCreateKeyOpen(true)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-medium border border-emerald-500/30 transition shadow-sm"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>New Key</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      setIsAddExistingOpen(true);
+                      setAddExistingKey("");
+                      setAddExistingName("");
+                      setAddExistingError(null);
+                      setAddExistingSuccess(null);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition shadow-sm"
+                    title="Import Existing or Master API Key"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Add Existing</span>
+                  </button>
+                  <button
+                    onClick={() => setIsCreateKeyOpen(true)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-medium border border-emerald-500/30 transition shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>New Key</span>
+                  </button>
+                </div>
               </div>
 
               <p className="text-xs text-slate-400">
-                Pair local MCP clients to stream real-time AST evaluations, blocks, and DLP redacting:
+                Pair local MCP clients to stream real-time AST evaluations, blocks, and DLP redacting (1 active key per account):
               </p>
 
               <div className="space-y-2">
-                {apiKeys.map((k) => (
+                {apiKeys.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-dashed border-slate-800 text-center space-y-2">
+                    <Key className="w-5 h-5 mx-auto text-slate-600" />
+                    <p className="text-xs text-slate-300 font-medium">No Active API Keys</p>
+                    <p className="text-[11px] text-slate-500">
+                      Generate a new key or import your Master Key to start streaming zero-trust protection.
+                    </p>
+                    <div className="flex items-center justify-center gap-2 pt-1">
+                      <button
+                        onClick={() => setIsCreateKeyOpen(true)}
+                        className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium"
+                      >
+                        Generate Key
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsAddExistingOpen(true);
+                          setAddExistingKey("");
+                          setAddExistingName("");
+                          setAddExistingError(null);
+                          setAddExistingSuccess(null);
+                        }}
+                        className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700"
+                      >
+                        Add Existing Key
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  apiKeys.map((k) => (
                   <div
                     key={k.id}
                     className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-slate-700 transition space-y-1.5"
@@ -1021,7 +1093,7 @@ export default function ConsolePage() {
                       <Link href="/settings/billing" className="text-blue-400 hover:underline">Renew / Upgrade</Link>
                     </div>
                   </div>
-                ))}
+                )))}
               </div>
 
               {/* Quick CLI snippet */}
@@ -1240,6 +1312,85 @@ export default function ConsolePage() {
                 Done & Return to Console
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Existing Key / Master Key Modal */}
+      {isAddExistingOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Upload className="w-4 h-4 text-emerald-400" />
+                Add Existing API Key or Master Key
+              </h3>
+              <button onClick={() => setIsAddExistingOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-300 text-xs">
+              Paste your existing API key or Master Key. The key will be cryptographically verified and bound to your account with 1 active key access.
+            </div>
+
+            {addExistingError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{addExistingError}</span>
+              </div>
+            )}
+
+            {addExistingSuccess ? (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs text-center space-y-1">
+                <ShieldCheck className="w-6 h-6 mx-auto text-emerald-400" />
+                <p className="font-semibold text-white">{addExistingSuccess}</p>
+                <p className="text-slate-400">Your key is active and ready for MCP pairing.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Key Description / Name</label>
+                  <input
+                    type="text"
+                    value={addExistingName}
+                    onChange={(e) => { setAddExistingName(e.target.value); setAddExistingError(null); }}
+                    placeholder="e.g. Master Admin Key, Enterprise Team Key"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">API Key / Master Key</label>
+                  <input
+                    type="text"
+                    value={addExistingKey}
+                    onChange={(e) => { setAddExistingKey(e.target.value); setAddExistingError(null); }}
+                    placeholder="Paste your key here (e.g. MASTER_... or mcp_live_...)"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Accepts Master Keys (MASTER_...) or client API keys (mcp_live_...). Accounts use 1 key with access.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setIsAddExistingOpen(false)}
+                    className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleImportExistingKey}
+                    disabled={addExistingLoading || !addExistingKey.trim()}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-black rounded-xl text-xs font-semibold shadow-lg shadow-emerald-500/20"
+                  >
+                    {addExistingLoading ? 'Verifying...' : 'Import & Activate Key'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
