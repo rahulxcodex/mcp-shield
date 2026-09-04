@@ -45,9 +45,9 @@ The assessment employed a three-tiered hybrid evaluation model:
 
 | Finding ID | Title | Severity (CVSS) | Affected Component | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **SEC-01** | AST Parameter Expansion & $IFS Obfuscation Bypass | **HIGH (8.2)** | `ASTAnalyzer` | ✅ **Fixed** (`CVE-2026-SHIELD-001`) |
-| **SEC-02** | Short Flag Substring Collision & Flag Disambiguation | **MEDIUM (5.8)** | `ASTAnalyzer` | ✅ **Fixed** (`CVE-2026-SHIELD-002`) |
-| **SEC-03** | Multi-Stage Pipeline Compound Subshell Evasion | **HIGH (7.8)** | `ASTAnalyzer` | ✅ **Fixed** (`CVE-2026-SHIELD-003`) |
+| **SEC-01** | AST Parameter Expansion & $IFS Obfuscation Bypass | **HIGH (8.2)** | `ASTAnalyzer` | ✅ **Fixed** (`ADV-2026-001` / `MCP-SHIELD-VULN-001`) |
+| **SEC-02** | Short Flag Substring Collision & Flag Disambiguation | **MEDIUM (5.8)** | `ASTAnalyzer` | ✅ **Fixed** (`ADV-2026-002` / `MCP-SHIELD-VULN-002`) |
+| **SEC-03** | Multi-Stage Pipeline Compound Subshell Evasion | **HIGH (7.8)** | `ASTAnalyzer` | ✅ **Fixed** (`ADV-2026-003` / `MCP-SHIELD-VULN-003`) |
 | **SEC-04** | Per-Call Uint32Array Allocation in Shannon Entropy | **LOW (3.2)** | `SecretSanitizer` | ✅ **Fixed** (Pre-Allocated Frequency Buffer) |
 | **SEC-05** | Unchecked Schema Drift on MCP Client Adapters | **LOW (3.5)** | `ProtectCommand` | ✅ **Fixed** (Pinned Schema & CI) |
 
@@ -63,7 +63,7 @@ The assessment employed a three-tiered hybrid evaluation model:
 ### 2. High-Throughput Reversible DLP Secret Sanitizer
 - **Observation**: `calculateEntropy()` instantiated a new 256-element `Uint32Array` on every candidate match. Additionally, word boundary delimiters were needed to avoid capturing variable assignments.
 - **Remediation**: Replaced dynamic allocations with a pre-allocated instance buffer `this.charFrequencies = new Uint32Array(256)` zeroed via `.fill(0)`. Updated compound regex boundaries.
-- **Verification**: Verified with `benchmarks/secret-detection.bench.ts` achieving **100% baseline rule coverage** across 1,780 lines of internal test fixtures (independent held-out benchmarks pending), and lossless roundtrip property tests in `tests/security-corpus/property-based.test.ts`.
+- **Verification**: Verified with `benchmarks/secret-detection.bench.ts` achieving **100% recall on an internally labeled 1,780-line benchmark; external held-out evaluation pending**, and lossless roundtrip property tests in `tests/security-corpus/property-based.test.ts`.
 
 ### 3. Client Schema Drift Protection
 - **Observation**: Auto-protection commands did not validate JSON structures before mutating configuration files for Claude Desktop, Cursor, Windsurf, or Cline.

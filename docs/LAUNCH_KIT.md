@@ -39,7 +39,7 @@ Try it out and let us know what you think! 🛡️
 *A: Sandboxing is great for virtualization, but developers want agents to edit local files, run local compilers, and interact with existing tools without 30-second container spin-up overhead. MCP-Shield provides real-time, deterministic wire protection directly inside your native workflow.*
 
 **Q: Does MCP-Shield use an LLM to evaluate commands?**  
-*A: No! LLM-as-a-judge is slow (800ms–2s), expensive, and susceptible to prompt injection itself. MCP-Shield uses native Tree-Sitter AST parsers running in C/Node at sub-millisecond speeds (<150µs) with 100% deterministic accuracy.*
+*A: No! LLM-as-a-judge is slow (800ms–2s), expensive, and susceptible to prompt injection itself. MCP-Shield uses native Tree-Sitter AST parsers running in C/Node at sub-millisecond speeds (<150µs) with deterministic policy enforcement.*
 
 ---
 
@@ -92,7 +92,7 @@ Today we're launching MCP-Shield 🛡️: The Zero-Trust Security Gateway & AST 
 Why not regex? Regex fails on basic shell tricks: $IFS, nested quotes, subshell pipes, and alias expansion.
 Why not LLM-as-a-judge? Too slow (1.5s latency) and vulnerable to jailbreaks.
 
-MCP-Shield uses native Tree-Sitter AST parsing in <150µs with 100% deterministic enforcement.
+MCP-Shield uses native Tree-Sitter AST parsing in <150µs with deterministic policy enforcement.
 ```
 
 ### Tweet 3 (1-Command Install & Call to Action)

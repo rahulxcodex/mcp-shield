@@ -133,4 +133,24 @@ rate_limiting:
 
 ---
 
+## 6. 🧠 Machine Learning & Telemetry Data Flywheel Strategy
+
+In addition to deterministic AST filtering and Shannon entropy DLP, MCP-Shield supports a 4-tier machine learning security suite:
+- **Model A (Tabular Action Risk)**: Evaluates per-invocation risk based on 42 structural features.
+- **Model B (Attack Family Classifier)**: Identifies attack vectors (SSRF, exfiltration, shell injection, privilege escalation).
+- **Model C (Behavioral Sequence Trajectory)**: Tracks multi-turn agent execution sequences and detects dangerous tool combinations.
+- **Model D (Novelty & Drift Detector)**: Isolation Forest identifying anomalous tool usage deviating from established tenant baselines.
+
+### The Real-World Telemetry Moat vs. Synthetic Benchmarks
+- **Synthetic Convergence**: In synthetic benchmarks (`models/export/diagnostic_report.json`), the models achieve near-perfect ROC-AUC (~ 1.0) because the test distribution is generated from programmatic rules. 
+- **The True Long-Term Moat**: Synthetic benchmarks prove algorithm soundness, but real-world zero-day defense requires continuous training on live telemetry:
+  1. Real-world agent tool invocation traces from diverse LLM orchestrators.
+  2. Multi-turn cross-server interaction graphs.
+  3. Ground-truth false positive and negative reports from enterprise environments.
+  4. Active red-team adversarial bypass submissions.
+
+Under our IP architecture, the expanding real-world telemetry dataset and continuously retrained enterprise weights are maintained as private trade secrets within `mcp-shield-enterprise-intel`, creating an accelerating data flywheel that compounds defensibility over time.
+
+---
+
 *For technical onboarding or an enterprise architecture review, contact [security@mcp-shield.dev](mailto:security@mcp-shield.dev).*

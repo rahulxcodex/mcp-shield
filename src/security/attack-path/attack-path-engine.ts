@@ -1,4 +1,5 @@
 import { AttackPath, AttackNode, SecurityDecision } from './attack-path-types';
+import { ToxicFlowEngine, ToxicFlowViolation } from '../dataflow/toxic-flow-engine';
 
 export interface ChainEvaluationResult {
   isDangerous: boolean;
@@ -8,6 +9,7 @@ export interface ChainEvaluationResult {
 }
 
 export class AttackPathEngine {
+  private toxicFlowEngine = new ToxicFlowEngine();
   private callHistory: Array<{
     toolName: string;
     capabilities: string[];
@@ -17,6 +19,7 @@ export class AttackPathEngine {
 
   /**
    * Evaluates an in-flight tool invocation against the accumulated sequence history
+   * utilizing true semantic toxic-flow data lineage tracking.
    */
   public evaluateStep(
     toolName: string,
@@ -30,9 +33,14 @@ export class AttackPathEngine {
       timestamp: Date.now()
     });
 
-    const chainAnalysis = this.analyzeAccumulatedChain();
-    if (chainAnalysis.isDangerous) {
-      return chainAnalysis.decision;
+    const flowResult = this.toxicFlowEngine.evaluateStep(toolName, capabilities, args);
+    if (flowResult.dangerousChainIdentified) {
+      return {
+        action: 'BLOCK',
+        riskScore: flowResult.riskScore,
+        dangerousChainIdentified: true,
+        chainExplanation: `Kill chain detected: ${flowResult.chainExplanation || 'sensitive data read -> transformation/compression -> external egress'}`,
+      };
     }
 
     return {
@@ -46,123 +54,26 @@ export class AttackPathEngine {
    */
   public reset(): void {
     this.callHistory = [];
+    this.toxicFlowEngine.reset();
   }
 
   /**
-   * Analyzes an explicit declarative AttackPath definition
+   * Analyzes an explicit declarative AttackPath definition with semantic data lineage
    */
   public evaluateDeclarativePath(path: AttackPath): SecurityDecision {
-    const nodeNames = path.nodes.map(n => n.toolName.toLowerCase());
-    const capabilities = path.nodes.flatMap(n => n.capabilities.map(c => c.toLowerCase()));
-
-    const hasSensitiveSource = capabilities.some(c =>
-      c.includes('read') || c.includes('secret') || c.includes('database') || c.includes('filesystem')
-    ) || nodeNames.some(n => n.includes('database') || n.includes('read') || n.includes('export') || n.includes('credential'));
-
-    const hasTransformation = capabilities.some(c =>
-      c.includes('transform') || c.includes('encode') || c.includes('compress')
-    ) || nodeNames.some(n => n.includes('transform') || n.includes('compress') || n.includes('export') || n.includes('zip'));
-
-    const hasEgressDestination = capabilities.some(c =>
-      c.includes('network') || c.includes('upload') || c.includes('egress') || c.includes('http') || c.includes('exec')
-    ) || nodeNames.some(n => n.includes('upload') || n.includes('post') || n.includes('send') || n.includes('curl') || n.includes('webhook'));
-
-    if (hasSensitiveSource && hasEgressDestination) {
-      const isExfiltrationChain = hasTransformation || path.objective === 'exfiltration';
-      return {
-        action: 'BLOCK',
-        riskScore: isExfiltrationChain ? 0.95 : 0.85,
-        dangerousChainIdentified: true,
-        chainExplanation: `DANGEROUS MULTI-TOOL CHAIN: Objective [${path.objective}] detected across ${path.nodes.length} nodes (sensitive source + egress destination). Path: ${path.nodes.map(n => n.toolName).join(' -> ')}`
-      };
-    }
-
+    const res = this.toxicFlowEngine.evaluateDeclarativePath(path);
     return {
-      action: 'ALLOW',
-      riskScore: 0.1,
-      dangerousChainIdentified: false
+      action: res.action,
+      riskScore: res.riskScore,
+      dangerousChainIdentified: res.dangerousChainIdentified,
+      chainExplanation: res.chainExplanation,
     };
   }
 
   /**
-   * Detects multi-step attack chains in historical sequence
+   * Direct access to underlying toxic-flow engine
    */
-  private analyzeAccumulatedChain(): ChainEvaluationResult {
-    const recent = this.callHistory.slice(-10); // Look at last 10 calls
-    if (recent.length < 2) {
-      return {
-        isDangerous: false,
-        decision: { action: 'ALLOW', riskScore: 0.0 },
-        why: 'Insufficient history depth',
-        contributingNodes: []
-      };
-    }
-
-    let hasSensitiveRead = false;
-    let hasTransform = false;
-    let hasEgress = false;
-    const contributingNodes: string[] = [];
-
-    for (const step of recent) {
-      const name = step.toolName.toLowerCase();
-      const caps = step.capabilities.map(c => c.toLowerCase());
-
-      if (
-        caps.some(c => c.includes('read') || c.includes('database') || c.includes('secret') || c.includes('filesystem')) ||
-        name.includes('read') ||
-        name.includes('db') ||
-        name.includes('fetch_secret')
-      ) {
-        hasSensitiveRead = true;
-        contributingNodes.push(step.toolName);
-      }
-
-      if (
-        caps.some(c => c.includes('transform') || c.includes('compress') || c.includes('encode')) ||
-        name.includes('export') ||
-        name.includes('transform') ||
-        name.includes('zip')
-      ) {
-        hasTransform = true;
-        contributingNodes.push(step.toolName);
-      }
-
-      if (
-        caps.some(c => c.includes('network') || c.includes('upload') || c.includes('egress') || c.includes('http') || c.includes('curl')) ||
-        name.includes('upload') ||
-        name.includes('http') ||
-        name.includes('curl') ||
-        name.includes('send')
-      ) {
-        hasEgress = true;
-        contributingNodes.push(step.toolName);
-      }
-    }
-
-    // Kill chain: read -> [transform] -> egress
-    if (hasSensitiveRead && hasEgress) {
-      const why = hasTransform
-        ? `Kill chain detected: sensitive data read -> transformation/compression -> external egress`
-        : `Direct exfiltration chain: sensitive read followed by external egress attempt`;
-
-      return {
-        isDangerous: true,
-        decision: {
-          action: 'BLOCK',
-          riskScore: 0.94,
-          dangerousChainIdentified: true,
-          chainExplanation: why
-        },
-        why,
-        contributingNodes
-      };
-    }
-
-    return {
-      isDangerous: false,
-      decision: { action: 'ALLOW', riskScore: 0.1 },
-      why: 'No dangerous kill-chain pattern matched',
-      contributingNodes: []
-    };
+  public getToxicFlowEngine(): ToxicFlowEngine {
+    return this.toxicFlowEngine;
   }
 }

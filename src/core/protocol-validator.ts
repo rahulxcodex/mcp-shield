@@ -118,6 +118,50 @@ export class ProtocolValidator {
         }
         break;
 
+      case 'resources/list':
+      case 'resources/templates/list':
+        if (params !== undefined && params !== null && (typeof params !== 'object' || Array.isArray(params))) {
+          return { valid: false, errorCode: -32602, errorMessage: `Invalid params for ${method}: must be an object` };
+        }
+        break;
+
+      case 'resources/read':
+        if (!params || typeof params !== 'object' || Array.isArray(params)) {
+          return { valid: false, errorCode: -32602, errorMessage: 'Invalid params for resources/read: must be an object' };
+        }
+        if (typeof params.uri !== 'string' || !params.uri.trim()) {
+          return { valid: false, errorCode: -32602, errorMessage: 'Invalid params for resources/read: "uri" must be a non-empty string' };
+        }
+        break;
+
+      case 'resources/subscribe':
+      case 'resources/unsubscribe':
+        if (!params || typeof params !== 'object' || Array.isArray(params)) {
+          return { valid: false, errorCode: -32602, errorMessage: `Invalid params for ${method}: must be an object` };
+        }
+        if (typeof params.uri !== 'string' || !params.uri.trim()) {
+          return { valid: false, errorCode: -32602, errorMessage: `Invalid params for ${method}: "uri" must be a non-empty string` };
+        }
+        break;
+
+      case 'prompts/list':
+        if (params !== undefined && params !== null && (typeof params !== 'object' || Array.isArray(params))) {
+          return { valid: false, errorCode: -32602, errorMessage: 'Invalid params for prompts/list: must be an object' };
+        }
+        break;
+
+      case 'prompts/get':
+        if (!params || typeof params !== 'object' || Array.isArray(params)) {
+          return { valid: false, errorCode: -32602, errorMessage: 'Invalid params for prompts/get: must be an object' };
+        }
+        if (typeof params.name !== 'string' || !params.name.trim()) {
+          return { valid: false, errorCode: -32602, errorMessage: 'Invalid params for prompts/get: "name" must be a non-empty string' };
+        }
+        if (params.arguments !== undefined && (typeof params.arguments !== 'object' || params.arguments === null || Array.isArray(params.arguments))) {
+          return { valid: false, errorCode: -32602, errorMessage: 'Invalid params for prompts/get: "arguments" must be an object' };
+        }
+        break;
+
       case 'ping':
         if (params !== undefined && params !== null && (typeof params !== 'object' || Array.isArray(params))) {
           return { valid: false, errorCode: -32602, errorMessage: 'Invalid params for ping: must be an object' };

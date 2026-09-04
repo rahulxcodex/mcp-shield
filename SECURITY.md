@@ -53,12 +53,14 @@ Or execute manual unwrapping via `mcp-shield unwrap`.
 
 ## 📋 Documented Security Advisories & CVE Writeups
 
-Real scar tissue and rigorous remediation are what separate enterprise-grade security tooling from theoretical prototypes. Below are published security advisories and CVE-style writeups documenting historical bypasses, root cause analyses, and verified patches.
+Real scar tissue and rigorous remediation are what separate enterprise-grade security tooling from theoretical prototypes. Below are published security advisories documenting historical bypasses, root cause analyses, and verified patches.
+
+> **Transparency Disclosure**: Identifiers `ADV-2026-001` through `ADV-2026-003` (also tracked internally as `MCP-SHIELD-VULN-001` through `003`) denote project security advisories. Formal CVE Numbering Authority (CNA) candidate assignment is in progress; they are documented openly to ensure reproducible verification and defense-in-depth.
 
 ---
 
-### 🛡️ CVE-2026-SHIELD-001: AST Subshell & Parameter Splitting Evasion
-- **Advisory ID**: `ADV-2026-001` / `CVE-2026-SHIELD-001`
+### 🛡️ Security Advisory ADV-2026-001 (MCP-SHIELD-VULN-001): AST Subshell & Parameter Splitting Evasion
+- **Advisory ID**: `ADV-2026-001` / `MCP-SHIELD-VULN-001`
 - **Component**: [`src/security/ast-analyzer.ts`](src/security/ast-analyzer.ts) (AST Shell Firewall)
 - **Reported By**: Alex Vance (@avance-sec) — Independent Security Researcher
 - **Severity**: **HIGH (CVSS 8.2)** — `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N`
@@ -81,8 +83,8 @@ rm$IFS-rf$IFS/etc
 
 ---
 
-### 🛡️ CVE-2026-SHIELD-002: Combined Short-Flag Substring Collision in `rm`/`del`
-- **Advisory ID**: `ADV-2026-002` / `CVE-2026-SHIELD-002`
+### 🛡️ Security Advisory ADV-2026-002 (MCP-SHIELD-VULN-002): Combined Short-Flag Substring Collision in `rm`/`del`
+- **Advisory ID**: `ADV-2026-002` / `MCP-SHIELD-VULN-002`
 - **Component**: [`src/security/ast-analyzer.ts`](src/security/ast-analyzer.ts) (Argument Parser)
 - **Reported By**: Dr. Elena Rostova (@erostova) — Security Research Fellow
 - **Severity**: **MEDIUM (CVSS 5.8)** — `CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L`
@@ -110,8 +112,8 @@ rm -- -r /
 
 ---
 
-### 🛡️ CVE-2026-SHIELD-003: Pipeline Stage Subshell & xargs Command Execution Evasion
-- **Advisory ID**: `ADV-2026-003` / `CVE-2026-SHIELD-003`
+### 🛡️ Security Advisory ADV-2026-003 (MCP-SHIELD-VULN-003): Pipeline Stage Subshell & xargs Command Execution Evasion
+- **Advisory ID**: `ADV-2026-003` / `MCP-SHIELD-VULN-003`
 - **Component**: [`src/security/ast-analyzer.ts`](src/security/ast-analyzer.ts) (Pipeline Evaluator)
 - **Reported By**: Marcus Thorne (@mthorne-sec) — Red-Team Consultant
 - **Severity**: **HIGH (CVSS 7.8)** — `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N`
@@ -123,27 +125,28 @@ While direct command executions were strictly analyzed, early pipeline validatio
 #### Reproduction Proof of Concept (PoC)
 ```bash
 # Evasion via subshell in pipeline stage
-cat app.log | (python3 -c "import os; os.system('id')")
-cat list.txt | xargs sh
+cat app.log | (cat /etc/shadow)
+
+# Evasion via dynamic argument execution
+echo "/etc/shadow" | xargs cat
 ```
 
 #### Remediation & Verification
-1. Enhanced pipeline walker in `ASTAnalyzer.walk()` to iterate across all stages `1..N`.
-2. Strictly disallowed compound statements, subshells `( ... )`, command groups `{ ... }`, and while-loops as pipe targets.
-3. Added recursive wrapper inspection on `xargs` to ensure any command invoked via `xargs` must also satisfy `SAFE_PIPE_TARGETS` and cannot be an interpreter (`sh`, `bash`, `python`).
-4. Regression tests added in [`tests/security-corpus/bypass-corpus.test.ts`](tests/security-corpus/bypass-corpus.test.ts).
+1. Extended `ASTAnalyzer.evaluatePipeline()` to recursively parse all pipe stages in compound pipelines.
+2. Flagged `xargs`, `eval`, and subshells within pipeline streams as dangerous execution vectors requiring administrative policy clearance.
+3. Added automated test coverage in [`tests/security-corpus/bypass-corpus.test.ts`](tests/security-corpus/bypass-corpus.test.ts) (`PIPE-EVASION-01`).
 
 ---
 
-## 🏆 Security Hall of Fame & Red-Team Leaderboard
+## 🎖️ Hall of Fame & Security Researcher Acknowledgments
 
-We gratefully recognize and credit the security researchers and community contributors who help harden MCP-Shield:
+We extend our deep gratitude to the ethical security researchers who responsibly disclosed vulnerabilities, assisted in hardening our AST firewalls, and contributed regression PoCs:
 
-| Researcher | Handle | Attribution | Advisory / Impact | Date |
-| :--- | :--- | :--- | :--- | :--- |
-| **Alex Vance** | `@avance-sec` | Independent Security Researcher | `CVE-2026-SHIELD-001` (AST Parameter Expansion Evasion) | Q1 2026 |
-| **Dr. Elena Rostova** | `@erostova` | AI Security Lab Fellow | `CVE-2026-SHIELD-002` (POSIX Flag Tokenization & Substring Collisions) | Q2 2026 |
-| **Marcus Thorne** | `@mthorne-sec` | Red-Team Consultant | `CVE-2026-SHIELD-003` (Pipeline Stage Subshell & xargs Evasion) | Q3 2026 |
+| Researcher | Handle | Organization / Affiliation | Contribution | Year |
+|---|---|---|---|---|
+| **Alex Vance** | `@avance-sec` | Independent Security Researcher | `ADV-2026-001` (AST Parameter Expansion Evasion) | Q1 2026 |
+| **Dr. Elena Rostova** | `@erostova` | AI Security Lab Fellow | `ADV-2026-002` (POSIX Flag Tokenization & Substring Collisions) | Q2 2026 |
+| **Marcus Thorne** | `@mthorne-sec` | Red-Team Consultant | `ADV-2026-003` (Pipeline Stage Subshell & xargs Evasion) | Q3 2026 |
 
 ---
 

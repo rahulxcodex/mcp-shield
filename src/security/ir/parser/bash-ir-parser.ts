@@ -23,10 +23,11 @@ export class BashIRParser {
     const readMatch = normalized.match(/\b(?:cat|less|more|head|tail|view)\s+([^\s|;&]+)/);
     if (readMatch) {
       const p = readMatch[1];
+      const isSensitivePath = /(?:^|[\\/])(?:\.env|passwd|shadow|sudoers|id_rsa|id_ed25519|credentials|secrets?)(?:[\\/.]|$)/i.test(p);
       actions.push({
         type: 'READ_FILE',
         path: p,
-        sensitive: p.includes('passwd') || p.includes('shadow') || p.includes('secret') || p.includes('.env'),
+        sensitive: isSensitivePath,
         rawSnippet: readMatch[0]
       });
     }

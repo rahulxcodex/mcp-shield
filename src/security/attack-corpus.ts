@@ -44,6 +44,13 @@ export interface AttackCorpusEntry {
 }
 
 export class AttackCorpusRegistry {
+  /**
+   * Open-Source Baseline Fixtures:
+   * Public sample test cases provided for local development, conformance testing, and unit regressions.
+   * The complete, weaponized multi-turn attack corpus with compounding zero-day reasoning chains
+   * is kept strictly private within `mcp-shield-enterprise-intel` and fetched dynamically via
+   * `fetchEnterpriseThreatFeed()`.
+   */
   private static attacks: AttackCorpusEntry[] = [
     // 1. Protocol Attacks
     {

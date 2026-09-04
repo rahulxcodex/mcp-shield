@@ -43,9 +43,18 @@ export interface RiskAssessment {
 }
 
 export interface SecurityDecision {
-  action: 'ALLOW' | 'BLOCK' | 'PROMPT' | 'SANDBOX' | 'SANITIZE';
+  action: 'ALLOW' | 'BLOCK' | 'PROMPT' | 'SANDBOX' | 'SANITIZE' | 'QUARANTINE';
   reason?: string;
   sanitizedArgs?: Record<string, any>;
+  requestId?: string;
+  sessionId?: string;
+  riskScore?: number;
+  confidence?: number;
+  detectorIds?: string[];
+  explanation?: string;
+  reasonCode?: string;
+  enforcementSource?: 'deterministic' | 'policy' | 'ml' | 'composite';
+  timestamp?: number;
 }
 
 export interface SecurityContext {
@@ -402,28 +411,68 @@ export class SecurityPipeline {
   }
 
   private makePolicyDecisionStage(context: SecurityContext): void {
+    const requestId = String(context.request.id ?? 'req-unknown');
+    const sessionId = context.metadata.sessionId || 'session-default';
+    const detectorIds = context.evidence.map(e => e.detectorId);
+    const riskScore = context.risk.score;
+
     // Invariant: Deterministic hard block is strictly authoritative
     if (context.risk.hardBlockTriggered || context.risk.score >= 0.8) {
+      const reason = context.risk.primaryViolation || 'Security policy violation detected (Fail-Closed)';
       context.decision = {
         action: 'BLOCK',
-        reason: context.risk.primaryViolation || 'Security policy violation detected (Fail-Closed)'
+        reason,
+        explanation: reason,
+        reasonCode: context.risk.hardBlockTriggered ? 'HARD_BLOCK' : 'HIGH_RISK_BLOCK',
+        requestId,
+        sessionId,
+        riskScore,
+        detectorIds,
+        enforcementSource: context.risk.hardBlockTriggered ? 'deterministic' : 'composite',
+        timestamp: Date.now()
       };
     } else if (context.risk.score >= 0.5) {
+      const reason = context.risk.primaryViolation || 'High-risk operation requires human authorization';
       context.decision = {
         action: 'PROMPT',
-        reason: context.risk.primaryViolation || 'High-risk operation requires human authorization'
+        reason,
+        explanation: reason,
+        reasonCode: 'AUTHORIZATION_REQUIRED',
+        requestId,
+        sessionId,
+        riskScore,
+        detectorIds,
+        enforcementSource: 'policy',
+        timestamp: Date.now()
       };
     } else {
       // Check if ML recommends stronger non-blocking action (SANDBOX or MONITOR)
       const mlAction = context.mlInsights?.modelAPrediction?.recommendedAction;
       if (!this.shadowMode && mlAction === 'SANDBOX') {
+        const reason = 'ML risk model recommended sandboxed execution';
         context.decision = {
           action: 'SANDBOX',
-          reason: 'ML risk model recommended sandboxed execution'
+          reason,
+          explanation: reason,
+          reasonCode: 'ML_SANDBOX_RECOMMENDED',
+          requestId,
+          sessionId,
+          riskScore,
+          detectorIds,
+          enforcementSource: 'ml',
+          timestamp: Date.now()
         };
       } else {
         context.decision = {
-          action: 'ALLOW'
+          action: 'ALLOW',
+          reasonCode: 'ALLOW_POLICY',
+          explanation: 'Request evaluated safe across all security detectors',
+          requestId,
+          sessionId,
+          riskScore,
+          detectorIds,
+          enforcementSource: 'deterministic',
+          timestamp: Date.now()
         };
       }
     }

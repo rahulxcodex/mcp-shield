@@ -121,7 +121,7 @@ export class SecretSanitizer {
 
 ## 4. Empirical Baseline Benchmarks
 
-> **⚠️ Disclosure**: Tested against our curated baseline corpus of 1,780 lines of simulated multi-language code, configs, and logs (`benchmarks/secret-detection.bench.ts`). This verifies deterministic rule coverage against known formats and high-entropy noise fixtures; independent external evaluation against held-out public datasets is ongoing.
+> **⚠️ Disclosure**: 100% recall on an internally labeled 1,780-line benchmark; external held-out evaluation pending. Tested against our curated baseline corpus of 1,780 lines of simulated multi-language code, configs, and logs (`benchmarks/secret-detection.bench.ts`). This verifies deterministic rule coverage against known formats and high-entropy noise fixtures; independent external evaluation against held-out public datasets is ongoing.
 
 | Category | Lines | Real Secrets | True Positives | False Positives | False Negatives | Precision (Baseline) | Recall (Baseline) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

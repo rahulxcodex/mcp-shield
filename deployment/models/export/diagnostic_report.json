@@ -109,5 +109,10 @@
     "model_c": "Behavioral Sequence Trajectory Model",
     "model_d": "Isolation Forest Novelty Anomaly Detector"
   },
-  "status": "CALIBRATED_PRODUCTION_READY"
+  "status": "CALIBRATED_PRODUCTION_READY",
+  "validation_scope": {
+    "benchmark_type": "SYNTHETIC_GENERATED_DISTRIBUTIONS",
+    "evaluation_caveat": "High metric convergence (ROC-AUC ~ 1.0) reflects synthetic distribution generation rules. Real-world zero-day detection requires held-out production telemetry validation.",
+    "held_out_validation_status": "PENDING_EXTERNAL_PRODUCTION_TELEMETRY"
+  }
 }
