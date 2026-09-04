@@ -14,6 +14,12 @@ import { CapabilityInferencer, ToolCapabilities } from '../security/capabilities
 import { CanaryManager } from '../security/canary';
 import { JITElevationManager } from '../security/jit-elevation';
 import { CloudTelemetryPublisher, SecurityTelemetryPayload } from '../cloud/telemetry';
+import { IngressGuard } from './guards/ingress-guard';
+import { ToolGuard } from './guards/tool-guard';
+import { ExecutionBroker } from './broker/execution-broker';
+import { OutputGuard } from './guards/output-guard';
+import { LifecycleManager } from './lifecycle/lifecycle-manager';
+import { CapabilityManifestRegistry } from '../security/capability-manifest';
 
 export interface Lifecycle {
   start(): Promise<number>;
@@ -43,6 +49,11 @@ export class ProxyServer implements Lifecycle {
   private networkEgressProxy: NetworkEgressProxy;
   public readonly canaryManager = new CanaryManager();
   public readonly jitManager = new JITElevationManager();
+  public readonly ingressGuard: IngressGuard;
+  public readonly toolGuard: ToolGuard;
+  public readonly executionBroker: ExecutionBroker;
+  public readonly outputGuard: OutputGuard;
+  public readonly lifecycleManager: LifecycleManager;
   private telemetryPublisher = new CloudTelemetryPublisher();
   private pendingInitRequestId: string | number | null = null;
 
@@ -58,6 +69,15 @@ export class ProxyServer implements Lifecycle {
       this.sendErrorToHost.bind(this)
     );
     this.networkEgressProxy = new NetworkEgressProxy(this.session.policyEngine);
+    this.ingressGuard = new IngressGuard(this.session, this.canaryManager);
+    this.toolGuard = new ToolGuard(this.session);
+    this.executionBroker = new ExecutionBroker(this.session, this.cowFs);
+    this.outputGuard = new OutputGuard(this.session, this.canaryManager);
+    this.lifecycleManager = new LifecycleManager(this.targetCmd, this.targetArgs);
+  }
+
+  public get manifestRegistry(): CapabilityManifestRegistry {
+    return this.toolGuard.getManifestRegistry();
   }
 
   private logAndBroadcast(event: any) {
@@ -121,110 +141,66 @@ export class ProxyServer implements Lifecycle {
         this.sendErrorToHost(null, -32700, 'Parse error: Invalid JSON received');
         return;
       }
+
+      // 1. Ingress Protocol validation (JSON-RPC 2.0 schema, recursion depth limit, key count limit)
+      const valResult = this.ingressGuard.validateProtocol(message);
+      if (!valResult.valid) {
+        this.logAndBroadcast({ type: 'protocol_violation', reason: valResult.errorMessage });
+        this.sendErrorToHost(message?.id ?? null, valResult.errorCode || -32600, valResult.errorMessage || 'Invalid JSON-RPC protocol envelope');
+        return;
+      }
+
       this.dispatcher.enqueue(message);
     });
 
     this.outboundFramer.on('message', async (buffer: Buffer) => {
-      try {
-        const message = JSON.parse(buffer.toString('utf8'));
-        
-        // Intercept initialize response to complete handshake
-        if (this.pendingInitRequestId !== null && message.id === this.pendingInitRequestId) {
-          this.pendingInitRequestId = null;
-          if (message.result && this.session.getState() === 'INITIALIZING') {
-            this.session.transitionState('READY');
-            this.session.logger.startSession(this.session.policyEngine.getConfig(), Array.from(this.session.toolRegistry.keys()));
-          }
+      const processRes = this.outputGuard.processOutboundMessage(
+        buffer,
+        (event) => this.logAndBroadcast(event),
+        () => {
+          if (this.child) { this.child.kill('SIGKILL'); }
         }
+      );
 
-        // Intercept tools/list response
-        if (message.id !== undefined && message.result && message.result.tools) {
-           message.result.tools = this.canaryManager.injectCanariesIntoToolsList(message.result.tools);
-           
-           try {
-             // Pin full tool list snapshot
-             this.session.validateToolsSnapshot(message.result.tools);
-           } catch (e: any) {
-             this.logAndBroadcast({ type: 'schema_violation', reason: e.message });
-             if (this.child) { this.child.kill('SIGKILL'); }
-           }
-
-           for (const tool of message.result.tools) {
-              try {
-                 this.session.registerTool(tool.name, tool.description || '', tool.inputSchema || {});
-              } catch (e: any) {
-                 this.logAndBroadcast({ type: 'schema_violation', reason: e.message });
-                 // Schema changed dynamically! Terminate session!
-                 if (this.child) { this.child.kill('SIGKILL'); }
-              }
-           }
+      if (!processRes.allowed) {
+        if (processRes.errorMessage) {
+          this.sendErrorToHost(processRes.id ?? null, processRes.errorCode || -32603, processRes.errorMessage);
         }
-
-        // Comprehensive DLP Sanitization on outputs back to host:
-        // message.result, message.error, message.error.data, and server notifications (message.params)
-        if (message.result) {
-           const resultStr = JSON.stringify(message.result);
-           const sanitizedStr = this.session.sanitizer.sanitize(resultStr);
-           message.result = JSON.parse(sanitizedStr);
-        }
-
-        if (message.error) {
-           const errStr = JSON.stringify(message.error);
-           const sanitizedErrStr = this.session.sanitizer.sanitize(errStr);
-           message.error = JSON.parse(sanitizedErrStr);
-        }
-
-        if (message.method === 'notifications/tools/list_changed') {
-           this.session.allowNextToolsUpdate();
-        }
-
-        if (message.params) {
-           const paramsStr = JSON.stringify(message.params);
-           const sanitizedParamsStr = this.session.sanitizer.sanitize(paramsStr);
-           message.params = JSON.parse(sanitizedParamsStr);
-        }
-        
-        const output = JSON.stringify(message) + '\n';
-        try {
-          process.stdout.write(output);
-        } catch {}
-      } catch (err) {
-        this.logAndBroadcast({ type: 'parse_error', reason: 'Failed to parse JSON from outbound stream, dropping payload.' });
         return;
       }
+
+      const message = processRes.message;
+      if (!message) return;
+
+      // Intercept initialize response to complete handshake
+      if (this.pendingInitRequestId !== null && message.id === this.pendingInitRequestId) {
+        this.pendingInitRequestId = null;
+        if (message.result && this.session.getState() === 'INITIALIZING') {
+          this.session.transitionState('READY');
+          this.session.logger.startSession(this.session.policyEngine.getConfig(), Array.from(this.session.toolRegistry.keys()));
+        }
+      }
+
+      const output = JSON.stringify(message) + '\n';
+      try {
+        process.stdout.write(output);
+      } catch {}
     });
   }
 
   private async handleInboundMessage(message: any) {
     try {
-      const state = this.session.getState();
-      
-      // Strict state machine enforcement:
-      // In INITIALIZING: ONLY initialize requests, ping, or notifications/initialized are accepted
-      if (state === 'INITIALIZING') {
-        if (message.method === 'initialize') {
-          if (message.id !== undefined && message.id !== null) {
-            this.pendingInitRequestId = message.id;
-          }
-        } else if (message.method === 'notifications/initialized') {
-          // Client confirms initialization complete
-          if (this.session.getState() === 'INITIALIZING') {
-            this.session.transitionState('READY');
-            this.session.logger.startSession(this.session.policyEngine.getConfig(), Array.from(this.session.toolRegistry.keys()));
-          }
-        } else if (message.method === 'ping') {
-          // Allow liveness pings
-        } else {
-          if (message.id !== undefined && message.id !== null) {
-            this.sendErrorToHost(message.id, -32002, `Server is not ready. Current state: ${state}`);
-          }
-          return;
-        }
-      } else if (state !== 'READY' && state !== 'DEGRADED') {
+      // 1. Ingress Guard: Strict state machine prerequisites check
+      const stateCheck = this.ingressGuard.checkStatePrerequisites(message);
+      if (!stateCheck.allowed) {
         if (message.id !== undefined && message.id !== null) {
-          this.sendErrorToHost(message.id, -32002, `Server is not ready. Current state: ${state}`);
+          this.sendErrorToHost(message.id, -32002, stateCheck.reason || 'Server is not ready.');
         }
         return;
+      }
+
+      if (stateCheck.pendingInit && message.id !== undefined && message.id !== null) {
+        this.pendingInitRequestId = message.id;
       }
 
       if ((message.method === 'call_tool' || message.method === 'tools/call') && message.params && message.params.name) {
@@ -240,7 +216,6 @@ export class ProxyServer implements Lifecycle {
         
         this.logAndBroadcast({ type: 'tool_call_intercepted', toolName, payload: sanitizedArgs });
 
-        const evidence: Evidence[] = [];
         const actualObserved: Partial<ToolCapabilities> = {};
 
         // Track runtime evidence for filesystem interactions
@@ -252,71 +227,35 @@ export class ProxyServer implements Lifecycle {
            }
         }
 
-        // -2. Canary / Honeypot Tool Tripwire Check
-        if (this.canaryManager.isCanaryTool(toolName)) {
-           evidence.push({ detector: 'canary-honeypot', finding: `CANARY_HONEYPOT_ACCESSED: Agent attempted to invoke honeypot tool '${toolName}'.`, risk: 'CRITICAL' });
-        }
-
-        // -1. Rate Limit & Semantic Complexity Check (Runaway loop prevention)
-        if (!this.session.rateLimiter.checkLimit(toolName, rawArgs)) {
-           evidence.push({ detector: 'rate-limiter', finding: `RATE_LIMIT_EXCEEDED: Runaway loop or semantic complexity budget exceeded for tool '${toolName}'.`, risk: 'CRITICAL' });
-        }
-
-        // 0. Honey-Token DLP Check (Evaluated against RawSecurityInput)
-        if (this.session.sanitizer.checkHoneyTokens(JSON.stringify(rawArgs))) {
-           evidence.push({ detector: 'sanitizer', finding: 'HONEY_TOKEN_ACCESSED: LLM attempted to use a decoy credential.', risk: 'CRITICAL' });
-        }
-        
-        // 0.5 Egress Network Firewall (URL/argument-level check against RawSecurityInput)
-        const egressCheck = this.session.policyEngine.checkEgress(rawArgs);
-        if (egressCheck.isBlocked) {
-           actualObserved.networkAccess = true;
-           evidence.push({ detector: 'url-egress-filter', finding: `EGRESS_BLOCKED: Unauthorized destination ${egressCheck.domain || 'endpoint'}: ${egressCheck.reason || ''}`, risk: 'CRITICAL' });
-        } else if (rawArgs.url || rawArgs.endpoint || rawArgs.host || rawArgs.uri) {
+        if (rawArgs.url || rawArgs.endpoint || rawArgs.host || rawArgs.uri) {
            actualObserved.networkAccess = true;
         }
 
-        // 2. AST Firewall (Recursive deep search across structured execution parameters)
-        const candidateCommands: string[] = [];
-        const extractCmds = (obj: any, depth = 0) => {
-           if (!obj || depth > 8) return;
-           if (typeof obj === 'string') {
-              const trimmed = obj.trim();
-              if (trimmed.length > 0) candidateCommands.push(trimmed);
-              return;
-           }
-           if (Array.isArray(obj)) {
-              for (const item of obj) extractCmds(item, depth + 1);
-              return;
-           }
-           if (typeof obj === 'object') {
-              for (const [k, v] of Object.entries(obj)) {
-                 const lower = k.toLowerCase();
-                 if (['command', 'cmd', 'script', 'code', 'exec', 'shell', 'query', 'payload', 'args', 'run', 'eval', 'instruction'].includes(lower)) {
-                    if (typeof v === 'string') candidateCommands.push(v.trim());
-                    else if (Array.isArray(v)) v.forEach((item) => typeof item === 'string' && candidateCommands.push(item.trim()));
-                 } else if (typeof v === 'object' && v !== null) {
-                    extractCmds(v, depth + 1);
-                 }
-              }
-           }
-        };
-        extractCmds(rawArgs);
+        // Ingress Security: Canary, Rate Limiter, Honey-Tokens, Argument-level Egress
+        const ingressResult = this.ingressGuard.evaluateInboundSecurity(toolName, rawArgs);
+        const evidence: Evidence[] = [...ingressResult.evidence];
 
-        const isShellTool = registeredTool?.inferredCapabilities.shellExecution || 
+        // Tool Guard AST Analysis (Bash, PowerShell, Cmd)
+        const isShellTool = !!registeredTool?.inferredCapabilities?.shellExecution || 
                             /bash|shell|terminal|exec|run|do_cmd|cmd|powershell|pwsh|system/i.test(toolName);
-        const shouldCheckAst = isShellTool || candidateCommands.length > 0;
-
-        if (shouldCheckAst && candidateCommands.length > 0) {
+        const astResult = this.toolGuard.analyzeToolParameters(toolName, rawArgs, isShellTool);
+        if (!astResult.isSafe) {
            actualObserved.shellExecution = true;
-           for (const cmd of candidateCommands) {
-              const astResult = this.astAnalyzer.analyzeCommand(cmd);
-              if (!astResult.isSafe) {
-                 const risk = astResult.reason?.includes('ARBITRARY_CODE_EXECUTION') ? 'HIGH' : 'CRITICAL';
-                 evidence.push({ detector: 'ast-analyzer', finding: astResult.reason || 'AST_BLOCKED', risk });
-                 break;
-              }
-           }
+           const risk = astResult.blockReason?.includes('ARBITRARY_CODE_EXECUTION') ? 'HIGH' : 'CRITICAL';
+           evidence.push({ detector: 'ast-analyzer', finding: astResult.blockReason || 'AST_BLOCKED', risk });
+        } else if (astResult.candidateCommands.length > 0 && isShellTool) {
+           actualObserved.shellExecution = true;
+        }
+
+        // Capability Manifest Contract Verification
+        const isStrict = (this.session.policyEngine.getConfig() as any).strictManifest ?? this.manifestRegistry.isDefaultDenyUnknown();
+        const manifestDecision = this.toolGuard.checkManifest(toolName, rawArgs, actualObserved as ToolCapabilities, isStrict);
+        if (!manifestDecision.authorized) {
+           evidence.push({
+             detector: 'capability-broker',
+             finding: `${manifestDecision.reasonCode}: ${manifestDecision.details || ''}`,
+             risk: 'CRITICAL'
+           });
         }
 
         // Update observed capabilities strictly with runtime evidence
@@ -437,81 +376,43 @@ ${red}BLOCKED${reset}
               this.logAndBroadcast({ type: 'user_allowed', toolName, ruleId: securityResult.ruleId });
            }
         } else if (action === 'sandbox') {
-           const targetPath = rawArgs.path || rawArgs.file || rawArgs.filename || rawArgs.filepath || rawArgs.target;
-           const content = rawArgs.content || rawArgs.text || rawArgs.data;
-           if (targetPath && typeof content === 'string') {
-              const staged = this.cowFs.stageWrite(targetPath, content);
-              this.logAndBroadcast({ type: 'cow_staged', toolName, payload: staged });
-              
-              const result = await PromptBridge.ask(
-                 `Sandbox Write: ${toolName}`,
-                 `Tool: ${toolName}\nTarget: ${targetPath}`,
-                 'HIGH',
-                 staged.diff
-              );
-              if (result.action === 'approve') {
-                 this.cowFs.commit(staged.stagingPath, staged.absoluteOriginalPath, staged.originalIdentity);
-                 this.logAndBroadcast({ type: 'cow_committed', toolName, payload: { path: staged.absoluteOriginalPath } });
-                 this.sendSuccessToHost(message.id, { content: [{ type: 'text', text: 'File changes approved and written.' }] });
-              } else {
-                 this.cowFs.discard(staged.stagingPath);
-                 this.logAndBroadcast({ type: 'cow_discarded', toolName });
-                 this.sendErrorToHost(message.id, -32000, 'USER DENIED: Staged file changes rejected.');
-              }
-              return;
-            } else {
-               // Non-file mutating tool evaluated under sandbox action: permit read-only isolated execution
-               this.logAndBroadcast({
-                 type: 'sandbox_pass_through',
-                 toolName,
-                 reason: 'Tool has no filesystem write parameters (path/content); allowing non-mutating execution.'
-               });
-            }
+           const sandboxExec = await this.executionBroker.handleSandboxExecution(
+             toolName,
+             rawArgs,
+             message.id,
+             (event) => this.logAndBroadcast(event)
+           );
+           if (sandboxExec.handled) {
+             if (sandboxExec.success) {
+               this.sendSuccessToHost(message.id, { content: [{ type: 'text', text: 'File changes approved and written.' }] });
+             } else {
+               this.sendErrorToHost(message.id, -32000, sandboxExec.error || 'USER DENIED: Staged file changes rejected.');
+             }
+             return;
+           }
         }
       }
       
-      // 3. RESTORED EXECUTION INPUT: Granular Trust & Capability-Aware Secret Restoration
-      // Cryptographic binding to (serverIdentity, toolName, sessionId, scope)
+      // 3. Execution Broker: Capability-Aware Scoped Secret Restoration
       if (message.method === 'call_tool' || message.method === 'tools/call') {
          const toolName = message.params?.name;
          const registeredTool = this.session.toolRegistry.get(toolName);
-         
-         const isTrusted = registeredTool?.trustLevel === 'TRUSTED';
-         // STRICT INVARIANT: Never allow inferred capabilities to authorize secret access; require explicitly declared attestation.
-         const hasDeclaredSecretAccess = !!registeredTool?.declaredCapabilities?.secretAccess;
-         
-         if (isTrusted && hasDeclaredSecretAccess) {
-            // Restore tokenized secrets strictly bound to server identity, tool name, and session
-            const secretScope = `${this.session.serverIdentity}:${toolName}`;
-            const restorationContext = {
-              serverIdentity: this.session.serverIdentity,
-              toolName,
-              sessionId: this.session.sessionId,
-              scope: secretScope
-            };
-            const payloadStr = JSON.stringify(message.params);
-            // First attempt scoped restoration; fallback to session-level if authorized
-            let restoredStr = this.session.sanitizer.restore(payloadStr, restorationContext);
-            if (restoredStr === payloadStr) {
-               restoredStr = this.session.sanitizer.restore(payloadStr, {
-                 serverIdentity: this.session.serverIdentity,
-                 sessionId: this.session.sessionId
-               });
-            }
-            message.params = JSON.parse(restoredStr);
-            this.logAndBroadcast({ type: 'secret_restored', toolName, trustLevel: registeredTool.trustLevel, scope: secretScope });
-         } else if (isTrusted && !hasDeclaredSecretAccess) {
-            this.logAndBroadcast({
-              type: 'secret_restoration_skipped',
-              toolName,
-              reason: 'Tool is TRUSTED but lacks explicitly declared secretAccess capability attestation; masked tokens retained.'
-            });
+         const restoration = this.executionBroker.restoreSecretsForTool(toolName, message.params, registeredTool);
+         if (restoration.restored) {
+           message.params = restoration.restoredParams;
+           this.logAndBroadcast({ type: 'secret_restored', toolName, trustLevel: registeredTool?.trustLevel, scope: restoration.scope });
+         } else if (registeredTool?.trustLevel === 'TRUSTED' && !registeredTool?.declaredCapabilities?.secretAccess) {
+           this.logAndBroadcast({
+             type: 'secret_restoration_skipped',
+             toolName,
+             reason: 'Tool is TRUSTED but lacks explicitly declared secretAccess capability attestation; masked tokens retained.'
+           });
          } else {
-            this.logAndBroadcast({
-              type: 'secret_restoration_denied',
-              toolName,
-              reason: `Server trust level is ${registeredTool?.trustLevel || 'UNKNOWN'}; masked tokens retained.`
-            });
+           this.logAndBroadcast({
+             type: 'secret_restoration_denied',
+             toolName,
+             reason: `Server trust level is ${registeredTool?.trustLevel || 'UNKNOWN'}; masked tokens retained.`
+           });
          }
       }
       

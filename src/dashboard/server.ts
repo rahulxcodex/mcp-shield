@@ -26,21 +26,30 @@ export class DashboardServer {
       return cookies;
     };
 
+    const safeCompare = (a?: string | null, b?: string | null): boolean => {
+      if (!a || !b) return false;
+      const bufA = Buffer.from(a, 'utf8');
+      const bufB = Buffer.from(b, 'utf8');
+      if (bufA.length !== bufB.length) return false;
+      return crypto.timingSafeEqual(bufA, bufB);
+    };
+
     this.app.use((req, res, next) => {
       const cookies = parseCookies(req.headers.cookie);
       const authHeader = req.headers.authorization;
       const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
 
       // 1. If query parameter token is present and valid: set HttpOnly session cookie & redirect to /
-      if (req.query.token === this.authToken) {
+      const queryToken = typeof req.query.token === 'string' ? req.query.token : null;
+      if (safeCompare(queryToken, this.authToken)) {
         res.setHeader('Set-Cookie', `mcp_shield_session=${this.authToken}; HttpOnly; SameSite=Strict; Path=/`);
         // Redirect to root path without query string to eliminate token leakage in browser history/logs/referrers
         res.redirect(302, '/');
         return;
       }
 
-      // 2. Validate session cookie or bearer token
-      if (cookies['mcp_shield_session'] === this.authToken || bearerToken === this.authToken) {
+      // 2. Validate session cookie or bearer token using constant-time comparison
+      if (safeCompare(cookies['mcp_shield_session'], this.authToken) || safeCompare(bearerToken, this.authToken)) {
         return next();
       }
 
@@ -58,8 +67,8 @@ export class DashboardServer {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       const tokenParam = url.searchParams.get('token');
       const hasValidAuth =
-        cookies['mcp_shield_session'] === this.authToken ||
-        tokenParam === this.authToken;
+        safeCompare(cookies['mcp_shield_session'], this.authToken) ||
+        safeCompare(tokenParam, this.authToken);
 
       if (!hasValidAuth) {
         ws.close(4001, 'Unauthorized: Invalid token');

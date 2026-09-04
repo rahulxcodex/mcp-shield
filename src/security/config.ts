@@ -66,29 +66,71 @@ export class ConfigLoader {
     return { isSafe: warnings.length === 0, warnings };
   }
 
-  public static getHardenedProfile(): ShieldConfig {
+  public static getProfile(name: 'developer' | 'secure' | 'enterprise' | 'hardened' | string): ShieldConfig {
+    switch ((name || '').toLowerCase()) {
+      case 'developer':
+        return this.getDeveloperProfile();
+      case 'secure':
+        return this.getSecureProfile();
+      case 'enterprise':
+        return this.getEnterpriseProfile();
+      default:
+        return this.getHardenedProfile();
+    }
+  }
+
+  public static getDeveloperProfile(): ShieldConfig {
     return {
-      version: '1.1',
-      profile: 'hardened',
+      version: '1.0',
+      profile: 'developer',
       mode: 'enforce',
       onError: 'block',
-      redaction: { enabled: true, maskStyle: 'hash', highEntropyCheck: true, entropyThreshold: 4.0 },
-      sandbox: { cowEnabled: true, cowStagingDir: '.mcp-shield/cow', autoCommitOnApproval: false },
-      egress: { 
-         enabled: true, 
-         allowMode: 'deny', 
-         allowedDomains: [], 
-         blockedDomains: [],
-         allowPrivateNetworks: false, 
-         blockLoopback: true, 
-         blockLinkLocal: true, 
-         blockMetadataEndpoints: true 
-      },
+      redaction: { enabled: true, maskStyle: 'token', highEntropyCheck: true, entropyThreshold: 4.5 },
+      sandbox: { cowEnabled: true, cowStagingDir: '.mcp-shield/cow', autoCommitOnApproval: true, readOnlyWorkspace: false },
+      egress: { enabled: true, allowMode: 'allow', allowPrivateNetworks: false, blockLoopback: true, blockLinkLocal: true, blockMetadataEndpoints: true },
       rules: [
-        { id: "allow-read-only", name: "Allow read-only queries", priority: 10, targetTools: ["*read*", "*list*", "*search*", "*get*", "*describe*", "*info*"], riskLevel: "LOW", action: "allow" },
-        { id: "block-destructive", name: "Block Destructive", priority: 100, targetTools: ["*bash*", "*terminal*"], riskLevel: "CRITICAL", action: "block" }
+        { id: 'allow-safe', name: 'Allow safe tools', priority: 10, targetTools: ['*read*', '*list*', '*search*'], riskLevel: 'LOW', action: 'allow' },
+        { id: 'block-destructive-rm', name: 'Block Recursive Root Deletion', priority: 100, targetTools: ['*bash*', '*terminal*', '*exec*'], riskLevel: 'CRITICAL', action: 'block' }
       ],
       audit: { enabled: true, logDir: '.mcp-shield/logs', tamperEvidentHashing: true }
     };
+  }
+
+  public static getSecureProfile(): ShieldConfig {
+    return {
+      version: '1.0',
+      profile: 'secure',
+      mode: 'enforce',
+      onError: 'block',
+      redaction: { enabled: true, maskStyle: 'token', highEntropyCheck: true, entropyThreshold: 4.0 },
+      sandbox: { cowEnabled: true, cowStagingDir: '.mcp-shield/cow', autoCommitOnApproval: false, readOnlyWorkspace: true },
+      egress: { enabled: true, allowMode: 'deny', allowedDomains: [], blockedDomains: [], allowPrivateNetworks: false, blockLoopback: true, blockLinkLocal: true, blockMetadataEndpoints: true },
+      rules: [
+        { id: 'allow-read-only', name: 'Allow read-only queries', priority: 10, targetTools: ['*read*', '*list*', '*search*'], riskLevel: 'LOW', action: 'allow' },
+        { id: 'block-all-shell', name: 'Block shell execution', priority: 90, targetTools: ['*bash*', '*terminal*', '*exec*'], riskLevel: 'HIGH', action: 'block' }
+      ],
+      audit: { enabled: true, logDir: '.mcp-shield/logs', tamperEvidentHashing: true }
+    };
+  }
+
+  public static getEnterpriseProfile(): ShieldConfig {
+    return {
+      version: '1.0',
+      profile: 'enterprise',
+      mode: 'enforce',
+      onError: 'block',
+      redaction: { enabled: true, maskStyle: 'hash', highEntropyCheck: true, entropyThreshold: 3.8 },
+      sandbox: { cowEnabled: true, cowStagingDir: '.mcp-shield/cow', autoCommitOnApproval: false, readOnlyWorkspace: true },
+      egress: { enabled: true, allowMode: 'deny', allowedDomains: [], blockedDomains: [], allowPrivateNetworks: false, blockLoopback: true, blockLinkLocal: true, blockMetadataEndpoints: true },
+      rules: [
+        { id: 'allow-verified', name: 'Allow verified tools', priority: 10, targetTools: ['*read*', '*list*'], riskLevel: 'LOW', action: 'allow' },
+        { id: 'quarantine-unknown', name: 'Quarantine high risk', priority: 100, targetTools: ['*bash*', '*terminal*', '*exec*'], riskLevel: 'CRITICAL', action: 'block' }
+      ],
+      audit: { enabled: true, logDir: '.mcp-shield/logs', tamperEvidentHashing: true }
+    };
+  }
+
+  public static getHardenedProfile(): ShieldConfig {
+    return this.getSecureProfile();
   }
 }

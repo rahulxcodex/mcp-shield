@@ -133,7 +133,9 @@ export class CapabilityInferencer {
       networkAccess: !!declared.networkAccess,
       processSpawn: !!declared.processSpawn,
       destructiveOperation: !!declared.destructiveOperation,
-      secretAccess: !!declared.secretAccess,
+      // CRITICAL SECURITY INVARIANT: An untrusted downstream server can NEVER self-attest secretAccess
+      // through its own schema; secretAccess requires explicit administrative configuration in policy.
+      secretAccess: false,
     };
   }
 
