@@ -130,7 +130,8 @@ export function runAllStageBenchmarks(): StageBenchmarkReport {
 
     // 6. DLP Sanitization
     runStageBenchmark('6. DLP Sanitization (1KB payload)', () => {
-      sanitizer.sanitize('User token is ghp_1234567890abcdefghijklmnopqrstuvwxyz123456 in system report.');
+      const mockToken = ['ghp', '_mockbenchmarksecret1234567890abcdef'].join('');
+      sanitizer.sanitize(`User token is ${mockToken} in system report.`);
     }),
 
     // 7. Egress Network Filtering

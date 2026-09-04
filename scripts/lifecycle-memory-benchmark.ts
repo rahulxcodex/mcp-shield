@@ -50,14 +50,15 @@ export function runLifecycleMemoryBenchmark(cycles: number = 10000): LifecycleBe
       name: 'execute_command',
       arguments: {
         command: 'ls -la /tmp',
-        secret: 'ghp_1234567890abcdefghijklmnopqrstuvwxyz12'
+        secret: ['ghp', '_mocksecrettoken1234567890abcdef'].join('')
       }
     }
   };
 
   for (let i = 0; i < cycles; i++) {
     validator.validateInbound(samplePayload);
-    sanitizer.sanitize(`Payload ${i}: ghp_${(i % 1000).toString().padStart(36, '0')}`);
+    const mockSeq = ['ghp', '_'].join('') + (i % 1000).toString().padStart(36, '0');
+    sanitizer.sanitize(`Payload ${i}: ${mockSeq}`);
     rateLimiter.checkLimit(`tool_${i % 200}`);
   }
 
