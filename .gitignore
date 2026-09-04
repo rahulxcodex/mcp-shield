@@ -12,3 +12,6 @@ coverage/
 sbom.json
 CI_FAILURE_ROOT_CAUSE.md
 security-report.json
+data/
+__pycache__/
+*.pyc

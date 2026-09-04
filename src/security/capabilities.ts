@@ -97,7 +97,7 @@ export class CapabilityInferencer {
     const schemaNetwork = schemaHasProp(/^(url|uri|endpoint|domain|host|hostname|webhook|http_method|headers)$/i) || schemaHasFormat(/^uri$/i) || schemaHasDesc(/url|http endpoint|web address/i);
     const schemaProcess = schemaHasProp(/^(binary|executable|process|spawn_args|env_vars|arguments)$/i) || schemaHasDesc(/spawn process|execute binary/i);
     const schemaDestructive = schemaHasProp(/^(force|recursive|drop_tables|purge|delete_all|truncate)$/i) || schemaHasDesc(/force delete|recursive delete|purge/i);
-    const schemaSecret = schemaHasProp(/^(api_key|secret|token|password|auth_token|credential|private_key|access_token)$/i) || schemaHasDesc(/api key|secret token|auth password/i);
+    const schemaSecret = schemaHasProp(/^(api_?key|secret|token|password|auth_?token|credential|private_?key|access_?token)$/i) || schemaHasDesc(/api[_\s]?key|secret|token|password|auth|credential/i);
 
     // 2. NAME & DESCRIPTION MATCHING (Priority 2 & 3)
     const nameFsRead = /read|cat|ls|grep|find|search|view|get_file|list_dir/i.test(name);

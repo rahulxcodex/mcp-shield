@@ -1,0 +1,113 @@
+{
+  "best_model": "Logistic Regression",
+  "vif_analysis": [
+    {
+      "feature": "tool_publisher_trust",
+      "vif": 2.193
+    },
+    {
+      "feature": "prov_publisher_identity_score",
+      "vif": 2.193
+    },
+    {
+      "feature": "seq_velocity_ops_per_min",
+      "vif": 2.113
+    },
+    {
+      "feature": "tool_schema_complexity",
+      "vif": 2.113
+    },
+    {
+      "feature": "prov_first_seen_days",
+      "vif": 1.734
+    },
+    {
+      "feature": "tool_server_age_days",
+      "vif": 1.733
+    },
+    {
+      "feature": "req_entropy",
+      "vif": 1.202
+    },
+    {
+      "feature": "req_payload_size_bytes",
+      "vif": 1.198
+    },
+    {
+      "feature": "seq_unique_tools_last_5",
+      "vif": 1.002
+    },
+    {
+      "feature": "tool_param_count",
+      "vif": 1.001
+    },
+    {
+      "feature": "seq_unique_tools_last_10",
+      "vif": 1.001
+    },
+    {
+      "feature": "prov_deployment_history_score",
+      "vif": 1.001
+    }
+  ],
+  "homoscedasticity_breusch_pagan": {
+    "Lagrange Multiplier stat": 1549.0035998289209,
+    "p-value": 1.1061474404286774e-297,
+    "f-value": 50.371205832629485,
+    "f p-value": 0.0
+  },
+  "model_benchmarks": [
+    {
+      "model": "Logistic Regression",
+      "train_acc": 0.9999,
+      "val_acc": 0.9993,
+      "test_acc": 0.9987,
+      "gen_gap": 0.0011,
+      "test_roc_auc": 1.0,
+      "test_pr_auc": 1.0,
+      "test_brier": 0.0007,
+      "test_logloss": 0.0037
+    },
+    {
+      "model": "Random Forest",
+      "train_acc": 1.0,
+      "val_acc": 1.0,
+      "test_acc": 1.0,
+      "gen_gap": 0.0,
+      "test_roc_auc": 1.0,
+      "test_pr_auc": 1.0,
+      "test_brier": 0.0029,
+      "test_logloss": 0.0294
+    },
+    {
+      "model": "LightGBM",
+      "train_acc": 1.0,
+      "val_acc": 1.0,
+      "test_acc": 1.0,
+      "gen_gap": 0.0,
+      "test_roc_auc": 1.0,
+      "test_pr_auc": 1.0,
+      "test_brier": 0.0,
+      "test_logloss": 0.0015
+    },
+    {
+      "model": "XGBoost",
+      "train_acc": 1.0,
+      "val_acc": 1.0,
+      "test_acc": 1.0,
+      "gen_gap": 0.0,
+      "test_roc_auc": 1.0,
+      "test_pr_auc": 1.0,
+      "test_brier": 0.0001,
+      "test_logloss": 0.004
+    }
+  ],
+  "feature_count": 42,
+  "multi_model_suite": {
+    "model_a": "Tabular Action Risk (Calibrated)",
+    "model_b": "Attack Family Multi-Class Classifier",
+    "model_c": "Behavioral Sequence Trajectory Model",
+    "model_d": "Isolation Forest Novelty Anomaly Detector"
+  },
+  "status": "CALIBRATED_PRODUCTION_READY"
+}

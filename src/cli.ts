@@ -4,6 +4,7 @@ import * as os from 'os';
 import { ProxyServer } from './core/proxy';
 import { ProtectCommand } from './cli/commands/protect';
 import { ReplayCommand } from './cli/commands/replay';
+import { ReplayEvalCommand } from './cli/commands/replay-eval';
 import { InstallCommand } from './cli/commands/install';
 import { ScanCommand } from './cli/commands/scan';
 import { FixCommand } from './cli/commands/fix';
@@ -19,7 +20,7 @@ import { AttackCorpusCommand } from './cli/commands/attack-corpus';
 export async function runCli(args: string[] = process.argv.slice(2)): Promise<void> {
   const command = args[0];
 
-  const bypassCommands = ['demo', 'install', 'license', 'enterprise', 'link', 'wrap', 'protect', 'scan', 'fix', 'dashboard', 'stats', 'report', 'replay', 'benchmark', 'attack-corpus'];
+  const bypassCommands = ['demo', 'install', 'license', 'enterprise', 'link', 'wrap', 'protect', 'scan', 'fix', 'dashboard', 'stats', 'report', 'replay', 'replay-eval', 'benchmark', 'attack-corpus'];
   if (command && !bypassCommands.includes(command) && process.env.NODE_ENV !== 'test') {
     const licenseFile = path.join(os.homedir(), '.mcp-shield', 'license.key');
     if (fs.existsSync(licenseFile)) {
@@ -37,6 +38,9 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
     process.exit(0);
   } else if (command === 'replay') {
     ReplayCommand.run(args[1]);
+    process.exit(0);
+  } else if (command === 'replay-eval') {
+    await ReplayEvalCommand.run(args[1]);
     process.exit(0);
   } else if (command === 'stats' || command === 'report') {
     StatsCommand.run(args[1]);
@@ -123,6 +127,7 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
       '  mcp-shield enterprise           Launch the full Next.js Enterprise Control Plane on-premise.',
       '  mcp-shield stats [log_file]     View shareable security activity & blocked attacks report.',
       '  mcp-shield replay <log_file>    Replay and verify tamper-evident audit logs.',
+      '  mcp-shield replay-eval <log>    Replay historical events & diff decisions against v2.0 engine.',
       '  mcp-shield wrap -- <cmd> [args] Wrap an MCP server with the security gateway.'
     ].join('\n'));
     process.exit(1);

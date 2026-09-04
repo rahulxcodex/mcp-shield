@@ -505,3 +505,12 @@ export function isSpecialIpRepresentation(ipStr: string): boolean {
   }
   return false;
 }
+
+export function isPrivateIp(ipStr: string): boolean {
+  const c = IpClassifier.classify(ipStr);
+  return c.isPrivate;
+}
+
+export function normalizeIpAddress(ipStr: string): string {
+  return IpClassifier.normalizeIp(ipStr).normalized;
+}

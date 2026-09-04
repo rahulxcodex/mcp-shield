@@ -1,18 +1,25 @@
-name: Keep Render Alive Cron
+name: Keep Deployments Alive (Render & Hugging Face)
 
 on:
   schedule:
-    # Runs every 10 minutes to prevent Render free-tier instances from spinning down
+    # Runs every 10 minutes to prevent Render free-tier & Hugging Face Spaces from spinning down
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
-  ping-render:
+  ping-deployments:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Render Service Endpoint
+      - name: Ping Render Enterprise Intel Endpoint
         env:
-          RENDER_SERVICE_URL: ${{ secrets.RENDER_SERVICE_URL || 'https://mcp-shield-proxy.onrender.com/health' }}
+          RENDER_INTEL_URL: ${{ secrets.RENDER_INTEL_URL || 'https://mcp-shield-enterprise-intel.onrender.com/health' }}
         run: |
-          echo "Pinging Render service at $RENDER_SERVICE_URL..."
-          curl -s -f -m 15 "$RENDER_SERVICE_URL" || echo "Service pinged (ignoring errors if offline)."
+          echo "Pinging Render Enterprise Intel service at $RENDER_INTEL_URL..."
+          curl -s -f -m 60 --retry 3 --retry-delay 5 "$RENDER_INTEL_URL" || echo "Render pinged (service may be waking up)."
+
+      - name: Ping Hugging Face Space Endpoint
+        env:
+          HF_SPACE_URL: ${{ secrets.HF_SPACE_URL || 'https://rahulxcodex-mcp-shield-risk-classifier.hf.space' }}
+        run: |
+          echo "Pinging Hugging Face Space at $HF_SPACE_URL..."
+          curl -s -f -m 60 --retry 3 --retry-delay 5 "$HF_SPACE_URL" || echo "Hugging Face Space pinged."

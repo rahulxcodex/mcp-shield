@@ -22,6 +22,18 @@ export interface SchemaSnapshot {
   timestamp: number;
 }
 
+export type SchemaDriftClass =
+  | 'BENIGN_UPDATE'
+  | 'EXPECTED_RELEASE'
+  | 'BREAKING_UPDATE'
+  | 'CAPABILITY_ESCALATION'
+  | 'SUSPICIOUS_DESCRIPTION_MUTATION'
+  | 'CREDENTIAL_EXPANSION'
+  | 'NETWORK_EXPANSION'
+  | 'EXECUTION_EXPANSION';
+
+export type DriftPolicyAction = 'ALLOW' | 'PROMPT' | 'SANDBOX' | 'BLOCK';
+
 export interface SchemaDriftEvent {
   toolName: string;
   oldSchemaHash: string;
@@ -32,6 +44,8 @@ export interface SchemaDriftEvent {
   capabilityExpansion: Array<keyof ToolCapabilities>;
   isHighRiskDrift: boolean;
   driftRiskScore: number; // 0.0 to 1.0
+  driftClass?: SchemaDriftClass;
+  policyAction?: DriftPolicyAction;
   evidence?: SecurityEvidence;
   explanation: string;
 }
@@ -142,6 +156,33 @@ export class SchemaDriftDetector {
       timestamp: Date.now()
     });
 
+    // Classify drift into policy-aware category
+    let driftClass: SchemaDriftClass = 'BENIGN_UPDATE';
+    let policyAction: DriftPolicyAction = 'ALLOW';
+
+    if (capabilityExpansion.includes('secretAccess')) {
+      driftClass = 'CREDENTIAL_EXPANSION';
+      policyAction = 'BLOCK';
+    } else if (capabilityExpansion.includes('networkAccess')) {
+      driftClass = 'NETWORK_EXPANSION';
+      policyAction = 'PROMPT';
+    } else if (capabilityExpansion.includes('processSpawn') || capabilityExpansion.includes('shellExecution')) {
+      driftClass = 'EXECUTION_EXPANSION';
+      policyAction = 'SANDBOX';
+    } else if (capabilityExpansion.length > 0) {
+      driftClass = 'CAPABILITY_ESCALATION';
+      policyAction = 'PROMPT';
+    } else if (descriptionChanged && (/ignore previous|prompt|system|override|token|secret/i.test(newDescription))) {
+      driftClass = 'SUSPICIOUS_DESCRIPTION_MUTATION';
+      policyAction = 'PROMPT';
+    } else if (removedParameters.length > 0) {
+      driftClass = 'BREAKING_UPDATE';
+      policyAction = 'ALLOW';
+    } else {
+      driftClass = 'BENIGN_UPDATE';
+      policyAction = 'ALLOW';
+    }
+
     return {
       toolName,
       oldSchemaHash: existing.schemaHash,
@@ -152,6 +193,8 @@ export class SchemaDriftDetector {
       capabilityExpansion,
       isHighRiskDrift,
       driftRiskScore,
+      driftClass,
+      policyAction,
       evidence,
       explanation
     };
