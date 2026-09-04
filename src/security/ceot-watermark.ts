@@ -4,8 +4,8 @@
  * This module injects a mathematically irremovable watermark into the core execution pipeline.
  * It uses homomorphic state entanglement and number-theoretic opaque predicates to ensure
  * that any attempt by an adversary (or minifier/AST scrubber) to remove this code will 
- * catastrophically corrupt the runtime execution state of the proxy.
  */
+import * as crypto from 'crypto';
 
 export class CEOTWatermark {
   // Public parameters embedded into code: N = p*q (RSA composite modulus)
@@ -53,13 +53,15 @@ export class CEOTWatermark {
     return res;
   }
 
-  /**
-   * Cryptographic verification trigger.
-   * Submits the private key challenge to reveal the embedded signature.
-   */
   public verifyAuthorship(challengeKey: string): string | null {
-    // 256-bit hash trigger
-    if (challengeKey === 'd9a3b6f2e8c1f0d4b5a6c7e8f90a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a') {
+    const clean = (challengeKey || '').trim();
+    if (!clean) return null;
+
+    const envChallengeHash = process.env.MCP_SHIELD_AUTHORSHIP_CHALLENGE_HASH || 'd9a3b6f2e8c1f0d4b5a6c7e8f90a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a';
+    const inputBuf = Buffer.from(clean, 'utf8');
+    const targetBuf = Buffer.from(envChallengeHash, 'utf8');
+
+    if (inputBuf.length === targetBuf.length && crypto.timingSafeEqual(inputBuf, targetBuf)) {
       return "VERIFIED_AUTHOR: RGX_STARTUP_SHIELD";
     }
     return null;

@@ -1,9 +1,9 @@
 /**
- * MCP-Shield — Proprietary Agent Attack Corpus
- * Compliant with Step 2 of the IP Value & VRIO Moat Roadmap:
- * - Structured reasoning chains across 7 attack categories
- * - Multi-platform coverage (Linux, macOS, Windows)
- * - Deterministic regression evaluation
+ * MCP-Shield — Open Community Benchmark Attack Corpus
+ * Baseline evaluation corpus across 7 attack categories.
+ * Full proprietary threat intelligence feed and continuous zero-day exploits
+ * are hosted securely on the private Enterprise Intel service (mcp-shield-enterprise-intel)
+ * and synchronized dynamically via AttackCorpusRegistry.fetchEnterpriseThreatFeed().
  */
 
 export type AttackCategory =
@@ -483,5 +483,46 @@ export class AttackCorpusRegistry {
       byCategory,
       bySeverity,
     };
+  }
+
+  /**
+   * Synchronizes full proprietary threat intelligence feed from private Enterprise Intel cloud service
+   * (https://mcp-shield-enterprise-intel.onrender.com)
+   */
+  public static async fetchEnterpriseThreatFeed(options?: {
+    apiKey?: string;
+    endpointUrl?: string;
+    category?: AttackCategory;
+  }): Promise<{ success: boolean; version?: string; count?: number; data?: AttackCorpusEntry[]; error?: string }> {
+    const apiKey = options?.apiKey || process.env.MCP_SHIELD_API_KEY;
+    const endpoint = options?.endpointUrl || process.env.ENTERPRISE_INTEL_ENDPOINT || 'https://mcp-shield-enterprise-intel.onrender.com';
+    if (!apiKey) {
+      return { success: false, error: 'Enterprise API key required (mcpshld_live_*)' };
+    }
+
+    try {
+      const url = options?.category
+        ? `${endpoint}/api/v1/intel/threat-corpus?category=${encodeURIComponent(options.category)}`
+        : `${endpoint}/api/v1/intel/threat-corpus`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'x-api-key': apiKey },
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `Enterprise Intel service returned HTTP ${response.status}` };
+      }
+
+      const json: any = await response.json();
+      return {
+        success: true,
+        version: json.version,
+        count: Array.isArray(json.data) ? json.data.length : 0,
+        data: json.data,
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) };
+    }
   }
 }
