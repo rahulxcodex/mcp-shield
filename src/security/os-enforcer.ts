@@ -214,7 +214,13 @@ export class OSEnforcer {
     const resolvedPath = path.resolve(filePath);
 
     if (options.jailRoot) {
-      const canonicalJail = path.resolve(options.jailRoot);
+      let canonicalJail: string;
+      try {
+        canonicalJail = fs.realpathSync(options.jailRoot);
+      } catch {
+        canonicalJail = path.resolve(options.jailRoot);
+      }
+
       let canonicalTarget: string;
       try {
         canonicalTarget = fs.realpathSync(resolvedPath);
@@ -226,7 +232,10 @@ export class OSEnforcer {
         }
       }
 
-      if (!canonicalTarget.startsWith(canonicalJail) && canonicalTarget !== canonicalJail) {
+      const isWithinJail = canonicalTarget === canonicalJail ||
+        canonicalTarget.startsWith(canonicalJail.endsWith(path.sep) ? canonicalJail : canonicalJail + path.sep);
+
+      if (!isWithinJail) {
         throw new Error(`Path traversal violation: ${resolvedPath} escapes jail boundary ${canonicalJail}`);
       }
     }
