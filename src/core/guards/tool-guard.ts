@@ -7,6 +7,7 @@ import { UnicodeNormalizer } from '../../security/unicode-normalizer';
 import { MultiInterpreterAnalyzer } from '../../security/multi-interpreter-analyzer';
 import { Evidence } from '../../security/policy-engine';
 import { ToolCapabilities } from '../../security/capabilities';
+import { UnifiedInterpreterClassifier } from '../../security/interpreter-analyzer';
 
 export interface ToolSecurityAnalysisResult {
   isSafe: boolean;
@@ -20,6 +21,7 @@ export class ToolGuard {
   private psAnalyzer: PowerShellASTAnalyzer;
   private cmdAnalyzer: CmdAnalyzer;
   private manifestRegistry: CapabilityManifestRegistry;
+  private interpreterClassifier: UnifiedInterpreterClassifier;
 
   constructor(
     private session: SecuritySession,
@@ -29,6 +31,7 @@ export class ToolGuard {
     this.psAnalyzer = new PowerShellASTAnalyzer();
     this.cmdAnalyzer = new CmdAnalyzer(this.psAnalyzer);
     this.manifestRegistry = manifestRegistry || new CapabilityManifestRegistry(false);
+    this.interpreterClassifier = new UnifiedInterpreterClassifier();
   }
 
   public getManifestRegistry(): CapabilityManifestRegistry {
@@ -96,46 +99,19 @@ export class ToolGuard {
       }
       const normalizedCmd = unicodeAnalysis.normalized;
 
-      // 0.1 Multi-interpreter and chaining detection
-      const multiInterpResult = MultiInterpreterAnalyzer.analyze(normalizedCmd);
-      if (!multiInterpResult.isSafe) {
+      const interpResult = this.interpreterClassifier.analyze(normalizedCmd);
+      if (!interpResult.isSafe) {
         return {
           isSafe: false,
-          blockReason: multiInterpResult.reason,
-          evidence,
-          candidateCommands
-        };
-      }
-
-      // 1. Bash / POSIX AST
-      const astResult = this.astAnalyzer.analyzeCommand(normalizedCmd);
-      if (!astResult.isSafe) {
-        return {
-          isSafe: false,
-          blockReason: astResult.reason,
-          evidence,
-          candidateCommands
-        };
-      }
-
-      // 2. PowerShell AST
-      const psResult = this.psAnalyzer.analyzeCommand(normalizedCmd);
-      if (!psResult.isSafe) {
-        return {
-          isSafe: false,
-          blockReason: psResult.reason,
-          evidence,
-          candidateCommands
-        };
-      }
-
-      // 3. cmd.exe AST
-      const cmdResult = this.cmdAnalyzer.analyzeCommand(normalizedCmd);
-      if (!cmdResult.isSafe) {
-        return {
-          isSafe: false,
-          blockReason: cmdResult.reason,
-          evidence,
+          blockReason: interpResult.reason,
+          evidence: [
+            ...evidence,
+            ...interpResult.evidence.map(e => ({
+              detector: e.detectorId,
+              finding: e.explanation,
+              risk: (e.severity >= 0.8 ? 'CRITICAL' : e.severity >= 0.6 ? 'HIGH' : 'MEDIUM') as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+            }))
+          ],
           candidateCommands
         };
       }

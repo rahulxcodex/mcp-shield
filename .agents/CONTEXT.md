@@ -10,7 +10,8 @@
   - License Verification: Constant-time master key verification (`crypto.timingSafeEqual`), finite positive expiry timestamp checks, and Ed25519 signature checks.
 - **`mcp-shield-enterprise-intel`** (Private GitHub `rahulxcodex/mcp-shield-enterprise-intel`, Render Web Service):
   - Proprietary non-linear risk scoring algorithm (`AST_COMPLEXITY_EXPONENT`, `EGRESS_SEVERITY_MULTIPLIER`, `DRIFT_BASE_PENALTY`).
-  - Endpoint: `https://mcp-shield-enterprise-intel.onrender.com/api/v1/intel/scoring` (Status: LIVE).
+  - Proprietary weaponized attack corpus & multi-turn behavioral kill chains (`CHAIN-EXFIL-001`, `CHAIN-STAGE-DETONATE-001`).
+  - Endpoints: `/api/v1/intel/scoring`, `/api/v1/intel/threat-corpus`, `/api/v1/intel/behavioral-rules` (Status: LIVE on Render).
   - Trade Secret Boundary: Hardened with 64KB max body limit, fail-closed constant-time API key auth, Slowloris timeouts, and numeric input sanitization.
 - **`mcp-shield-licensing`** (Private GitHub `rahulxcodex/mcp-shield-licensing`, Vercel App):
   - Asymmetric cryptographic license generation (`/api/license`) using Ed25519 private key.
@@ -35,6 +36,27 @@
 
 ## 3. Deployment & Release Matrix
 - **npm**: `mcpshld` v1.0.22 published with public access (circular dependency removed, exports map configured).
-- **GitHub**: All 3 repositories synced and audited; 55 suites / 780 tests passing cleanly.
-- **Vercel**: `mcp-shield-dashboard` deployed in READY state, `mcp-shield-licensing` verified and building cleanly with Turbopack.
-- **Render**: `mcp-shield-enterprise-intel` hardened with fail-closed authentication and connection timeouts.
+- **GitHub**: All 3 repositories synced and audited; PR #31 merged to `main` (`cf45a47`); 55 suites / 780 tests passing cleanly.
+- **Vercel**: `mcp-shield-dashboard` deployed in READY state (`dpl_44ReRsnLP23n8LEYjJ4BKFkMNTZE`), `mcp-shield-licensing` verified and building cleanly with Turbopack.
+- **Render**: `mcp-shield-enterprise-intel` live with commit `43cc006`, exposing authenticated threat corpus, behavioral kill-chain, and risk scoring APIs.
+
+## 4. Commercial Architecture, Referral Engine & Customer Verification
+- **Pricing & Tiering Logic**: Defined in `src/config/plans.ts`. Starter plan configured at 10 USD/year (or 1 USD/month). Active payment gateways kept dormant in code (`SHOW_PAYMENT_GATEWAYS: false`) during the introductory free access rollout (`FREE_ACCESS_LIMITED_PERIOD: true`).
+- **Single Active Key Policy**: Strictly enforces `maxActiveKeys: 1` per account on key generation and key import. Automatically rotates prior active keys to epoch timestamp (`expires_at = 1970-01-01`).
+- **Key Non-Reusability**: Historical SHA-256 hash lookup rejects any previously revoked or used keys with 400 Bad Request, guaranteeing one-time issuance semantics.
+- **Referral Engine**: Deterministic `SHIELD-<id>` codes granting 30 days (1 month) of free access to referees upon redemption; blocks self-referral attempts.
+- **UI & Metrics Authenticity**: Removed all mock/random numbers from `/console` and settings pages. Baseline metrics default cleanly to 0. Master key import (`MASTER_*` / `MCP_SHIELD_MASTER_KEY`) elevates user with master admin badges.
+- **Playwright Customer Testing**: Automated suite in `scripts/test-customer-agents.js` executing 5 customer subagents covering metrics integrity, single-key limit, master import, referral redemption, and non-reusability (5/5 passing).
+
+## 5. Security Kernel & Architecture Hardening (Step 1 Roadmap Complete)
+- **Canonical Security Pipeline**: `src/core/pipeline/security-pipeline.ts` provides a 7-stage pipeline (`Normalize` -> `Parse/Classify` -> `Capability Extraction` -> `Deterministic Detectors` -> `Attack-Path Analysis` -> `Risk Scoring` -> `Policy Decision`) with shared `SecurityContext`.
+- **Deduplicated Interpreter Analysis**: `src/security/interpreter-analyzer.ts` with `UnifiedInterpreterClassifier` and pluggable `InterpreterAnalyzer` eliminating redundant multi-pass AST execution.
+- **Capability Trust Hierarchy**: 5-tier resolution (Admin Policy > Signed Manifest > Verified Publisher > Local Inference > Untrusted Self-Declaration) downgrading downstream `_shieldCapabilities` strictly to `untrusted`.
+- **Canonical Path Resolver**: `src/security/path-resolver.ts` (`PathSecurityResolver`) enforcing Unicode NFKC, recursive URL decoding, UNC, Windows drive, dot-segments, and `isWithin` containment.
+- **Canonical JSON**: `src/security/canonical-json.ts` (RFC 8785 deterministic key sorting & stable `hashCanonicalJson` digests).
+- **Real Cancellation Propagation**: `src/core/dispatcher.ts` with `ExecutionContext` and `AbortController` propagation across dispatcher, execution broker, and subprocesses.
+- **Removed Placeholders**: `src/security/feature-flags.ts` with explicit `FeatureStatus: 'UNSUPPORTED'` and fail-closed handling for CAC/PIV, SLSA L4, CRDT HA, NVMe WAL.
+- **Hardened WASM Plugins**: `src/microkernel/wasm-loader.ts` with publisher allowlists, constant-time SHA-256 digests, cryptographic signatures, memory limits, and fail-closed execution.
+- **Library / CLI Split**: `src/index.ts` is pure library exports with zero side effects; `src/cli.ts` handles command routing; `bin/mcp-shield.js` invokes CLI.
+- **Dependency Injection**: `src/core/runtime/security-runtime.ts` (`SecurityRuntime`) managing SessionStore, BehaviorStore, ReputationStore, ThreatCorpusStore, FeatureStore.
+- **Universal Evidence Contract**: `src/security/evidence.ts` (`SecurityEvidence` and `ThreatCategory`).

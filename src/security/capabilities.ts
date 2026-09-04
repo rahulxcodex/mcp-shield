@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { hashCanonicalJson } from './canonical-json';
 
 export interface ToolCapabilities {
   filesystemRead: boolean;
@@ -12,6 +13,23 @@ export interface ToolCapabilities {
 
 export type ExecutionClass = 'shell' | 'binary' | 'script' | 'filesystem_write' | 'filesystem_read' | 'network' | 'secret' | 'destructive';
 
+export type CapabilitySource =
+  | 'admin-policy'
+  | 'signed-manifest'
+  | 'verified-publisher'
+  | 'local-inference'
+  | 'remote-declaration';
+
+export type CapabilityTrustLevel = 'trusted' | 'conditional' | 'untrusted';
+
+export interface CapabilityEvidence {
+  capability: keyof ToolCapabilities;
+  source: CapabilitySource;
+  trust: CapabilityTrustLevel;
+  granted: boolean;
+  reason?: string;
+}
+
 export interface ToolProfile {
   readonly serverId: string;
   readonly toolName: string;
@@ -23,6 +41,8 @@ export interface ToolProfile {
   readonly declaredCapabilities: ToolCapabilities;
   readonly inferredCapabilities: ToolCapabilities;
   readonly observedCapabilities: ToolCapabilities;
+  readonly effectiveCapabilities?: ToolCapabilities;
+  readonly capabilityEvidence?: readonly CapabilityEvidence[];
   readonly trustLevel: 'TRUSTED' | 'UNTRUSTED' | 'SUSPICIOUS';
   readonly firstSeen: number;
 }
@@ -159,16 +179,122 @@ export class CapabilityInferencer {
     return 'TRUSTED';
   }
 
+  public static resolveEffectiveCapabilities(
+    toolName: string,
+    schema: any,
+    description: string,
+    options?: {
+      adminPolicy?: Partial<ToolCapabilities>;
+      signedManifest?: Partial<ToolCapabilities>;
+      verifiedPublisher?: boolean;
+    }
+  ): { effective: ToolCapabilities; evidence: CapabilityEvidence[] } {
+    const inferred = this.infer(toolName, schema, description);
+    const declared = this.getDeclared(schema);
+    const evidence: CapabilityEvidence[] = [];
+
+    const keys: (keyof ToolCapabilities)[] = [
+      'filesystemRead', 'filesystemWrite', 'shellExecution',
+      'networkAccess', 'processSpawn', 'destructiveOperation', 'secretAccess'
+    ];
+
+    const effective: ToolCapabilities = {
+      filesystemRead: false,
+      filesystemWrite: false,
+      shellExecution: false,
+      networkAccess: false,
+      processSpawn: false,
+      destructiveOperation: false,
+      secretAccess: false
+    };
+
+    for (const key of keys) {
+      // 1. Administrator policy (Priority 1 - Authoritative)
+      if (options?.adminPolicy && options.adminPolicy[key] !== undefined) {
+        const granted = !!options.adminPolicy[key];
+        effective[key] = granted;
+        evidence.push({
+          capability: key,
+          source: 'admin-policy',
+          trust: 'trusted',
+          granted,
+          reason: 'Set by authoritative administrator policy'
+        });
+        continue;
+      }
+
+      // 2. Signed capability manifest (Priority 2 - Cryptographically verified)
+      if (options?.signedManifest && options.signedManifest[key] !== undefined) {
+        const granted = !!options.signedManifest[key];
+        effective[key] = granted;
+        evidence.push({
+          capability: key,
+          source: 'signed-manifest',
+          trust: 'trusted',
+          granted,
+          reason: 'Granted via cryptographically signed capability manifest'
+        });
+        continue;
+      }
+
+      // 3. Verified publisher metadata (Priority 3)
+      if (options?.verifiedPublisher && declared[key]) {
+        effective[key] = true;
+        evidence.push({
+          capability: key,
+          source: 'verified-publisher',
+          trust: 'conditional',
+          granted: true,
+          reason: 'Attested by verified publisher'
+        });
+        continue;
+      }
+
+      // 4. Local static inference (Priority 4)
+      if (inferred[key]) {
+        effective[key] = true;
+        evidence.push({
+          capability: key,
+          source: 'local-inference',
+          trust: 'conditional',
+          granted: true,
+          reason: 'Inferred via parameter and schema static analysis'
+        });
+        continue;
+      }
+
+      // 5. Remote self-declaration (Priority 5 - Lowest trust, informational only)
+      if (declared[key]) {
+        // Self-attestation without local inference or admin/manifest approval is untrusted
+        evidence.push({
+          capability: key,
+          source: 'remote-declaration',
+          trust: 'untrusted',
+          granted: false,
+          reason: 'Untrusted remote self-declaration ignored without manifest or admin grant'
+        });
+      }
+    }
+
+    return { effective, evidence };
+  }
+
   public static createProfile(
     serverId: string,
     toolName: string,
     description: string,
     schema: any,
-    existingProfile?: ToolProfile
+    existingProfile?: ToolProfile,
+    options?: {
+      adminPolicy?: Partial<ToolCapabilities>;
+      signedManifest?: Partial<ToolCapabilities>;
+      verifiedPublisher?: boolean;
+    }
   ): ToolProfile {
     const hash = this.hashSchema(schema);
     const inferred = this.infer(toolName, schema, description);
     const declared = this.getDeclared(schema);
+    const resolved = this.resolveEffectiveCapabilities(toolName, schema, description, options);
     const observed: ToolCapabilities = existingProfile
       ? { ...existingProfile.observedCapabilities }
       : {
@@ -195,12 +321,14 @@ export class CapabilityInferencer {
       declaredCapabilities: declared,
       inferredCapabilities: inferred,
       observedCapabilities: observed,
+      effectiveCapabilities: resolved.effective,
+      capabilityEvidence: resolved.evidence,
       trustLevel,
       firstSeen: existingProfile ? existingProfile.firstSeen : Date.now()
     });
   }
 
   public static hashSchema(schema: any): string {
-    return crypto.createHash('sha256').update(JSON.stringify(schema)).digest('hex');
+    return hashCanonicalJson(schema);
   }
 }
