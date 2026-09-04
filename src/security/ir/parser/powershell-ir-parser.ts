@@ -26,10 +26,11 @@ export class PowerShellIRParser {
     const readMatch = normalized.match(/\b(?:Get-Content|gc|type)\s+(?:-Path\s+)?([^\s|;&]+)/i);
     if (readMatch) {
       const p = readMatch[1];
+      const isSensitivePath = /(?:^|[\\/])(?:\.env|password|id_rsa|id_ed25519|credentials|secrets?)(?:[\\/.]|$)/i.test(p);
       actions.push({
         type: 'READ_FILE',
         path: p,
-        sensitive: p.toLowerCase().includes('password') || p.toLowerCase().includes('id_rsa') || p.toLowerCase().includes('.env'),
+        sensitive: isSensitivePath,
         rawSnippet: readMatch[0]
       });
     }

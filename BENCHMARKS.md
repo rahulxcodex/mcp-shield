@@ -45,10 +45,13 @@ To ground detection claims with empirical evidence, the Secret Sanitizer is eval
 | **True Positives (TP)** | **300** | Successfully quarantined & tokenized secrets |
 | **False Positives (FP)** | **0** | Non-secret tokens erroneously scrubbed |
 | **False Negatives (FN)** | **0** | Secrets missed during single-pass scan |
-| **Precision** | **100.00%** | TP / (TP + FP) |
-| **Recall** | **100.00%** | TP / (TP + FN) |
-| **F1-Score** | **100.00%** | Harmonic mean of Precision & Recall |
+| **Precision** | **100.00%** | Internal benchmark baseline (TP / (TP + FP)) |
+| **Recall** | **100.00%** | 100% recall on an internally labeled 1,780-line benchmark; external held-out evaluation pending |
+| **F1-Score** | **100.00%** | Baseline on curated internal fixtures |
 | **Scanner Throughput** | **87,307 lines/sec** | 3.57 MB/s raw scanning speed |
+
+> [!IMPORTANT]
+> **Empirical Disclosure**: Claims of 100% recall are strictly grounded in this internally labeled 1,780-line benchmark suite (`benchmarks/secret-detection.bench.ts`). Synthetic and curated internal benchmarks evaluate deterministic rule coverage against known formats and synthetic noise; independent external evaluation against uncurated held-out enterprise telemetry is pending.
 
 ### Breakdown by Workload Category
 

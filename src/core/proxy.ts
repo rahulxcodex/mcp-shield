@@ -20,6 +20,7 @@ import { ExecutionBroker } from './broker/execution-broker';
 import { OutputGuard } from './guards/output-guard';
 import { LifecycleManager } from './lifecycle/lifecycle-manager';
 import { CapabilityManifestRegistry } from '../security/capability-manifest';
+import { ToxicFlowEngine } from '../security/dataflow/toxic-flow-engine';
 
 export interface Lifecycle {
   start(): Promise<number>;
@@ -54,6 +55,7 @@ export class ProxyServer implements Lifecycle {
   public readonly executionBroker: ExecutionBroker;
   public readonly outputGuard: OutputGuard;
   public readonly lifecycleManager: LifecycleManager;
+  public readonly toxicFlowEngine = new ToxicFlowEngine();
   private telemetryPublisher = new CloudTelemetryPublisher();
   private pendingInitRequestId: string | number | null = null;
 
@@ -268,10 +270,24 @@ export class ProxyServer implements Lifecycle {
            evidence.push({ detector: 'capability-attestation', finding: 'CAPABILITY_MISMATCH: Inferred capabilities exceed declared capabilities.', risk: 'HIGH' });
         }
 
+        // 4. Toxic Flow & Semantic Lineage Analysis
+        const activeCaps = registeredTool
+          ? Object.keys(registeredTool.inferredCapabilities).filter((k) => (registeredTool.inferredCapabilities as any)[k])
+          : Object.keys(actualObserved).filter((k) => (actualObserved as any)[k]);
+        
+        const toxicViolation = this.toxicFlowEngine.evaluateStep(toolName, activeCaps, rawArgs);
+        if (toxicViolation && toxicViolation.dangerousChainIdentified) {
+          evidence.push({
+            detector: 'toxic-flow-engine',
+            finding: `TOXIC_DATAFLOW_DETECTED: ${toxicViolation.violation?.lineagePath || toolName} (${toxicViolation.chainExplanation || 'Dangerous toxic chain identified'})`,
+            risk: toxicViolation.riskScore >= 0.8 ? 'CRITICAL' : 'HIGH'
+          });
+        }
+
         // Evaluate Policy Unified Engine against RawSecurityInput
         const evaluationContext: EvaluationContext = {
            toolName,
-           capabilities: registeredTool ? Object.keys(registeredTool.inferredCapabilities).filter((k) => (registeredTool.inferredCapabilities as any)[k]) : undefined,
+           capabilities: activeCaps.length > 0 ? activeCaps : undefined,
            args: rawArgs,
            evidence
         };

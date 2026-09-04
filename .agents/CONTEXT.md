@@ -104,4 +104,13 @@
 - **Hugging Face Spaces & Gradio 6.0**: Multi-model visualization tabs and programmatic `/api/predict` endpoint in `deployment/app.py` with zero deprecated parameter warnings.
 - **Deployment Keep-Alive Automation**: `.github/workflows/render-keepalive.yml` runs every 10 minutes (`*/10 * * * *`) pinging Render Enterprise Intel and Hugging Face Spaces with cold-start retry tolerances.
 - **Direct Mail API Transition**: `cloud-dashboard/src/lib/email-service.ts` dispatches support inquiries directly via Resend REST API (`RESEND_API_KEY`) and SendGrid API with Apps Script fallback.
-- **Trade Secret Boundaries**: Delineated and strictly isolated across the 3 repositories (`mcp-shield` public, `mcp-shield-enterprise-intel` private on Render, `mcp-shield-licensing` private on Vercel).
+## 10. v2.1.0 Competitive Leap & Enterprise Hardening (Complete)
+- **Multi-Agent Ecosystem Discovery**: `src/scanner/agent-ecosystem-scanner.ts` auto-detects 9 agent environments (Claude, Cursor, Windsurf, Gemini CLI, VS Code Cline/Roo/Copilot, Codex, Amazon Q, local `.mcp.json`, `.agents/skills`) with live posture scoring in `mcp-shield scan` and `protect`.
+- **Supply-Chain Security Suite**: `src/security/supply-chain/` combines npm/PyPI CVE scanning, typo-squat detection, lifecycle install-script analysis, MCP server source AST auditing (TS/JS/Py), and CycloneDX/SPDX SBOM and SLSA attestation validation.
+- **First-Class MCP Surface Inspection**: `src/security/protocol/mcp-surface-inspector.ts` and `OutputGuard` inspect `tools/list`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get`, and `initialize.result.instructions`.
+- **True Semantic Toxic-Flow Engine**: `src/security/dataflow/toxic-flow-engine.ts` tracks data lineage (`source -> transform -> tainted object -> cross-tool transfer -> sink`) with cryptographic hashing and taint propagation.
+- **Response-Side Semantic Pipeline**: `src/security/response/response-security-pipeline.ts` inspects tool outputs for indirect prompt injection, secret exfiltration, malicious links, and downstream tool poisoning.
+- **Kernel/VM Containment**: `src/security/os-enforcer.ts` provides Linux Namespaces (PID, Mount, Net, User), Landlock rulesets, Bubblewrap, network namespace isolation, read-only rootfs, and MicroVM configs (Firecracker, Cloud-Hypervisor).
+- **Heuristics & Decision Consolidation**: Token-anchored boundaries in `capabilities.ts`, `network-extractor.ts`, `intelligence-engine.ts`, and IR parsers; consolidated `SecurityDecision` pipeline.
+- **Credibility & Transparency**: Reframed advisories `ADV-2026-001..003` (`MCP-SHIELD-VULN-001..003`) in `SECURITY.md`, `SECURITY_AUDIT.md`, `README.md`, `LAUNCH_KIT.md` with transparent CNA registration disclosures.
+- **Verification Gate**: 103 suites / 981 tests passing cleanly (100%).

@@ -94,6 +94,6 @@ Many projects attempt simple regex checks like `!/rm\s+-rf/.test(cmd)`. Attacker
 ### The AST Approach
 We open-sourced **MCP-Shield** (https://github.com/rahulxcodex/mcp-shield), which uses native `tree-sitter-bash` C bindings to walk the actual syntax tree of commands in < 150µs. It unwraps execution layers, decomposes combined short flags, and validates pipelines before passing the JSON-RPC call downstream.
 
-We published our labeled DLP accuracy benchmarks (100% precision / 100% recall on 1,780 lines of real code/logs) in `BENCHMARKS.md` and third-party security audit in `SECURITY_AUDIT.md`.
+We published our labeled DLP accuracy benchmarks (100% recall on an internally labeled 1,780-line benchmark; external held-out evaluation pending) in `BENCHMARKS.md` and third-party security audit in `SECURITY_AUDIT.md`.
 
 Check it out on GitHub: https://github.com/rahulxcodex/mcp-shield

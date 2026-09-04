@@ -99,27 +99,28 @@ export class CapabilityInferencer {
     const schemaDestructive = schemaHasProp(/^(force|recursive|drop_tables|purge|delete_all|truncate)$/i) || schemaHasDesc(/force delete|recursive delete|purge/i);
     const schemaSecret = schemaHasProp(/^(api_?key|secret|token|password|auth_?token|credential|private_?key|access_?token)$/i) || schemaHasDesc(/api[_\s]?key|secret|token|password|auth|credential/i);
 
-    // 2. NAME & DESCRIPTION MATCHING (Priority 2 & 3)
-    const nameFsRead = /read|cat|ls|grep|find|search|view|get_file|list_dir/i.test(name);
-    const descFsRead = /read file|view file|search path|list contents|inspect directory/i.test(desc);
+    // 2. NAME & DESCRIPTION MATCHING (Token-anchored boundaries to prevent substring collisions)
+    const tokenizedName = name.replace(/[-_.:/]/g, ' ');
+    const nameFsRead = /\b(?:read|cat|ls|grep|find|search|view|get_file|list_dir)\b/i.test(tokenizedName);
+    const descFsRead = /\b(?:read file|view file|search path|list contents|inspect directory)\b/i.test(desc);
 
-    const nameFsWrite = /write|edit|replace|patch|rm|delete|create|mkdir|touch|cp|mv/i.test(name);
-    const descFsWrite = /write to file|modify file|delete file|create directory|edit code/i.test(desc);
+    const nameFsWrite = /\b(?:write|edit|replace|patch|rm|delete|create|mkdir|touch|cp|mv)\b/i.test(tokenizedName);
+    const descFsWrite = /\b(?:write to file|modify file|delete file|create directory|edit code)\b/i.test(desc);
 
-    const nameShell = /bash|shell|terminal|exec|run_command|do_cmd|cmd/i.test(name);
-    const descShell = /execute command|run shell|run bash|execute in terminal/i.test(desc);
+    const nameShell = /\b(?:bash|sh|shell|terminal|exec|run_command|do_cmd|cmd)\b/i.test(tokenizedName);
+    const descShell = /\b(?:execute command|run shell|run bash|execute in terminal)\b/i.test(desc);
 
-    const nameNetwork = /fetch|curl|wget|request|http|api|download|network|web/i.test(name);
-    const descNetwork = /make http request|fetch url|download from web|send api request/i.test(desc);
+    const nameNetwork = /\b(?:fetch|curl|wget|request|http|https|api|download|network|web|webhook|socket)\b/i.test(tokenizedName);
+    const descNetwork = /\b(?:make http request|fetch url|download from web|send api request)\b/i.test(desc);
 
-    const nameProcess = /spawn|fork|exec/i.test(name);
-    const descProcess = /spawn process|execute binary|start daemon/i.test(desc);
+    const nameProcess = /\b(?:spawn|fork|exec|process)\b/i.test(tokenizedName);
+    const descProcess = /\b(?:spawn process|execute binary|start daemon)\b/i.test(desc);
 
-    const nameDestructive = /rm|delete|drop|truncate|format|kill|stop|destroy/i.test(name);
-    const descDestructive = /permanently delete|force stop|drop table|destroy workspace/i.test(desc);
+    const nameDestructive = /\b(?:rm|delete|drop|truncate|kill|destroy|purge)\b/i.test(tokenizedName);
+    const descDestructive = /\b(?:permanently delete|force stop|drop table|destroy workspace|purge)\b/i.test(desc);
 
-    const nameSecret = /secret|key|token|password|auth|credential/i.test(name);
-    const descSecret = /access secret|retrieve token|manage credentials/i.test(desc);
+    const nameSecret = /\b(?:secret|key|token|password|auth|credential)\b/i.test(tokenizedName);
+    const descSecret = /\b(?:access secret|retrieve token|manage credentials)\b/i.test(desc);
 
     return {
       filesystemRead: schemaFsRead || nameFsRead || descFsRead,

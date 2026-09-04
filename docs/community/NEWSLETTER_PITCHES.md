@@ -22,7 +22,7 @@ Simple regex blocklists fail against shell syntax (`$IFS` parameter expansions, 
 
 ### How MCP-Shield Solves It
 - **Native AST Shell Firewall**: Sits as a JSON-RPC stdio proxy using `tree-sitter-bash` C bindings to parse syntax trees, unwrap arbitrary execution layers, split POSIX short flags (`-rf` vs `-exclude`), and enforce fail-closed pipe policies.
-- **Zero-Allocation Reversible DLP**: Tokenizes AWS, OpenAI, Anthropic, and GitHub keys in single-pass Shannon entropy scanning (< 150µs latency overhead) with 100% precision & recall on labeled test suites.
+- **Zero-Allocation Reversible DLP**: Tokenizes AWS, OpenAI, Anthropic, and GitHub keys in single-pass Shannon entropy scanning (< 150µs latency overhead) with 100% recall on an internally labeled 1,780-line benchmark (external held-out evaluation pending).
 - **Published Audit & Benchmarks**: We published empirical benchmarks in `BENCHMARKS.md` and third-party security review findings in `SECURITY_AUDIT.md`.
 
 Thought this would be of great interest to *tldr sec* readers building or securing AI agent infrastructure!

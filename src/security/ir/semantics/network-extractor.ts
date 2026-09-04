@@ -6,10 +6,25 @@ export class NetworkSemanticExtractor {
 
     for (const action of ir.actions) {
       if (action.type === 'NETWORK_REQUEST') {
-        const dest = action.destination.toLowerCase();
-        const isUntrusted = !dest.includes('github.com') && !dest.includes('npm.org');
+        let hostname = action.destination.toLowerCase().trim();
+        try {
+          if (hostname.includes('://')) {
+            hostname = new URL(hostname).hostname.toLowerCase();
+          } else {
+            hostname = hostname.split(/[:/]/)[0];
+          }
+        } catch {}
 
-        if (isUntrusted) {
+        const isTrustedDomain = (domain: string, trusted: string) => {
+          return domain === trusted || domain.endsWith('.' + trusted);
+        };
+
+        const isTrusted =
+          isTrustedDomain(hostname, 'github.com') ||
+          isTrustedDomain(hostname, 'npmjs.org') ||
+          isTrustedDomain(hostname, 'npmjs.com');
+
+        if (!isTrusted) {
           findings.push({
             ruleId: 'NET-UNTRUSTED-EGRESS',
             category: 'NETWORK',

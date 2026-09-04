@@ -33,6 +33,10 @@ export class ProtectCommand {
     this.patchConfigFile(this.getWindsurfConfigPath(), 'Windsurf');
     this.patchConfigFile(this.getZedConfigPath(), 'Zed Editor');
     this.patchConfigFile(this.getRooConfigPath(), 'Roo Code');
+    this.patchConfigFile(this.getGeminiConfigPath(), 'Gemini CLI');
+    this.patchConfigFile(this.getCodexConfigPath(), 'OpenAI Codex');
+    this.patchConfigFile(this.getAmazonQConfigPath(), 'Amazon Q Developer');
+    this.patchConfigFile(this.getLocalMcpConfigPath(), 'Local Workspace MCP');
   }
 
   public static getClaudeConfigPath(): string {
@@ -65,6 +69,22 @@ export class ProtectCommand {
     if (process.platform === 'win32') return path.join(os.homedir(), 'AppData', 'Roaming', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'cline_mcp_settings.json');
     if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'cline_mcp_settings.json');
     return path.join(os.homedir(), '.config', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'cline_mcp_settings.json');
+  }
+
+  public static getGeminiConfigPath(): string {
+    return path.join(os.homedir(), '.gemini', 'settings.json');
+  }
+
+  public static getCodexConfigPath(): string {
+    return path.join(os.homedir(), '.codex', 'config.json');
+  }
+
+  public static getAmazonQConfigPath(): string {
+    return path.join(os.homedir(), '.aws', 'amazon-q', 'mcp.json');
+  }
+
+  public static getLocalMcpConfigPath(): string {
+    return path.resolve(process.cwd(), '.mcp.json');
   }
 
   /**

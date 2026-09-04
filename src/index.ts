@@ -48,3 +48,4 @@ export * from './security/kernel/agent-security-kernel';
 export * from './security/kernel/adapters/mcp-adapter';
 export * from './security/kernel/adapters/browser-adapter';
 export * from './security/kernel/adapters/coding-adapter';
+export * from './security/os-enforcer';

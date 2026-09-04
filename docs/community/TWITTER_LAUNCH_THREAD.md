@@ -79,7 +79,7 @@ It auto-discovers configs for Claude Desktop, Cursor, Windsurf, and Cline, creat
 
 ### Tweet 8 (Empirical Evidence & Third-Party Audit)
 No hand-waving claims:
-📊 Labeled DLP benchmark: 100% Precision / 100% Recall across 1,780 lines in `BENCHMARKS.md`
+📊 Labeled DLP benchmark: 100% recall on an internally labeled 1,780-line benchmark; external held-out evaluation pending (`BENCHMARKS.md`)
 🛡️ Independent security audit report in `SECURITY_AUDIT.md`
 📋 3 documented CVE advisories in `SECURITY.md` 8/10
 

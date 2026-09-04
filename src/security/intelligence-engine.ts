@@ -1,10 +1,12 @@
 /**
- * MCP-Shield — Security Intelligence Engine
- * Compliant with Step 3 of the IP Value & VRIO Moat Roadmap:
- * - Unified Capability Graph representation
- * - Deterministic explainable risk scoring
- * - Behavioral baselining and anomaly detection
- * - Policy simulation engine
+ * MCP-Shield — Security Intelligence Engine (Open-Source Client SDK & Local Baseline)
+ * 
+ * Trade Secret Boundary Notice:
+ * - This file provides the open-source client interface and deterministic local fallback heuristics.
+ * - In enterprise environments, high-tier composite risk evaluation, proprietary non-linear weight vectors,
+ *   multi-turn reasoning kill chains, and the global MCP server reputation graph are evaluated remotely
+ *   via the private `mcp-shield-enterprise-intel` service (see `evaluateViaRemoteIntel`).
+ * - Local heuristic evaluators allow offline CLI execution and zero-latency local development.
  */
 
 export interface RemoteIntelEvaluationResult {
@@ -219,7 +221,8 @@ export class SecurityIntelligenceEngine {
       rationale.push(...nGramAnomaly.rationale);
     }
     const isSuspiciousChaining =
-      history.slice(-2).includes('read_file') && params.toolName.includes('network');
+      history.slice(-2).some(h => /\b(?:read|read_file|get_file|query)\b/i.test(h)) &&
+      /\b(?:network|upload|egress|curl|http|post)\b/i.test(params.toolName);
     if (isSuspiciousChaining && factors.behaviorAnomaly === 0) {
       factors.behaviorAnomaly = 30;
       rationale.push('Suspicious behavioral chain: local read followed immediately by outbound egress');
@@ -233,11 +236,22 @@ export class SecurityIntelligenceEngine {
 
     // 4. Destination Risk
     if (params.destinationHost) {
-      if (
-        params.destinationHost.includes('169.254') ||
-        params.destinationHost.includes('localhost') ||
-        params.destinationHost.includes('127.0.0.1')
-      ) {
+      let host = params.destinationHost.trim();
+      try {
+        if (host.includes('://')) {
+          host = new URL(host).hostname;
+        } else {
+          host = host.split('/')[0].split(':')[0];
+        }
+      } catch {
+        // fallback to raw
+      }
+
+      const isDangerousDest =
+        /(?:^|\.)169\.254\.\d+\.\d+$|^localhost$|^127\.\d+\.\d+\.\d+$|^0\.0\.0\.0$|metadata\.google\.internal/i.test(host) ||
+        /(?:169\.254\.\d+\.\d+|localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|::ffff:127\.0\.0\.1|metadata\.google\.internal)/i.test(params.destinationHost);
+
+      if (isDangerousDest) {
         factors.destinationRisk = 35;
         rationale.push(`High-risk destination target: SSRF / metadata link ${params.destinationHost}`);
       }
@@ -246,44 +260,44 @@ export class SecurityIntelligenceEngine {
     // 5. Credential Exposure & Payload Risk
     if (params.payloadSnippet) {
       if (
-        params.payloadSnippet.includes('AKIA') ||
-        params.payloadSnippet.includes('ghp_') ||
-        params.payloadSnippet.includes('BEGIN PRIVATE KEY')
+        /(?:AKIA[0-9A-Z]{16})|(?:ghp_[a-zA-Z0-9]{20,40})|(?:BEGIN (?:RSA |EC )?PRIVATE KEY)/i.test(
+          params.payloadSnippet
+        )
       ) {
         factors.credentialExposure = 35;
         rationale.push('Cleartext credential signature detected in execution context');
       }
       if (
-        params.payloadSnippet.includes('$(') ||
-        params.payloadSnippet.includes('| bash') ||
-        params.payloadSnippet.includes('-Enc') ||
-        params.payloadSnippet.includes('eval(') ||
-        params.payloadSnippet.includes('powershell')
+        /\$\([^)]+\)|\`[^`]+\`|\|\s*(?:bash|sh|pwsh|powershell)|-enc|-encodedcommand\b|\beval\s*\(|\bpowershell(?:\.exe)?\b/i.test(
+          params.payloadSnippet
+        )
       ) {
         factors.capabilityRisk += 40;
         factors.policyViolations += 35;
         rationale.push('Subshell execution or obfuscated script command injection detected');
       }
       if (
-        params.payloadSnippet.includes('../') ||
-        params.payloadSnippet.includes('link_to_root') ||
-        params.payloadSnippet.includes('.json:') ||
-        params.payloadSnippet.includes('.exe:') ||
-        params.payloadSnippet.includes(':hidden') ||
-        params.payloadSnippet.includes('::')
+        /(?:\.\.[/\\])|link_to_root|(?:\.[a-zA-Z0-9]+:[a-zA-Z0-9_]+)|:hidden|(?:::\$DATA)|(?:::)/i.test(
+          params.payloadSnippet
+        )
       ) {
         factors.capabilityRisk += 35;
         factors.policyViolations += 30;
         rationale.push('Filesystem directory traversal or alternate data stream detected');
       }
       if (
-        params.payloadSnippet.includes('<SYSTEM>') ||
-        params.payloadSnippet.includes('Ignore previous instructions')
+        /<SYSTEM>|ignore\s+(?:all\s+)?(?:previous|prior)\s+instructions/i.test(params.payloadSnippet)
       ) {
         factors.policyViolations += 40;
-        rationale.push('Prompt injection instruction override tags detected');
+        rationale.push('Adversarial system prompt injection attempt detected');
       }
-      if (params.payloadSnippet.includes('loop_depth') || params.payloadSnippet.includes('parent_session')) {
+      if (
+        params.payloadSnippet.includes('loop_depth') ||
+        params.payloadSnippet.includes('parent_session') ||
+        params.payloadSnippet.includes('execute_reflection') ||
+        params.payloadSnippet.includes('eval_buffer') ||
+        params.payloadSnippet.includes('append_buffer')
+      ) {
         factors.behaviorAnomaly += 40;
         factors.policyViolations += 25;
         rationale.push('Runaway recursive delegation loop anomaly detected');
@@ -333,7 +347,7 @@ export class SecurityIntelligenceEngine {
       toolName: params.toolName,
       actionType: 'simulation',
       payloadSnippet: serializedArgs,
-      destinationHost: params.args.url || params.args.host,
+      destinationHost: params.args.url || params.args.host || params.args.endpoint || params.args.destination || params.args.uri || params.args.target,
     });
 
     const triggeredRules: string[] = [];

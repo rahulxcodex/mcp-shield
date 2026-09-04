@@ -201,7 +201,7 @@ MCP-Shield is built for ultra-low latency, zero LLM hot-path overhead, and empir
 - **Hot-Path Interception Overhead**: `~ 150 µs` (p50 median) — adds `< 0.04%` latency to LLM tool calls
 - **AST Parser Throughput**: `> 7,500 ops/sec` (< 130 µs per command)
 - **Token Efficiency**: `0%` added tokens for benign output; `-24.2%` prompt token compression on credentials via DLP; `-67.3%` context savings by blocking runaway error stack traces
-- **DLP Sanitizer Coverage**: `100%` baseline coverage on internal synthetic test corpus (1,780 lines; independent held-out benchmarks pending)
+- **DLP Sanitizer Coverage**: 100% recall on an internally labeled 1,780-line benchmark; external held-out evaluation pending
 - **DLP Scanner Speed**: `> 115,000 lines/sec` with pre-allocated entropy frequency buffers
 - **Rate Limiting & Policy Evaluation**: `< 5 µs` (> 200,000 ops/sec)
 
@@ -214,7 +214,7 @@ See [BENCHMARKS.md](BENCHMARKS.md) for reproducible benchmark runs, methodology 
 Security tools must be validated against hostile, adversarial pressure rather than self-authored benchmarks alone:
 
 - 🛡️ **Independent Security Audit**: Read our full external assessment in [SECURITY_AUDIT.md](SECURITY_AUDIT.md).
-- 📋 **Documented CVEs & Real Bypasses**: Review full writeups, root cause analyses, and verified regression patches in [SECURITY.md](SECURITY.md) (`CVE-2026-SHIELD-001`, `CVE-2026-SHIELD-002`, `CVE-2026-SHIELD-003`).
+- 📋 **Documented Security Advisories & Verified Bypasses**: Review full writeups, root cause analyses, and verified regression patches in [SECURITY.md](SECURITY.md) (`ADV-2026-001`, `ADV-2026-002`, `ADV-2026-003`).
 - 🎯 **Public Bypass Challenge**: We publish all validated bypass reports. Submit new bypass PoCs via the [Bypass Challenge Template](.github/ISSUE_TEMPLATE/security_bypass.yml).
 - ⚠️ **Zero-Telemetry False Positive Reporting**: Report benign collisions via the [False Positive Template](.github/ISSUE_TEMPLATE/false_positive.yml).
 

@@ -1,6 +1,8 @@
 import { SecuritySession } from '../session';
 import { CanaryManager } from '../../security/canary';
 import { ProtocolValidator, ProtocolValidationResult } from '../protocol-validator';
+import { ResponseSecurityPipeline } from '../../security/response/response-security-pipeline';
+import { McpSurfaceInspector } from '../../security/protocol/mcp-surface-inspector';
 
 export interface ProcessOutboundResult {
   allowed: boolean;
@@ -13,11 +15,18 @@ export interface ProcessOutboundResult {
 
 export class OutputGuard {
   private validator = new ProtocolValidator();
+  private responsePipeline: ResponseSecurityPipeline;
+  private surfaceInspector: McpSurfaceInspector;
 
   constructor(
     private session: SecuritySession,
-    private canaryManager: CanaryManager
-  ) {}
+    private canaryManager: CanaryManager,
+    responsePipeline?: ResponseSecurityPipeline,
+    surfaceInspector?: McpSurfaceInspector
+  ) {
+    this.responsePipeline = responsePipeline || new ResponseSecurityPipeline();
+    this.surfaceInspector = surfaceInspector || new McpSurfaceInspector();
+  }
 
   public processOutboundMessage(
     rawBuffer: Buffer,
@@ -80,6 +89,96 @@ export class OutputGuard {
       }
     }
 
+    // 2.1 Surface Security Inspection (initialize instructions, resources/list, resources/read, prompts/list, prompts/get)
+    if (message.result) {
+      if (typeof message.result.instructions === 'string') {
+        const instrRes = this.surfaceInspector.inspectServerInstructions(message.result.instructions);
+        if (!instrRes.isSafe) {
+          onLog({
+            type: 'surface_violation_blocked',
+            surface: 'server/instructions',
+            findings: instrRes.findings
+          });
+          return {
+            allowed: false,
+            id: message.id,
+            errorCode: -32603,
+            errorMessage: `SURFACE_SECURITY_BLOCKED: ${instrRes.findings[0]?.explanation || 'Dangerous instruction in server capabilities'}`
+          };
+        }
+      }
+
+      if (Array.isArray(message.result.resources)) {
+        const resListEval = this.surfaceInspector.inspectResourcesList(message.result.resources);
+        if (!resListEval.isSafe) {
+          onLog({
+            type: 'surface_violation_blocked',
+            surface: 'resources/list',
+            findings: resListEval.findings
+          });
+          return {
+            allowed: false,
+            id: message.id,
+            errorCode: -32603,
+            errorMessage: `SURFACE_SECURITY_BLOCKED: ${resListEval.findings[0]?.explanation || 'Malicious resource definition in resources/list'}`
+          };
+        }
+      }
+
+      if (Array.isArray(message.result.contents)) {
+        const uri = message.result.uri || (typeof message.id === 'string' ? message.id : 'unknown');
+        const contentEval = this.surfaceInspector.inspectResourceReadResponse(uri, message.result.contents);
+        if (!contentEval.isSafe) {
+          onLog({
+            type: 'surface_violation_blocked',
+            surface: 'resources/read',
+            findings: contentEval.findings
+          });
+          return {
+            allowed: false,
+            id: message.id,
+            errorCode: -32603,
+            errorMessage: `SURFACE_SECURITY_BLOCKED: ${contentEval.findings[0]?.explanation || 'Poisoned content in resources/read'}`
+          };
+        }
+      }
+
+      if (Array.isArray(message.result.prompts)) {
+        const promptListEval = this.surfaceInspector.inspectPromptsList(message.result.prompts);
+        if (!promptListEval.isSafe) {
+          onLog({
+            type: 'surface_violation_blocked',
+            surface: 'prompts/list',
+            findings: promptListEval.findings
+          });
+          return {
+            allowed: false,
+            id: message.id,
+            errorCode: -32603,
+            errorMessage: `SURFACE_SECURITY_BLOCKED: ${promptListEval.findings[0]?.explanation || 'Dangerous prompt in prompts/list'}`
+          };
+        }
+      }
+
+      if (Array.isArray(message.result.messages)) {
+        const promptName = message.result.name || (typeof message.id === 'string' ? message.id : 'prompt');
+        const promptGetEval = this.surfaceInspector.inspectPromptGetResponse(promptName, message.result);
+        if (!promptGetEval.isSafe) {
+          onLog({
+            type: 'surface_violation_blocked',
+            surface: 'prompts/get',
+            findings: promptGetEval.findings
+          });
+          return {
+            allowed: false,
+            id: message.id,
+            errorCode: -32603,
+            errorMessage: `SURFACE_SECURITY_BLOCKED: ${promptGetEval.findings[0]?.explanation || 'Dangerous prompt template in prompts/get'}`
+          };
+        }
+      }
+    }
+
     // 3. Whole-envelope DLP sanitization without redundant re-serialization cycles
     if (message.result) {
       this.sanitizeInPlace(message.result);
@@ -89,6 +188,25 @@ export class OutputGuard {
     }
     if (message.params) {
       this.sanitizeInPlace(message.params);
+    }
+
+    // 4. Response-Side Semantic Inspection (Indirect prompt injection, malicious URLs, steganography)
+    if (message.result && !message.result.tools) {
+      const respEval = this.responsePipeline.evaluateResponse('tool_output', message.result);
+      if (respEval.action === 'BLOCK') {
+        onLog({
+          type: 'response_poisoning_blocked',
+          reason: respEval.findings.map(f => f.explanation).join('; '),
+          findings: respEval.findings,
+        });
+
+        return {
+          allowed: false,
+          id: message.id,
+          errorCode: -32603,
+          errorMessage: `RESPONSE_POISONING_BLOCKED: ${respEval.findings[0]?.explanation || 'Dangerous instruction or payload in tool response'}`
+        };
+      }
     }
 
     if (message.method === 'notifications/tools/list_changed') {

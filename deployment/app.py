@@ -41,6 +41,19 @@ FEATURE_NAMES = model_bundle.get("feature_names", []) if model_bundle else [
     'prov_previous_violations'
 ]
 
+try:
+    import spaces
+except Exception:
+    class spaces:
+        @staticmethod
+        def GPU(func=None, **kwargs):
+            if func is not None:
+                return func
+            def decorator(f):
+                return f
+            return decorator
+
+@spaces.GPU
 def analyze_risk(
     tool_name,
     shell_metachars,
