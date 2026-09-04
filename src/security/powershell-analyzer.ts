@@ -191,7 +191,7 @@ export class PowerShellASTAnalyzer {
   }
 
   private extractEncodedCommand(command: string): string | null {
-    const regex = /(?:^|\s)(?:-encodedcommand|-enc|-ec|-e|-encoded)\s+([A-Za-z0-9+/=]{4,})/i;
+    const regex = /(?:^|\s)(?:-encodedcommand|-enc|-ec|-e|-encoded)(?:\s+|:)\s*["']?([A-Za-z0-9+/=]{4,})["']?/i;
     const match = regex.exec(command);
     return match ? match[1] : null;
   }

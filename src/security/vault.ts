@@ -148,15 +148,25 @@ export class SecretVault {
     }
 
     // Granular context-bound verification: enforce scope, server, session, and tool binding
-    if (entry.context && expectedContext) {
-      if (entry.context.sessionId && expectedContext.sessionId && entry.context.sessionId !== expectedContext.sessionId) {
-        return null;
-      }
-      if (entry.context.serverIdentity && expectedContext.serverIdentity && entry.context.serverIdentity !== expectedContext.serverIdentity) {
-        return null;
-      }
-      if (entry.context.scope && expectedContext.scope && entry.context.scope !== expectedContext.scope) {
-        return null;
+    if (entry.context) {
+      const hasConstraints = !!(entry.context.sessionId || entry.context.serverIdentity || entry.context.scope);
+      if (hasConstraints) {
+        if (!expectedContext) {
+          return null;
+        }
+        if (expectedContext.sessionId && entry.context.sessionId && entry.context.sessionId !== expectedContext.sessionId) {
+          return null;
+        }
+        if (expectedContext.serverIdentity && entry.context.serverIdentity && entry.context.serverIdentity !== expectedContext.serverIdentity) {
+          return null;
+        }
+        if (expectedContext.scope && entry.context.scope && entry.context.scope !== expectedContext.scope) {
+          return null;
+        }
+        // If entry is scope-bound, expectedContext must provide matching scope or serverIdentity
+        if (entry.context.scope && !expectedContext.scope && !expectedContext.serverIdentity) {
+          return null;
+        }
       }
     }
 

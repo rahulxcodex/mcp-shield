@@ -43,7 +43,7 @@ export const ShieldConfigSchema = z.object({
   }),
   egress: z.object({
     enabled: z.boolean(),
-    allowMode: z.enum(['allow', 'deny']).default('allow'),
+    allowMode: z.enum(['allow', 'deny']).default('deny'),
     allowedDomains: z.array(z.string()).optional(),
     blockedDomains: z.array(z.string()).optional(),
     allowPrivateNetworks: z.boolean().default(false),
@@ -136,6 +136,11 @@ export class PolicyEngine {
         ],
         audit: { enabled: true, logDir: ".mcp-shield/logs", tamperEvidentHashing: true }
       };
+    }
+
+    // STRICT INVARIANT: In enforce mode, eliminate bypass to guarantee fail-closed security invariants
+    if (this.config.mode === 'enforce' && this.config.onError === 'bypass') {
+      this.config.onError = 'block';
     }
 
     this.compileRules();

@@ -49,6 +49,17 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
 
       const licenseData = JSON.parse(payload);
       
+      // Strict validation of payload structure and expiration timestamp
+      if (
+        !licenseData ||
+        typeof licenseData !== 'object' ||
+        typeof licenseData.expiresAt !== 'number' ||
+        !Number.isFinite(licenseData.expiresAt) ||
+        licenseData.expiresAt <= 0
+      ) {
+        throw new Error('License validation failed: Missing, invalid, or non-finite expiration timestamp.');
+      }
+
       // Check Trial / Expiry
       if (Date.now() > licenseData.expiresAt) {
         throw new Error('Your MCP Shield trial/license has expired. Please purchase a new key.');

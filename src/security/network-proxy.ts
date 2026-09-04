@@ -162,17 +162,45 @@ export class NetworkEgressProxy {
       // Preserve original Host header for virtual hosting
       const headers: http.OutgoingHttpHeaders = { ...(req.headers as any), host: url.host };
 
+      // Socket-level pinning: agent forces socket connect strictly to pre-validated pinned IP
+      const socketAgent = new http.Agent({
+        keepAlive: false,
+        lookup: (_hostname, _options, callback) => {
+          callback(null, pinnedIp, net.isIPv6(pinnedIp) ? 6 : 4);
+        }
+      });
+
       const options: http.RequestOptions = {
         hostname: pinnedIp,
         host: targetHost,
         port: url.port || 80,
         path: url.pathname + url.search,
         method: req.method,
-        headers
+        headers,
+        agent: socketAgent
       };
 
-      const proxyReq = http.request(options, (proxyRes) => {
-        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+      const proxyReq = http.request(options, async (proxyRes) => {
+        const statusCode = proxyRes.statusCode || 200;
+
+        // Intercept 3xx redirect responses to prevent SSRF redirect-hopping (e.g. into cloud metadata)
+        if ([301, 302, 303, 307, 308].includes(statusCode) && proxyRes.headers.location) {
+          try {
+            const redirectUrl = new URL(proxyRes.headers.location, url);
+            const redirectPinnedIp = await this.isAllowed(redirectUrl.hostname);
+            if (!redirectPinnedIp) {
+              res.writeHead(403);
+              res.end('Blocked by MCP-Shield Egress Policy: Unauthorized Redirect Target');
+              return;
+            }
+          } catch {
+            res.writeHead(400);
+            res.end('Malformed Redirect Location');
+            return;
+          }
+        }
+
+        res.writeHead(statusCode, proxyRes.headers);
         proxyRes.pipe(res, { end: true });
       });
 
@@ -208,8 +236,14 @@ export class NetworkEgressProxy {
       return;
     }
 
-    // Connect strictly to the pinned, verified resolved IP address
-    const serverSocket = net.connect({ host: pinnedIp, port: targetPort }, () => {
+    // Connect strictly to the pinned, verified resolved IP address at the socket layer
+    const serverSocket = net.connect({
+      host: pinnedIp,
+      port: targetPort,
+      lookup: (_hostname, _options, callback) => {
+        callback(null, pinnedIp, net.isIPv6(pinnedIp) ? 6 : 4);
+      }
+    }, () => {
       clientSocket.write('HTTP/1.1 200 Connection Established\r\n' +
                          'Proxy-agent: MCP-Shield\r\n\r\n');
       if (head && head.length > 0) {

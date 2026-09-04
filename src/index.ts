@@ -18,8 +18,17 @@ import * as os from 'os';
 
 export * from './core/proxy';
 export * from './core/mcp-protocol-state-machine';
+export { ProtocolValidator, ProtocolValidatorConfig } from './core/protocol-validator';
 export * from './core/ai-runtime-security';
+export * from './core/broker/execution-broker';
+export * from './core/guards/ingress-guard';
+export * from './core/guards/tool-guard';
+export * from './core/guards/output-guard';
+export * from './core/lifecycle/lifecycle-manager';
 export * from './security/policy-engine';
+export * from './security/capability-manifest';
+export * from './security/unicode-normalizer';
+export * from './security/multi-interpreter-analyzer';
 export * from './security/sanitizer';
 export * from './security/rate-limiter';
 export * from './security/canary';

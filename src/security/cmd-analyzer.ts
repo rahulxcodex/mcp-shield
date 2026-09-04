@@ -54,35 +54,38 @@ export class CmdAnalyzer {
       return { isSafe: false, reason: 'cmd.exe command size exceeds 64KB safety limit' };
     }
 
-    // 1. Check for delayed expansion variables e.g. !CMD!, !PAYLOAD!, !AWS_SECRET_ACCESS_KEY!
-    if (/![a-zA-Z0-9_]+!/.test(command)) {
-      const matches = command.match(/!([a-zA-Z0-9_]+)!/g);
-      if (matches) {
-        for (const rawMatch of matches) {
-          const varName = rawMatch.replace(/!/g, '').toLowerCase();
-          if (this.SENSITIVE_ENV_VARS.has(varName) || varName.includes('secret') || varName.includes('token') || varName.includes('key')) {
-            return { isSafe: false, reason: `Direct access to sensitive delayed expansion variable "${rawMatch}" is blocked` };
-          }
-          return { isSafe: false, reason: `cmd.exe delayed expansion variable execution "${rawMatch}" is blocked` };
-        }
-      }
-    }
-
-    // 2. Check for %VAR% environment variables
-    const envVarMatches = command.match(/%([a-zA-Z0-9_]+)%/g);
-    if (envVarMatches) {
-      for (const rawEnv of envVarMatches) {
-        const envName = rawEnv.replace(/%/g, '').toLowerCase();
-        if (this.SENSITIVE_ENV_VARS.has(envName) || envName.includes('secret') || envName.includes('token') || envName.includes('key')) {
-          return { isSafe: false, reason: `Direct access to sensitive environment variable "${rawEnv}" is blocked` };
-        }
-      }
-    }
-
-    // 3. De-obfuscate carets (^) and quotes
+    // 1. De-obfuscate carets (^) and quotes first to defeat caret-insertion evasions
     const deobfuscated = this.deobfuscateCarets(command);
 
-    // 4. Split by compound operators: &, &&, ||, |, while respecting quotes and parentheses
+    // 2. Check for delayed expansion variables e.g. !CMD!, !PAYLOAD!, !AWS_SECRET_ACCESS_KEY!
+    const targetCommandsForEnv = [command, deobfuscated];
+    for (const targetCmd of targetCommandsForEnv) {
+      if (/![a-zA-Z0-9_]+!/.test(targetCmd)) {
+        const matches = targetCmd.match(/!([a-zA-Z0-9_]+)!/g);
+        if (matches) {
+          for (const rawMatch of matches) {
+            const varName = rawMatch.replace(/!/g, '').toLowerCase();
+            if (this.SENSITIVE_ENV_VARS.has(varName) || varName.includes('secret') || varName.includes('token') || varName.includes('key')) {
+              return { isSafe: false, reason: `Direct access to sensitive delayed expansion variable "${rawMatch}" is blocked` };
+            }
+            return { isSafe: false, reason: `cmd.exe delayed expansion variable execution "${rawMatch}" is blocked` };
+          }
+        }
+      }
+
+      // Check for %VAR% environment variables
+      const envVarMatches = targetCmd.match(/%([a-zA-Z0-9_]+)%/g);
+      if (envVarMatches) {
+        for (const rawEnv of envVarMatches) {
+          const envName = rawEnv.replace(/%/g, '').toLowerCase();
+          if (this.SENSITIVE_ENV_VARS.has(envName) || envName.includes('secret') || envName.includes('token') || envName.includes('key')) {
+            return { isSafe: false, reason: `Direct access to sensitive environment variable "${rawEnv}" is blocked` };
+          }
+        }
+      }
+    }
+
+    // 3. Split by compound operators: &, &&, ||, |, while respecting quotes and parentheses
     const subCommands = this.splitCompoundCommands(deobfuscated);
 
     for (const subCmd of subCommands) {
