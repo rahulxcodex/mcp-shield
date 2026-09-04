@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { 
@@ -12,11 +12,15 @@ import {
   AlertCircle, 
   Clock, 
   X,
-  FileText
+  FileText,
+  Gift,
+  Sparkles
 } from "lucide-react";
+import { PLANS, FEATURE_FLAGS } from "@/config/plans";
 
 export default function BillingPage() {
   const [providerTab, setProviderTab] = useState<"stripe" | "razorpay">("stripe");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
   const [enterpriseSeats, setEnterpriseSeats] = useState<number>(25);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [isRazorpayLoading, setIsRazorpayLoading] = useState(false);
@@ -25,29 +29,20 @@ export default function BillingPage() {
   const [canceled, setCanceled] = useState(false);
 
   const currentPlan = {
-    tier: "Enterprise Multi-Seat Fleet",
-    status: canceled ? "Canceled (Active until end of period)" : "Active",
-    seatsTotal: 25,
-    seatsUsed: 14,
-    renewalDate: "October 3, 2026",
-    billingCycle: "Monthly",
-    amount: "499 USD / month",
-    sla: "99.9% Target Operational SLA"
+    tier: FEATURE_FLAGS.FREE_ACCESS_LIMITED_PERIOD 
+      ? "Introductory Free Access (Limited Period)" 
+      : PLANS.starter.name,
+    status: "Active (Complimentary Access)",
+    seatsTotal: 1, // 1 active key with access per account
+    seatsUsed: 1,
+    renewalDate: "Complimentary Limited Period",
+    billingCycle: "Annual / Monthly",
+    amount: "0 USD (Free Tier Active)",
+    basePrice: "Starting at 1 USD / month or 10 USD / year",
+    sla: "Zero-Trust AST & Bijective DLP Active"
   };
 
-  const enterpriseSeatPricing: Record<number, { usd: string; inr: string; label: string }> = {
-    25: { usd: "499 USD / mo", inr: "39,900 INR / mo", label: "25 Seats" },
-    50: { usd: "899 USD / mo", inr: "69,900 INR / mo", label: "50 Seats" },
-    100: { usd: "1,499 USD / mo", inr: "119,900 INR / mo", label: "100 Seats" },
-    500: { usd: "4,999 USD / mo", inr: "399,900 INR / mo", label: "500 Seats" },
-    1000: { usd: "8,999 USD / mo", inr: "699,900 INR / mo", label: "1,000 Seats" },
-  };
-
-  const invoiceHistory = [
-    { id: "INV-2026-009", date: "Sep 3, 2026", amount: "499.00 USD", status: "PAID", receiptUrl: "#" },
-    { id: "INV-2026-008", date: "Aug 3, 2026", amount: "499.00 USD", status: "PAID", receiptUrl: "#" },
-    { id: "INV-2026-007", date: "Jul 3, 2026", amount: "29.00 USD", status: "PAID", receiptUrl: "#" },
-  ];
+  const invoiceHistory: { id: string; date: string; amount: string; status: string; receiptUrl: string }[] = [];
 
   const handleRazorpayUpgrade = async (plan: "pro" | "enterprise" = "pro") => {
     setIsRazorpayLoading(true);
@@ -237,122 +232,123 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Payment Provider Selector */}
+      {/* Plans & Rollout Status Card */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 space-y-6">
-        <div>
-          <h2 className="text-sm font-semibold text-white mb-1">Choose Payment Region & Gateway</h2>
-          <p className="text-xs text-slate-400">
-            Select your preferred billing currency. All plans feature instant prorated upgrades.
-          </p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-sm font-semibold text-white">Subscription & Plan Architecture</h2>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> Limited-Period Free Access Active
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              During this rollout phase, all zero-trust protection features are provided free of charge. No payment gateway checkout is required.
+            </p>
+          </div>
         </div>
 
-        <div className="flex gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 max-w-sm">
-          <button
-            onClick={() => setProviderTab("stripe")}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              providerTab === "stripe"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Stripe (Global USD)
-          </button>
-          <button
-            onClick={() => setProviderTab("razorpay")}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              providerTab === "razorpay"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Razorpay (India INR / UPI)
-          </button>
-        </div>
-
-        {/* Plan Cards */}
+        {/* Plan Tiers Preview */}
         <div className="grid md:grid-cols-2 gap-4">
-          {/* Pro Plan */}
+          {/* Starter Plan */}
+          <div className="p-5 rounded-2xl bg-slate-950/70 border border-emerald-500/30 flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 right-0 bg-emerald-600 text-black text-[9px] font-bold px-3 py-1 rounded-bl-lg uppercase tracking-wider">
+              Single Key Access
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Starter Plan</span>
+                <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
+                  Active (0 USD Free Rollout)
+                </span>
+              </div>
+              <div className="text-2xl font-bold text-white mb-1">
+                1 USD <span className="text-xs font-normal text-slate-400">/ month</span>
+                <span className="text-xs font-semibold text-emerald-400 ml-2 font-mono">(or 10 USD / year)</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-4">
+                Starting plan for individual developers and production MCP agents.
+              </p>
+              <ul className="space-y-2 text-xs text-slate-300 mb-6">
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> 1 dedicated key with access per account</li>
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> Single-use key enforced (used keys cannot be reused)</li>
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> Tree-sitter AST Firewall (&lt;0.18ms latency)</li>
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> Bijective FPE DLP & Tokenization</li>
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-emerald-400" /> Referral link: give friends 1 month free access</li>
+              </ul>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-xs font-medium text-emerald-400 flex items-center justify-center gap-1.5">
+                <ShieldCheck className="w-4 h-4" /> Unlocked Under Free Rollout
+              </span>
+            </div>
+          </div>
+
+          {/* Enterprise Fleet Plan */}
           <div className="p-5 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Developer Pro</span>
+                <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Enterprise Fleet</span>
                 <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-semibold">
-                  Individual
+                  Multi-Seat Single Key
                 </span>
               </div>
-              <div className="text-2xl font-bold text-white mb-2">
-                {providerTab === "stripe" ? "29 USD" : "2,490 INR"}
-                <span className="text-xs font-normal text-slate-400"> / month</span>
+              <div className="text-2xl font-bold text-white mb-1">
+                Custom Fleet
               </div>
+              <p className="text-[11px] text-slate-400 mb-4">
+                Single cryptographic key bounded across enterprise fleet teams.
+              </p>
               <ul className="space-y-2 text-xs text-slate-300 mb-6">
-                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> Unlimited AST shell analysis</li>
-                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> FPE Bijective secret masking</li>
-                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> 30-Day audit log retention</li>
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> Single Key fleet deployment (25 to 1,000 Seats)</li>
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> Private enterprise threat intelligence sync</li>
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> Multi-turn behavioral kill-chain defense</li>
+                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> Custom AST rules & priority support</li>
               </ul>
             </div>
 
-            <button
-              onClick={() => providerTab === "stripe" ? handleStripeCheckout("pro") : handleRazorpayUpgrade("pro")}
-              disabled={isUpgrading || isRazorpayLoading}
-              className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-colors"
-            >
-              Downgrade to Pro
-            </button>
-          </div>
-
-          {/* Enterprise Multi-Seat Plan */}
-          <div className="p-5 rounded-2xl bg-gradient-to-b from-blue-950/40 to-slate-950 border border-blue-500/30 flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-bold px-3 py-1 rounded-bl-lg uppercase tracking-wider">
-              Fleet Single-Key
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center">
+              <span className="text-xs font-medium text-slate-400">
+                Contact Enterprise Sales for Custom Multi-Seat Deployment
+              </span>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-blue-300 uppercase tracking-wider">Enterprise Fleet</span>
-              </div>
-              <div className="text-2xl font-bold text-white mb-2">
-                {providerTab === "stripe" 
-                  ? enterpriseSeatPricing[enterpriseSeats].usd 
-                  : enterpriseSeatPricing[enterpriseSeats].inr}
-              </div>
-
-              {/* Seat Selector */}
-              <div className="my-3">
-                <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">
-                  Fleet Seat Tier
-                </label>
-                <div className="grid grid-cols-5 gap-1">
-                  {[25, 50, 100, 500, 1000].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setEnterpriseSeats(s)}
-                      className={`py-1 rounded text-xs font-medium border transition-colors ${
-                        enterpriseSeats === s
-                          ? "bg-blue-600 text-white border-blue-500"
-                          : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                      }`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <ul className="space-y-2 text-xs text-slate-300 mb-6">
-                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> Single cryptographic key for {enterpriseSeats} devs</li>
-                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> Automated seat revocation and key rotation</li>
-                <li className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-blue-400" /> 1-Year audit retention & SOC 2 evidence export</li>
-              </ul>
-            </div>
-
-            <button
-              onClick={() => providerTab === "stripe" ? handleStripeCheckout("enterprise") : handleRazorpayUpgrade("enterprise")}
-              disabled={isUpgrading || isRazorpayLoading}
-              className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all"
-            >
-              {providerTab === "stripe" ? "Update Fleet with Stripe" : "Update Fleet with Razorpay"}
-            </button>
           </div>
         </div>
+
+        {/* Hidden Payment Gateway Section (Only shown when SHOW_PAYMENT_GATEWAYS is enabled) */}
+        {FEATURE_FLAGS.SHOW_PAYMENT_GATEWAYS && (
+          <div className="pt-6 border-t border-slate-800 space-y-4">
+            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Payment Gateway Checkout</h3>
+            <div className="flex gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 max-w-sm">
+              <button
+                onClick={() => setProviderTab("stripe")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  providerTab === "stripe" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Stripe (Global USD)
+              </button>
+              <button
+                onClick={() => setProviderTab("razorpay")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  providerTab === "razorpay" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Razorpay (India INR)
+              </button>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => providerTab === "stripe" ? handleStripeCheckout("pro") : handleRazorpayUpgrade("pro")}
+                disabled={isUpgrading || isRazorpayLoading}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-black text-xs font-bold rounded-xl"
+              >
+                Purchase Starter Plan
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Invoice History */}
@@ -366,30 +362,40 @@ export default function BillingPage() {
         </p>
 
         <div className="divide-y divide-slate-800 border-t border-b border-slate-800">
-          {invoiceHistory.map((inv) => (
-            <div key={inv.id} className="py-3 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-3">
-                <FileText className="w-4 h-4 text-slate-500" />
-                <div>
-                  <div className="font-mono font-medium text-slate-200">{inv.id}</div>
-                  <div className="text-[11px] text-slate-500">{inv.date}</div>
+          {invoiceHistory.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 space-y-1">
+              <FileText className="w-6 h-6 mx-auto text-slate-600 mb-2" />
+              <p className="text-xs font-medium text-slate-400">No Invoices Recorded</p>
+              <p className="text-[11px] text-slate-500">
+                You have not made any payments. All features are currently active under complimentary Introductory Free Access (0 USD).
+              </p>
+            </div>
+          ) : (
+            invoiceHistory.map((inv) => (
+              <div key={inv.id} className="py-3 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <div className="font-mono font-medium text-slate-200">{inv.id}</div>
+                    <div className="text-[11px] text-slate-500">{inv.date}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <span className="font-mono text-slate-200">{inv.amount}</span>
+                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold">
+                    {inv.status}
+                  </span>
+                  <button
+                    onClick={() => alert(`Downloading ${inv.id} receipt PDF...`)}
+                    className="p-1 rounded text-slate-400 hover:text-white"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-4">
-                <span className="font-mono text-slate-200">{inv.amount}</span>
-                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-bold">
-                  {inv.status}
-                </span>
-                <button
-                  onClick={() => alert(`Downloading ${inv.id} receipt PDF...`)}
-                  className="p-1 rounded text-slate-400 hover:text-white"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

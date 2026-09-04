@@ -108,50 +108,9 @@ export async function GET(req: Request) {
     console.error('[TELEMETRY_EVENTS] Route error:', err);
   }
 
-  // Graceful fallback ONLY for explicitly unauthenticated public demo/sandbox
+  // Return genuine empty events array (never fake demo attacks)
   return NextResponse.json({
-    events: [
-      {
-        id: 'evt-101',
-        timestamp: 'Just now',
-        eventType: 'BLOCK',
-        toolName: 'execute_command',
-        detector: 'Tree-sitter AST',
-        riskLevel: 'CRITICAL',
-        reason: 'Root destruction command rm -rf / detected in binary_expression',
-        rawTimestamp: new Date().toISOString()
-      },
-      {
-        id: 'evt-102',
-        timestamp: '2m ago',
-        eventType: 'SANITIZE',
-        toolName: 'read_env_file',
-        detector: 'Bijective FPE DLP',
-        riskLevel: 'HIGH',
-        reason: 'Tokenized AWS_SECRET_ACCESS_KEY (wJalrXUt...) with surrogate token',
-        rawTimestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString()
-      },
-      {
-        id: 'evt-103',
-        timestamp: '5m ago',
-        eventType: 'BLOCK',
-        toolName: 'fetch_http',
-        detector: 'SSRF / Cloud Metadata',
-        riskLevel: 'CRITICAL',
-        reason: 'Egress blocked to AWS IMDS 169.254.169.254/latest/meta-data',
-        rawTimestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString()
-      },
-      {
-        id: 'evt-104',
-        timestamp: '12m ago',
-        eventType: 'QUARANTINE',
-        toolName: 'sql_query',
-        detector: 'Canary Honeytoken',
-        riskLevel: 'CRITICAL',
-        reason: 'Agent context accessed decoy honeytoken mcp_honey_decoy_k8s_9921',
-        rawTimestamp: new Date(Date.now() - 12 * 60 * 1000).toISOString()
-      }
-    ],
+    events: [],
     live: false
   });
 }

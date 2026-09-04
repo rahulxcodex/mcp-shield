@@ -1,5 +1,7 @@
 import * as crypto from 'crypto';
 import { ToolCapabilities } from './capabilities';
+import { hashCanonicalJson } from './canonical-json';
+import { PathSecurityResolver } from './path-resolver';
 
 export interface ToolCapabilityManifest {
   toolName: string;
@@ -51,12 +53,7 @@ export class CapabilityManifestRegistry {
   }
 
   public static computeSchemaFingerprint(schema: any): string {
-    try {
-      const canonical = JSON.stringify(schema, Object.keys(schema || {}).sort());
-      return crypto.createHash('sha256').update(canonical).digest('hex');
-    } catch {
-      return crypto.createHash('sha256').update(String(schema)).digest('hex');
-    }
+    return hashCanonicalJson(schema);
   }
 
   public registerManifest(manifest: ToolCapabilityManifest): void {
@@ -200,13 +197,11 @@ export class CapabilityManifestRegistry {
     if (manifest.allowedPaths && manifest.allowedPaths.length > 0) {
       const targetPath = args.path || args.file || args.filename || args.targetPath || args.destination;
       if (typeof targetPath === 'string') {
-        const normalized = targetPath.replace(/\\/g, '/').toLowerCase();
+        const canonicalTarget = PathSecurityResolver.normalize(targetPath);
         const matchesAllowed = manifest.allowedPaths.some(pattern => {
-          const normPattern = pattern.replace(/\\/g, '/').toLowerCase();
-          if (normPattern.endsWith('/*')) {
-            return normalized.startsWith(normPattern.slice(0, -2));
-          }
-          return normalized === normPattern || normalized.startsWith(normPattern + '/');
+          const cleanPattern = pattern.replace(/\/\*+$/, '');
+          const canonicalPattern = PathSecurityResolver.normalize(cleanPattern);
+          return PathSecurityResolver.isWithin(canonicalTarget, canonicalPattern);
         });
 
         if (!matchesAllowed) {

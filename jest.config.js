@@ -12,18 +12,34 @@ module.exports = {
   setupFiles: ["<rootDir>/tests/setup-tree-sitter.ts"],
   collectCoverageFrom: [
     "src/security/**/*.ts",
+    "src/core/protocol-validator.ts",
+    "src/core/pipeline/**/*.ts",
     "src/core/stream-framing.ts",
     "src/sandbox/**/*.ts",
-    "!src/security/capabilities.ts",
-    "!src/security/network-proxy.ts",
     "!src/**/*.d.ts"
   ],
   coverageReporters: ["text", "lcov", "json-summary"],
   coverageThreshold: {
     global: {
-      lines: 75,
+      lines: 80,
       functions: 75,
-      statements: 75
+      statements: 80
+    },
+    "./src/security/path-resolver.ts": {
+      lines: 95,
+      statements: 95
+    },
+    "./src/security/ip-utils.ts": {
+      lines: 95,
+      statements: 95
+    },
+    "./src/core/protocol-validator.ts": {
+      lines: 90,
+      statements: 90
+    },
+    "./src/security/policy-engine.ts": {
+      lines: 90,
+      statements: 90
     }
   },
   transform: {

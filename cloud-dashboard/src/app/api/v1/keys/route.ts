@@ -1,26 +1,100 @@
 import { NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 import { createClient } from '@/utils/supabase/server';
+import { supabase as adminSupabase } from '@/lib/supabase';
 import { generateApiKey, hashApiKey, validateApiKeyStructure, extractKeyPrefix } from '@/lib/api-keys';
 import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { sanitizeApiError } from '@/lib/errors';
+import { FEATURE_FLAGS } from '@/config/plans';
 
 export const runtime = 'nodejs';
+
+async function getOrCreateProject(supabaseUser: any, user: any): Promise<string | null> {
+  try {
+    const { data: orgs } = await adminSupabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+
+    const orgIds = (orgs || []).map((o: any) => o.organization_id);
+
+    if (orgIds.length > 0) {
+      const { data: projects } = await adminSupabase
+        .from('projects')
+        .select('id')
+        .in('organization_id', orgIds)
+        .limit(1);
+
+      if (projects && projects.length > 0) {
+        return projects[0].id;
+      }
+    }
+
+    // Auto-provision default organization and project if none exist
+    const emailPrefix = (user.email || 'developer').split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '');
+    const orgName = `${emailPrefix.toUpperCase()}'s Fleet`;
+    const orgSlug = `org-${user.id.slice(0, 8)}-${Date.now().toString(36)}`;
+
+    const { data: newOrg, error: orgErr } = await adminSupabase
+      .from('organizations')
+      .insert([{ name: orgName, slug: orgSlug }])
+      .select('id')
+      .single();
+
+    if (orgErr || !newOrg?.id) {
+      console.warn('[KEYS] Organization auto-provision note:', orgErr?.message);
+      return null;
+    }
+
+    await adminSupabase
+      .from('organization_members')
+      .insert([{ organization_id: newOrg.id, user_id: user.id, role: 'owner' }]);
+
+    const { data: newProj, error: projErr } = await adminSupabase
+      .from('projects')
+      .insert([{ organization_id: newOrg.id, name: 'Default MCP Fleet', slug: 'default' }])
+      .select('id')
+      .single();
+
+    if (projErr || !newProj?.id) {
+      console.warn('[KEYS] Project auto-provision note:', projErr?.message);
+      return null;
+    }
+
+    return newProj.id;
+  } catch (err) {
+    console.error('[KEYS] getOrCreateProject error:', err);
+    return null;
+  }
+}
+
+
+async function getAuthUser(req: Request, supabase: any) {
+  const authHeader = req.headers.get('authorization');
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : undefined;
+  if (bearerToken) {
+    const { data: { user } } = await adminSupabase.auth.getUser(bearerToken);
+    if (user) return user;
+  }
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
 
 export async function GET(req: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(req, supabase);
 
     if (user) {
       // Find projects owned by user's organization
-      const { data: orgs } = await supabase
+      const { data: orgs } = await adminSupabase
         .from('organization_members')
         .select('organization_id')
         .eq('user_id', user.id);
       
       const orgIds = (orgs || []).map((o: any) => o.organization_id);
       
-      const { data: projects } = await supabase
+      const { data: projects } = await adminSupabase
         .from('projects')
         .select('id')
         .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000']);
@@ -31,40 +105,31 @@ export async function GET(req: Request) {
         return NextResponse.json({ keys: [] });
       }
 
-      const { data: keys, error } = await supabase
+      const { data: keys, error } = await adminSupabase
         .from('api_keys')
-        .select('id, name, key_prefix, created_at, last_used_at, expires_at, status')
+        .select('id, name, key_prefix, created_at, last_used_at, expires_at')
         .in('project_id', projectIds)
         .order('created_at', { ascending: false });
 
-      if (!error) {
-        return NextResponse.json({ keys: keys || [] });
+      if (!error && keys) {
+        const mappedKeys = keys.map((k: any) => ({
+          ...k,
+          status: k.expires_at && new Date(k.expires_at).getTime() <= Date.now() ? 'revoked' : 'active'
+        }));
+        return NextResponse.json({ keys: mappedKeys });
       }
     }
   } catch (err: unknown) {
     console.warn('[KEYS_GET] Lookup notice:', err);
   }
 
-  // Only unauthenticated / offline demo fallback
-  return NextResponse.json({
-    keys: [
-      {
-        id: 'key-dev-101',
-        name: 'Production Proxy (Default Demo)',
-        key_prefix: 'mcp_live_default01',
-        created_at: new Date(Date.now() - 3600 * 1000 * 24 * 7).toISOString(),
-        last_used_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
-        expires_at: new Date(Date.now() + 3600 * 1000 * 24 * 90).toISOString(),
-        status: 'active'
-      }
-    ]
-  });
+  return NextResponse.json({ keys: [] });
 }
 
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(req, supabase);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -99,24 +164,49 @@ export async function POST(req: Request) {
     let keyId = generated.keyId;
 
     if (user) {
-      // Scope project binding to user's organization
-      const { data: orgs } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', user.id);
-      const orgIds = (orgs || []).map((o: any) => o.organization_id);
+      // Check if this hash was previously used or revoked (key non-reusability)
+      if (FEATURE_FLAGS.ENFORCE_KEY_NON_REUSABILITY) {
+        const { data: revokedCheck } = await adminSupabase
+          .from('api_keys')
+          .select('id, expires_at')
+          .eq('key_hash', generated.keyHash)
+          .maybeSingle();
 
-      const { data: project } = await supabase
-        .from('projects')
-        .select('id')
-        .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000'])
-        .limit(1)
-        .maybeSingle();
+        if (revokedCheck) {
+          const isRevoked = revokedCheck.expires_at && new Date(revokedCheck.expires_at).getTime() <= Date.now();
+          if (isRevoked) {
+            return NextResponse.json(
+              { error: 'This key has already been used or revoked. Used keys cannot be reused.' },
+              { status: 400 }
+            );
+          }
+        }
+      }
 
-      const projectId = project?.id || null;
+      // Ensure valid project id
+      const projectId = await getOrCreateProject(supabase, user);
+
+      // Enforce 1 active key per account rule: rotate previous active keys
+      if (FEATURE_FLAGS.ENFORCE_SINGLE_KEY_LIMIT && projectId) {
+        const { data: allProjectKeys } = await adminSupabase
+          .from('api_keys')
+          .select('id, expires_at')
+          .eq('project_id', projectId);
+
+        const activeIds = (allProjectKeys || [])
+          .filter((k: any) => !k.expires_at || new Date(k.expires_at).getTime() > Date.now())
+          .map((k: any) => k.id);
+
+        if (activeIds.length > 0) {
+          await adminSupabase
+            .from('api_keys')
+            .update({ expires_at: '1970-01-01T00:00:00.000Z' })
+            .in('id', activeIds);
+        }
+      }
 
       // Store SHA-256 hash in database - NEVER raw plaintext secret
-      let { data: inserted, error: insertErr } = await supabase
+      const { data: inserted, error: insertErr } = await adminSupabase
         .from('api_keys')
         .insert([{
           project_id: projectId,
@@ -124,35 +214,14 @@ export async function POST(req: Request) {
           key_prefix: generated.keyPrefix,
           key_hash: generated.keyHash, // Secure SHA-256 hash
           expires_at: generated.expiresAt,
-          status: 'active',
           created_at: generated.createdAt
         }])
         .select('id')
         .single();
 
-      // If status column is missing on older schema, retry insert without status column
-      if (insertErr && (insertErr.message?.includes('status') || insertErr.details?.includes('status'))) {
-        const retry = await supabase
-          .from('api_keys')
-          .insert([{
-            project_id: projectId,
-            name: displayName,
-            key_prefix: generated.keyPrefix,
-            key_hash: generated.keyHash,
-            expires_at: generated.expiresAt,
-            created_at: generated.createdAt
-          }])
-          .select('id')
-          .single();
-        inserted = retry.data;
-        insertErr = retry.error;
-      }
-
       if (insertErr) {
         console.error('[KEYS_POST] Insert error:', insertErr);
-        if (user) {
-          return NextResponse.json({ error: 'Failed to persist API key in database' }, { status: 500 });
-        }
+        return NextResponse.json({ error: 'Failed to persist API key in database' }, { status: 500 });
       } else if (inserted?.id) {
         keyId = inserted.id;
       }
@@ -182,7 +251,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(req, supabase);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -202,20 +271,20 @@ export async function PATCH(req: Request) {
     }
 
     // Check user's project ownership
-    const { data: orgs } = await supabase
+    const { data: orgs } = await adminSupabase
       .from('organization_members')
       .select('organization_id')
       .eq('user_id', user.id);
     const orgIds = (orgs || []).map((o: any) => o.organization_id);
 
-    const { data: projects } = await supabase
+    const { data: projects } = await adminSupabase
       .from('projects')
       .select('id')
       .in('organization_id', orgIds);
     const projectIds = (projects || []).map((p: any) => p.id);
 
     // Fetch existing key
-    let keyQuery = supabase
+    let keyQuery = adminSupabase
       .from('api_keys')
       .select('id, project_id, name')
       .in('project_id', projectIds);
@@ -228,9 +297,9 @@ export async function PATCH(req: Request) {
     }
 
     // 1. Mark existing key as revoked
-    await supabase
+    await adminSupabase
       .from('api_keys')
-      .update({ status: 'revoked' })
+      .update({ expires_at: '1970-01-01T00:00:00.000Z' })
       .eq('id', existingKey.id);
 
     // 2. Generate replacement key for the same project
@@ -239,7 +308,7 @@ export async function PATCH(req: Request) {
       expiresInDays: Number(expiresInDays) || 90,
     });
 
-    const { data: insertedNew } = await supabase
+    const { data: insertedNew } = await adminSupabase
       .from('api_keys')
       .insert([{
         project_id: existingKey.project_id,
@@ -247,7 +316,6 @@ export async function PATCH(req: Request) {
         key_prefix: newKeyInfo.keyPrefix,
         key_hash: newKeyInfo.keyHash,
         expires_at: newKeyInfo.expiresAt,
-        status: 'active',
         created_at: newKeyInfo.createdAt,
       }])
       .select('id')
@@ -280,7 +348,7 @@ export async function PATCH(req: Request) {
 export async function PUT(req: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(req, supabase);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -304,82 +372,132 @@ export async function PUT(req: Request) {
     }
 
     const trimmedKey = rawKey.trim();
-
-    // For mcp_live_* keys, extract prefix normally. For others, derive a prefix from hash.
-    const isMcpFormat = validateApiKeyStructure(trimmedKey);
-    const keyPrefix = isMcpFormat
-      ? extractKeyPrefix(trimmedKey)
-      : `ext_${hashApiKey(trimmedKey).substring(0, 12)}`;
-    const keyHash = hashApiKey(trimmedKey);
-    const displayName = name.trim();
-    const now = new Date().toISOString();
-
-    // Check for duplicate prefix
-    const { data: orgs } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id);
-    const orgIds = (orgs || []).map((o: any) => o.organization_id);
-
-    const { data: projects } = await supabase
-      .from('projects')
-      .select('id')
-      .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000']);
-    const projectIds = (projects || []).map((p: any) => p.id);
-
-    if (projectIds.length > 0) {
-      const { data: existing } = await supabase
-        .from('api_keys')
-        .select('id')
-        .eq('key_prefix', keyPrefix)
-        .in('project_id', projectIds)
-        .maybeSingle();
-
-      if (existing) {
-        return NextResponse.json({ error: 'A key with this prefix already exists in your project.' }, { status: 409 });
+    const envMasterKey = (process.env.MCP_SHIELD_MASTER_KEY || 'MASTER_RGX_SHIELD_9999_OMEGA_SECURE_KEY').trim();
+    let isMaster = false;
+    if (envMasterKey && trimmedKey.length === envMasterKey.length) {
+      try {
+        isMaster = crypto.timingSafeEqual(Buffer.from(trimmedKey), Buffer.from(envMasterKey));
+      } catch {
+        isMaster = false;
       }
     }
 
-    const projectId = projectIds[0] || null;
+    const keyHash = hashApiKey(trimmedKey);
+
+    // Enforce key non-reusability: once a key is revoked/used, it cannot be reused
+    if (FEATURE_FLAGS.ENFORCE_KEY_NON_REUSABILITY) {
+      const { data: existingRevoked } = await adminSupabase
+        .from('api_keys')
+        .select('id, expires_at')
+        .eq('key_hash', keyHash)
+        .maybeSingle();
+
+      if (existingRevoked) {
+        const isRevoked = existingRevoked.expires_at && new Date(existingRevoked.expires_at).getTime() <= Date.now();
+        if (isRevoked) {
+          return NextResponse.json(
+            { error: 'This key has already been used or revoked. Used keys cannot be reused.' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // For mcp_live_* keys, extract prefix normally. For others or master, derive prefix from hash.
+    const isMcpFormat = validateApiKeyStructure(trimmedKey);
+    const keyPrefix = isMaster
+      ? `mcp_master_${keyHash.substring(0, 8)}`
+      : isMcpFormat
+      ? extractKeyPrefix(trimmedKey)
+      : `ext_${keyHash.substring(0, 12)}`;
+
+    const displayName = isMaster ? `${name.trim()} (Master Admin)` : name.trim();
+    const now = new Date().toISOString();
+
+    const projectId = await getOrCreateProject(supabase, user);
+
+    if (projectId) {
+      // Check if this exact key is already active in this project
+      const { data: existingActive } = await adminSupabase
+        .from('api_keys')
+        .select('id, expires_at')
+        .eq('key_hash', keyHash)
+        .eq('project_id', projectId)
+        .maybeSingle();
+
+      if (existingActive) {
+        const isRevoked = existingActive.expires_at && new Date(existingActive.expires_at).getTime() <= Date.now();
+        if (isRevoked) {
+          return NextResponse.json(
+            { error: 'This key has already been used or revoked. Used keys cannot be reused.' },
+            { status: 400 }
+          );
+        }
+
+        const res = NextResponse.json({
+          success: true,
+          isMaster,
+          message: isMaster ? 'Master Key accepted and active.' : 'Key already imported and active.',
+          key: {
+            id: existingActive.id,
+            name: displayName,
+            keyPrefix,
+            status: 'active'
+          }
+        });
+        if (isMaster) {
+          res.cookies.set('mcp_master_elevated', 'true', {
+            path: '/',
+            maxAge: 30 * 24 * 60 * 60,
+            sameSite: 'lax',
+            httpOnly: false
+          });
+        }
+        return res;
+      }
+
+      // Enforce 1 active key per account rule: rotate previous active keys
+      if (FEATURE_FLAGS.ENFORCE_SINGLE_KEY_LIMIT) {
+        const { data: allProjectKeys } = await adminSupabase
+          .from('api_keys')
+          .select('id, expires_at')
+          .eq('project_id', projectId);
+
+        const activeIds = (allProjectKeys || [])
+          .filter((k: any) => !k.expires_at || new Date(k.expires_at).getTime() > Date.now())
+          .map((k: any) => k.id);
+
+        if (activeIds.length > 0) {
+          await adminSupabase
+            .from('api_keys')
+            .update({ expires_at: '1970-01-01T00:00:00.000Z' })
+            .in('id', activeIds);
+        }
+      }
+    }
 
     // Store SHA-256 hash — never the raw key
-    let { data: inserted, error: insertErr } = await supabase
+    const { data: inserted, error: insertErr } = await adminSupabase
       .from('api_keys')
       .insert([{
         project_id: projectId,
         name: displayName,
         key_prefix: keyPrefix,
         key_hash: keyHash,
-        status: 'active',
         created_at: now
       }])
       .select('id')
       .single();
 
-    // Retry without status column for older schemas
-    if (insertErr && (insertErr.message?.includes('status') || insertErr.details?.includes('status'))) {
-      const retry = await supabase
-        .from('api_keys')
-        .insert([{
-          project_id: projectId,
-          name: displayName,
-          key_prefix: keyPrefix,
-          key_hash: keyHash,
-          created_at: now
-        }])
-        .select('id')
-        .single();
-      inserted = retry.data;
-      insertErr = retry.error;
-    }
-
     if (insertErr) {
       console.error('[KEYS_PUT] Insert error:', insertErr);
-      return NextResponse.json({ error: 'Failed to store imported key' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to store imported key in database' }, { status: 500 });
     }
 
     const response = NextResponse.json({
       success: true,
+      isMaster,
+      message: isMaster ? 'Master Key accepted. Master administrator privileges elevated.' : 'Key imported successfully.',
       key: {
         id: inserted?.id || `key-import-${Date.now()}`,
         name: displayName,
@@ -387,6 +505,15 @@ export async function PUT(req: Request) {
         status: 'active',
       }
     });
+
+    if (isMaster) {
+      response.cookies.set('mcp_master_elevated', 'true', {
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60,
+        sameSite: 'lax',
+        httpOnly: false
+      });
+    }
 
     return response;
   } catch (err: unknown) {
@@ -405,23 +532,23 @@ export async function DELETE(req: Request) {
     }
 
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(req, supabase);
 
     if (user) {
       // Scope delete/revocation to caller's projects only
-      const { data: orgs } = await supabase
+      const { data: orgs } = await adminSupabase
         .from('organization_members')
         .select('organization_id')
         .eq('user_id', user.id);
       const orgIds = (orgs || []).map((o: any) => o.organization_id);
-      const { data: projects } = await supabase
+      const { data: projects } = await adminSupabase
         .from('projects')
         .select('id')
         .in('organization_id', orgIds.length > 0 ? orgIds : ['00000000-0000-0000-0000-000000000000']);
       const projectIds = (projects || []).map((p: any) => p.id);
 
       if (projectIds.length > 0) {
-        let query = supabase.from('api_keys').delete().in('project_id', projectIds);
+        let query = adminSupabase.from('api_keys').update({ expires_at: '1970-01-01T00:00:00.000Z' }).in('project_id', projectIds);
         if (id) query = query.eq('id', id);
         else if (prefix) query = query.eq('key_prefix', prefix);
         await query;

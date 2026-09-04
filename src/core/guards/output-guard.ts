@@ -80,23 +80,15 @@ export class OutputGuard {
       }
     }
 
-    // 3. Whole-envelope DLP sanitization
+    // 3. Whole-envelope DLP sanitization without redundant re-serialization cycles
     if (message.result) {
-      const resultStr = JSON.stringify(message.result);
-      const sanitizedStr = this.session.sanitizer.sanitize(resultStr);
-      message.result = JSON.parse(sanitizedStr);
+      this.sanitizeInPlace(message.result);
     }
-
     if (message.error) {
-      const errStr = JSON.stringify(message.error);
-      const sanitizedErrStr = this.session.sanitizer.sanitize(errStr);
-      message.error = JSON.parse(sanitizedErrStr);
+      this.sanitizeInPlace(message.error);
     }
-
     if (message.params) {
-      const paramsStr = JSON.stringify(message.params);
-      const sanitizedParamsStr = this.session.sanitizer.sanitize(paramsStr);
-      message.params = JSON.parse(sanitizedParamsStr);
+      this.sanitizeInPlace(message.params);
     }
 
     if (message.method === 'notifications/tools/list_changed') {
@@ -107,5 +99,31 @@ export class OutputGuard {
       allowed: true,
       message
     };
+  }
+
+  private sanitizeInPlace(target: any, depth = 0): void {
+    if (!target || depth > 20) return;
+
+    if (Array.isArray(target)) {
+      for (let i = 0; i < target.length; i++) {
+        if (typeof target[i] === 'string') {
+          target[i] = this.session.sanitizer.sanitize(target[i]);
+        } else if (typeof target[i] === 'object' && target[i] !== null) {
+          this.sanitizeInPlace(target[i], depth + 1);
+        }
+      }
+      return;
+    }
+
+    if (typeof target === 'object') {
+      for (const key of Object.keys(target)) {
+        const val = target[key];
+        if (typeof val === 'string') {
+          target[key] = this.session.sanitizer.sanitize(val);
+        } else if (typeof val === 'object' && val !== null) {
+          this.sanitizeInPlace(val, depth + 1);
+        }
+      }
+    }
   }
 }

@@ -3,11 +3,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const distEntry = path.join(__dirname, '..', 'dist', 'index.js');
+const distEntry = path.join(__dirname, '..', 'dist', 'cli.js');
 
 if (fs.existsSync(distEntry)) {
-  require(distEntry);
+  const { runCli } = require(distEntry);
+  runCli();
 } else {
   require('ts-node').register();
-  require(path.join(__dirname, '..', 'src', 'index.ts'));
+  const { runCli } = require(path.join(__dirname, '..', 'src', 'cli.ts'));
+  runCli();
 }

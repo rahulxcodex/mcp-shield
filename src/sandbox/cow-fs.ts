@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as Diff from 'diff';
+import { PathSecurityResolver } from '../security/path-resolver';
 
 export interface FileIdentity {
   ino: number;
@@ -72,8 +73,7 @@ export class COWFileSystem {
       };
     }
     
-    const rel = path.relative(this.rootDir, canonicalTarget);
-    const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
+    const isInside = PathSecurityResolver.isWithin(canonicalTarget, this.rootDir);
     if (!isInside) {
       throw new Error(`SANDBOX ESCAPE ATTEMPT: Target path "${originalPath}" resolves outside workspace root.`);
     }
@@ -141,8 +141,7 @@ export class COWFileSystem {
             throw new Error('COW TOCTOU DETECTED: Parent directory is a symlink.');
           }
           const canonicalParent = fs.realpathSync(parentDir);
-          const rel = path.relative(this.rootDir, canonicalParent);
-          const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
+          const isInside = PathSecurityResolver.isWithin(canonicalParent, this.rootDir);
           if (!isInside) {
             throw new Error('SANDBOX ESCAPE: Parent directory resolves outside workspace root.');
           }
@@ -150,8 +149,7 @@ export class COWFileSystem {
       }
       
       const canonicalTarget = fs.existsSync(absoluteOriginalPath) ? fs.realpathSync(absoluteOriginalPath) : absoluteOriginalPath;
-      const rel = path.relative(this.rootDir, canonicalTarget);
-      const isInside = rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
+      const isInside = PathSecurityResolver.isWithin(canonicalTarget, this.rootDir);
       if (!isInside) {
         throw new Error('SANDBOX ESCAPE: Cannot commit outside workspace root.');
       }
@@ -183,8 +181,7 @@ export class COWFileSystem {
         throw new Error('COW TOCTOU DETECTED: Committed target was replaced with a symlink during rename.');
       }
       const finalCanonical = fs.realpathSync(absoluteOriginalPath);
-      const finalRel = path.relative(this.rootDir, finalCanonical);
-      const finalIsInside = finalRel === '' || (!finalRel.startsWith('..' + path.sep) && finalRel !== '..' && !path.isAbsolute(finalRel));
+      const finalIsInside = PathSecurityResolver.isWithin(finalCanonical, this.rootDir);
       if (!finalIsInside) {
         fs.unlinkSync(absoluteOriginalPath);
         throw new Error('SANDBOX ESCAPE: Post-rename canonical path escapes workspace root.');

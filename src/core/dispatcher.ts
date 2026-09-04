@@ -1,4 +1,9 @@
-export type RequestHandler = (message: any) => Promise<void>;
+export interface ExecutionContext {
+  requestId?: string | number;
+  signal: AbortSignal;
+}
+
+export type RequestHandler = (message: any, context?: ExecutionContext) => Promise<void>;
 
 export interface DispatcherConfig {
   maxQueueDepth?: number;
@@ -16,6 +21,7 @@ export class RequestDispatcher {
   private inflight = 0;
   private inflightIds = new Set<string | number>();
   private cancelledIds = new Set<string | number>();
+  private activeControllers = new Map<string | number, AbortController>();
   
   private maxQueueDepth: number;
   private maxInflightRequests: number;
@@ -46,7 +52,13 @@ export class RequestDispatcher {
     if (this.queue.length < initialLen) {
       return true;
     }
-    // 2. Mark inflight request as cancelled
+    // 2. Abort active controller for inflight execution
+    const controller = this.activeControllers.get(requestId);
+    if (controller) {
+      controller.abort();
+      this.cancelledIds.add(requestId);
+      return true;
+    }
     if (this.inflightIds.has(requestId)) {
       this.cancelledIds.add(requestId);
       return true;
@@ -144,13 +156,20 @@ export class RequestDispatcher {
 
   private async executeMessage(message: any): Promise<void> {
     const hasId = message.id !== undefined && message.id !== null;
+    const controller = new AbortController();
     if (hasId) {
       this.inflightIds.add(message.id);
+      this.activeControllers.set(message.id, controller);
     }
     this.inflight++;
 
+    const execContext: ExecutionContext = {
+      requestId: hasId ? message.id : undefined,
+      signal: controller.signal
+    };
+
     try {
-      await this.handler(message);
+      await this.handler(message, execContext);
     } catch (err) {
       console.error('[MCP-SHIELD] Dispatcher unhandled error:', err);
     } finally {
@@ -158,12 +177,17 @@ export class RequestDispatcher {
       if (hasId) {
         this.inflightIds.delete(message.id);
         this.cancelledIds.delete(message.id);
+        this.activeControllers.delete(message.id);
       }
       this.scheduleDrain();
     }
   }
 
   public clear(): void {
+    for (const controller of this.activeControllers.values()) {
+      controller.abort();
+    }
+    this.activeControllers.clear();
     this.queue = [];
     this.inflight = 0;
     this.inflightIds.clear();

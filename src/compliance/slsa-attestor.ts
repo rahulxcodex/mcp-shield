@@ -5,7 +5,7 @@ export class SlsaAttestor {
    * Generate an in-toto SLSA Level 4 Provenance Attestation for the current build.
    * This provides independently reproducible verification of the compiled artifacts.
    */
-  public generateProvenance(buildId: string, artifactHash: string): string {
+  public generateProvenance(buildId: string, artifactHash: string, signingKey?: string): string {
     const provenance = {
       _type: 'https://in-toto.io/Statement/v0.1',
       subject: [{
@@ -40,9 +40,12 @@ export class SlsaAttestor {
       }
     };
     
-    const payload = JSON.stringify(provenance, null, 2);
-    // In production this would be signed by Sigstore / Fulcio
-    const signature = crypto.createHmac('sha256', 'mock-slsa-key').update(payload).digest('hex');
+    const payload = JSON.stringify(provenance);
+    const key = signingKey || process.env.SLSA_SIGNING_KEY;
+    if (!key) {
+      throw new Error('FAIL_CLOSED: SLSA provenance generation requires a valid SLSA_SIGNING_KEY in environment or options.');
+    }
+    const signature = crypto.createHmac('sha256', key).update(payload).digest('hex');
     
     return JSON.stringify({
       payload: Buffer.from(payload).toString('base64'),

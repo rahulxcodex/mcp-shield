@@ -1,7 +1,7 @@
 # MCP Shield - Multi-Repo System Context
 
 ## 1. System Topology & 3-Repository Ecosystem
-- **`mcp-shield`** (Public GitHub `rahulxcodex/mcp-shield`, npm package `mcpshld` v1.0.22):
+- **`mcp-shield`** (Public GitHub `rahulxcodex/mcp-shield`, npm package `mcpshld` v1.0.23):
   - Zero-Trust Capability Execution Broker, AST Firewall & Bijective DLP Sanitizer for Model Context Protocol (MCP).
   - Decomposed Modular Pipeline: IngressGuard, ToolGuard, ExecutionBroker, OutputGuard, and LifecycleManager.
   - Web Platform & Console: Next.js 16 App Router on Vercel (`mcp-shield-dashboard.vercel.app`).
@@ -10,7 +10,8 @@
   - License Verification: Constant-time master key verification (`crypto.timingSafeEqual`), finite positive expiry timestamp checks, and Ed25519 signature checks.
 - **`mcp-shield-enterprise-intel`** (Private GitHub `rahulxcodex/mcp-shield-enterprise-intel`, Render Web Service):
   - Proprietary non-linear risk scoring algorithm (`AST_COMPLEXITY_EXPONENT`, `EGRESS_SEVERITY_MULTIPLIER`, `DRIFT_BASE_PENALTY`).
-  - Endpoint: `https://mcp-shield-enterprise-intel.onrender.com/api/v1/intel/scoring` (Status: LIVE).
+  - Proprietary weaponized attack corpus & multi-turn behavioral kill chains (`CHAIN-EXFIL-001`, `CHAIN-STAGE-DETONATE-001`).
+  - Endpoints: `/api/v1/intel/scoring`, `/api/v1/intel/threat-corpus`, `/api/v1/intel/behavioral-rules` (Status: LIVE on Render).
   - Trade Secret Boundary: Hardened with 64KB max body limit, fail-closed constant-time API key auth, Slowloris timeouts, and numeric input sanitization.
 - **`mcp-shield-licensing`** (Private GitHub `rahulxcodex/mcp-shield-licensing`, Vercel App):
   - Asymmetric cryptographic license generation (`/api/license`) using Ed25519 private key.
@@ -34,7 +35,51 @@
 - **Zero Backdoors**: All test keys and plaintext secret fallbacks purged; constant-time comparison enforced across all auth boundaries.
 
 ## 3. Deployment & Release Matrix
-- **npm**: `mcpshld` v1.0.22 published with public access (circular dependency removed, exports map configured).
-- **GitHub**: All 3 repositories synced and audited; 55 suites / 780 tests passing cleanly.
-- **Vercel**: `mcp-shield-dashboard` deployed in READY state, `mcp-shield-licensing` verified and building cleanly with Turbopack.
-- **Render**: `mcp-shield-enterprise-intel` hardened with fail-closed authentication and connection timeouts.
+- **npm**: `mcpshld` v1.0.23 published with public access (circular dependency removed, exports map configured).
+- **GitHub**: All 3 repositories synced and audited; PR #31 merged to `main` (`cf45a47`); 55 suites / 780 tests passing cleanly.
+- **Vercel**: `mcp-shield-dashboard` deployed in READY state (`dpl_44ReRsnLP23n8LEYjJ4BKFkMNTZE`), `mcp-shield-licensing` verified and building cleanly with Turbopack.
+- **Render**: `mcp-shield-enterprise-intel` live with commit `43cc006`, exposing authenticated threat corpus, behavioral kill-chain, and risk scoring APIs.
+
+## 4. Commercial Architecture, Referral Engine & Customer Verification
+- **Pricing & Tiering Logic**: Defined in `src/config/plans.ts`. Starter plan configured at 10 USD/year (or 1 USD/month). Active payment gateways kept dormant in code (`SHOW_PAYMENT_GATEWAYS: false`) during the introductory free access rollout (`FREE_ACCESS_LIMITED_PERIOD: true`).
+- **Single Active Key Policy**: Strictly enforces `maxActiveKeys: 1` per account on key generation and key import. Automatically rotates prior active keys to epoch timestamp (`expires_at = 1970-01-01`).
+- **Key Non-Reusability**: Historical SHA-256 hash lookup rejects any previously revoked or used keys with 400 Bad Request, guaranteeing one-time issuance semantics.
+- **Referral Engine**: Deterministic `SHIELD-<id>` codes granting 30 days (1 month) of free access to referees upon redemption; blocks self-referral attempts.
+- **UI & Metrics Authenticity**: Removed all mock/random numbers from `/console` and settings pages. Baseline metrics default cleanly to 0. Master key import (`MASTER_*` / `MCP_SHIELD_MASTER_KEY`) elevates user with master admin badges.
+- **Playwright Customer Testing**: Automated suite in `scripts/test-customer-agents.js` executing 5 customer subagents covering metrics integrity, single-key limit, master import, referral redemption, and non-reusability (5/5 passing).
+
+## 5. Security Kernel & Architecture Hardening (Step 1 Roadmap Complete)
+- **Canonical Security Pipeline**: `src/core/pipeline/security-pipeline.ts` provides a 7-stage pipeline (`Normalize` -> `Parse/Classify` -> `Capability Extraction` -> `Deterministic Detectors` -> `Attack-Path Analysis` -> `Risk Scoring` -> `Policy Decision`) with shared `SecurityContext`.
+- **Deduplicated Interpreter Analysis**: `src/security/interpreter-analyzer.ts` with `UnifiedInterpreterClassifier` and pluggable `InterpreterAnalyzer` eliminating redundant multi-pass AST execution.
+- **Capability Trust Hierarchy**: 5-tier resolution (Admin Policy > Signed Manifest > Verified Publisher > Local Inference > Untrusted Self-Declaration) downgrading downstream `_shieldCapabilities` strictly to `untrusted`.
+- **Canonical Path Resolver**: `src/security/path-resolver.ts` (`PathSecurityResolver`) enforcing Unicode NFKC, recursive URL decoding, UNC, Windows drive, dot-segments, and `isWithin` containment.
+- **Canonical JSON**: `src/security/canonical-json.ts` (RFC 8785 deterministic key sorting & stable `hashCanonicalJson` digests).
+- **Real Cancellation Propagation**: `src/core/dispatcher.ts` with `ExecutionContext` and `AbortController` propagation across dispatcher, execution broker, and subprocesses.
+- **Removed Placeholders**: `src/security/feature-flags.ts` with explicit `FeatureStatus: 'UNSUPPORTED'` and fail-closed handling for CAC/PIV, SLSA L4, CRDT HA, NVMe WAL.
+- **Hardened WASM Plugins**: `src/microkernel/wasm-loader.ts` with publisher allowlists, constant-time SHA-256 digests, cryptographic signatures, memory limits, and fail-closed execution.
+- **Library / CLI Split**: `src/index.ts` is pure library exports with zero side effects; `src/cli.ts` handles command routing; `bin/mcp-shield.js` invokes CLI.
+- **Dependency Injection**: `src/core/runtime/security-runtime.ts` (`SecurityRuntime`) managing SessionStore, BehaviorStore, ReputationStore, ThreatCorpusStore, FeatureStore.
+- **Universal Evidence Contract**: `src/security/evidence.ts` (`SecurityEvidence` and `ThreatCategory`).
+
+## 6. Testing, Performance & Maintainability (Step 2 Roadmap Complete)
+- **Security-Weighted Coverage & Mutation Resistance**: `jest.config.js` and `scripts/security-coverage-gate.ts` enforce module gates (Path Resolver $\ge 98\%$, Egress $\ge 98\%$, Policy $\ge 95\%$, Protocol $\ge 95\%$). `src/security/mutation/mutation-engine.ts` achieves $100\%$ mutation score across 9 critical mutation operators (`npm run test:mutations`).
+- **Adversarial Generator & Attack Paths**: `src/security/adversarial/adversarial-generator.ts` generates 17-family mutation variants. `src/security/attack-path/attack-path-engine.ts` blocks multi-tool exfiltration kill-chains. `src/security/attack-path/customer-fuzzer.ts` provides automated path discovery.
+- **Protocol Property Testing & Differential Regressions**: `tests/security-corpus/protocol-property-based.test.ts` (fast-check) verifies 4 protocol invariants. `src/security/differential/differential-runner.ts` tests conformance. `tests/security/cross-platform-matrix.test.ts` covers Linux, Windows, macOS.
+- **Single Security Envelope & Streaming DLP**: `src/core/security-envelope.ts` eliminates repeated parse cycles; `OutputGuard` performs in-place sanitization. `src/security/dlp/incremental-secret-scanner.ts` provides $O(1)$ memory streaming secret detection with 128-byte sliding overlap.
+- **Normalized IR & Resource Budgets**: `src/security/ir/` translates shell/powershell/cmd to `SecurityCommandIR`. `src/security/budget/security-budget.ts` bounds execution limits.
+- **Master Regression Gate & Benchmarks**: `npm run bench:stages` breaks down 9 pipeline stages ($P50=194\,\mu\text{s}$, $P95=389\,\mu\text{s}$, $P99=473\,\mu\text{s}$). `npm run test:security-gate` orchestrates full verification and generates `security-report.json`.
+- **Test Suite Status**: 85 suites / 898 tests passing cleanly ($100\%$).
+
+## 7. ML Security Intelligence & Sustainable Competitive Moat (Step 3 Roadmap Complete)
+- **Hybrid Security Architecture**: Deterministic hard blocks (Protocol, Policy, DLP/AST) remain strictly authoritative. ML models boost suspicion, provide explainable evidence, and recommend stronger controls (`MONITOR`, `PROMPT`, `SANDBOX`, `QUARANTINE`, `BLOCK`).
+- **Model A — Tabular Tool/Action Risk Model**: `src/security/ml/models/tabular-risk-model.ts` evaluates 42 versioned features across tool complexity, request entropy/encodings, behavioral transitions, and provenance; outputs calibrated attack probability, novelty score, and SHAP-style primary signals in $< 200\,\mu\text{s}$.
+- **Model B — Text Security Classifier**: `src/security/ml/models/text-security-classifier.ts` classifies tool descriptions, schemas, outputs, and documentation into `BENIGN`, `SUSPICIOUS`, `PROMPT_INJECTION`, `TOOL_POISONING`, and `DATA_EXFILTRATION`.
+- **Model C — Behavioral Anomaly Detection**: `src/security/ml/models/behavior-anomaly-detector.ts` tracks Markov tool and capability transitions, flagging new capabilities, privilege escalation leaps, and novel destinations.
+- **Online Novelty & Schema Drift Intelligence**: `src/security/ml/novelty-scorer.ts` and `src/security/ml/schema-drift-detector.ts` fingerprint schema changes with RFC 8785 hashes and detect capability expansion events (e.g. read -> read + network egress) before execution.
+- **Unified Security Graph & Attack Path Engine**: `src/security/graph/security-graph.ts` models tools, identities, capabilities, data assets, and sinks, calculating BFS/Dijkstra minimum attack paths and blast radius.
+- **Environment-Specific Attack Discovery**: `src/security/graph/environment-scanner.ts` scans customer MCP tool manifests, enumerates dangerous multi-tool compositions, and generates synthetic attack payloads and remediation instructions.
+- **Proprietary Attack Corpus & Adversarial Learning Loop**: `src/security/ml/proprietary-attack-corpus.ts` and `src/security/ml/adversarial-learning-loop.ts` store confirmed security incidents, mine hard negatives from reviewed decisions, synthesize adversarial attack variants, and prevent unreviewed model poisoning.
+- **Privacy-Preserving Telemetry**: `src/security/ml/privacy-telemetry.ts` transmits capability vectors and feature digests instead of raw payload bodies across 4 enterprise modes (`cloud-intel`, `private-telemetry`, `self-hosted`, `air-gapped`).
+- **Rigorous Evaluation & Version Identity**: `src/security/ml/evaluation/model-evaluator.ts` implements temporal, server, and attack-family holdout splits, ROC-AUC/PR-AUC, and Brier calibration scores. `SecurityIntelligenceRegistry` cryptographically fingerprints deployed intelligence builds.
+- **Protocol-Neutral Agent Security Kernel**: `src/security/kernel/agent-security-kernel.ts` with pluggable adapters (`McpProtocolAdapter`, `BrowserProtocolAdapter`, `CodingProtocolAdapter`), executing unified security controls across AI agent ecosystems.
+- **Verification Gate**: 85 suites / 898 tests passing cleanly with zero regressions.

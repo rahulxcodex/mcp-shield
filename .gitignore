@@ -11,3 +11,4 @@ coverage/
 *.sbom.json
 sbom.json
 CI_FAILURE_ROOT_CAUSE.md
+security-report.json
