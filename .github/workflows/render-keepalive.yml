@@ -19,7 +19,7 @@ jobs:
 
       - name: Ping Hugging Face Space Endpoint
         env:
-          HF_SPACE_URL: ${{ secrets.HF_SPACE_URL || 'https://rahulxcodex-mcp-shield-risk-classifier.hf.space' }}
+          HF_SPACE_URL: ${{ secrets.HF_SPACE_URL || 'https://rahulrgx-mcp-shield-risk-api.hf.space' }}
         run: |
           echo "Pinging Hugging Face Space at $HF_SPACE_URL..."
           curl -s -f -m 60 --retry 3 --retry-delay 5 "$HF_SPACE_URL" || echo "Hugging Face Space pinged."
