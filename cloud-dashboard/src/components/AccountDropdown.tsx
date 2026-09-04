@@ -8,6 +8,11 @@ import Github from './GithubIcon';
 export interface AccountDropdownProps {
   user: {
     email: string;
+    app_metadata?: {
+      role?: string;
+      plan?: string;
+      [key: string]: any;
+    };
     user_metadata?: {
       avatar_url?: string;
       full_name?: string;
@@ -62,9 +67,7 @@ export default function AccountDropdown({ user, onSignOut }: AccountDropdownProp
 
   const isMasterAdmin =
     email.toLowerCase() === 'rahulsahygupta24@gmail.com' ||
-    username?.toLowerCase() === 'rahulxcodex' ||
-    metadata.is_master === true ||
-    accountTypeRaw.toLowerCase() === 'master_admin';
+    user.app_metadata?.role === 'master_admin';
   const isEnterprise = accountTypeRaw.toLowerCase().includes('enterprise') || isMasterAdmin;
 
   let badgeText = 'Developer';
