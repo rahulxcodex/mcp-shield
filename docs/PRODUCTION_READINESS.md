@@ -146,8 +146,8 @@ TRUST ZONE 1: MCP Shield Gateway & Execution Broker (Local / Sidecar)
 - **Recovery Time Objective (RTO)**: $< 4$ hours.
 - **Database Backup Frequency**: Continuous WAL archiving + daily automated snapshots via Supabase Enterprise.
 - **Backup Encryption**: AES-256 with KMS managed keys isolated from application runtime.
-- **Stripe Reconciliation**: Daily automated reconciliation job compares local subscription state against Stripe Subscription API to detect out-of-band drifts.
-- **Disaster Recovery Drill**: Semi-annual simulated failover to secondary cloud region.
+- **Stripe Reconciliation**: Daily automated reconciliation job (`mcp-shield-licensing/scripts/reconcile-stripe-subscriptions.ts`) compares local subscription state against Stripe Subscription API to detect and correct out-of-band drifts.
+- **Disaster Recovery Drill**: Automated drill script (`scripts/disaster-recovery-drill.ts`) simulates snapshot checksum validation, KMS asymmetric key recovery, and telemetry backlog replay within RPO/RTO bounds.
 
 ---
 

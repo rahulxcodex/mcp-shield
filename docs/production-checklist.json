@@ -184,7 +184,7 @@
       "title": "Race Condition & Concurrency Defense",
       "description": "Atomic org creation, single active key enforcement, webhook idempotency locks, and COW file mutexes",
       "verificationMethod": "integration_test",
-      "target": "tests/concurrency/race-defense.test.ts",
+      "target": "tests/security/race-concurrency.test.ts",
       "status": "PASS"
     },
     {
@@ -293,8 +293,8 @@
       "severity": "MEDIUM",
       "title": "Disaster Recovery & Reconciliation Procedures",
       "description": "Documented RPO/RTO objectives, automated Stripe drift reconciliation, and snapshot recovery procedure",
-      "verificationMethod": "doc_check",
-      "target": "docs/PRODUCTION_READINESS.md",
+      "verificationMethod": "drill_script",
+      "target": "scripts/disaster-recovery-drill.ts",
       "status": "PASS"
     },
     {
