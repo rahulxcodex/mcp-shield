@@ -1,9 +1,53 @@
 import * as crypto from 'crypto';
-import { generateApiKey, verifyKeyHash } from '../../cloud-dashboard/src/lib/api-keys';
 import { IngressGuard } from '../../src/core/guards/ingress-guard';
 import { SecurityPipeline, JsonRpcMessage, MessageMetadata } from '../../src/core/pipeline/security-pipeline';
 import { PrivacyTelemetryEngine } from '../../src/security/ml/privacy-telemetry';
-import { AuthorizationService, AuthPrincipal } from '../../cloud-dashboard/src/lib/authz';
+import { AuthorizationService, AuthPrincipal } from '../../src/security/authz/authorization-service';
+
+function hashApiKey(rawKey: string): string {
+  return crypto.createHash('sha256').update(rawKey.trim()).digest('hex');
+}
+
+function verifyKeyHash(rawKey: string, storedHash: string): boolean {
+  try {
+    const computedHash = hashApiKey(rawKey);
+    const bufA = Buffer.from(computedHash, 'hex');
+    const bufB = Buffer.from(storedHash, 'hex');
+    if (bufA.length !== 32 || bufB.length !== 32) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
+function generateApiKey(options: {
+  name?: string;
+  clientType?: string;
+  expiresInDays?: number;
+  seats?: number;
+}) {
+  const prefixId = crypto.randomBytes(4).toString('hex');
+  const keyPrefix = `mcp_live_${prefixId}`;
+  const secretEntropy = crypto.randomBytes(16).toString('hex');
+  const rawKey = `${keyPrefix}_${secretEntropy}`;
+  const keyHash = hashApiKey(rawKey);
+  const now = new Date().toISOString();
+
+  const days = options.expiresInDays && options.expiresInDays > 0 ? options.expiresInDays : null;
+  const expiresAt = days ? new Date(Date.now() + days * 24 * 3600 * 1000).toISOString() : null;
+  const displayName = options.name?.trim() || `Production MCP Key (${options.clientType || 'Gateway'})`;
+
+  return {
+    keyId: `key-${Date.now()}-${prefixId}`,
+    name: displayName,
+    keyPrefix,
+    rawKey,
+    keyHash,
+    createdAt: now,
+    expiresAt,
+    seats: options.seats || 25,
+  };
+}
 
 describe('Production Readiness Phase 17 — Full 12-Step Customer Journey E2E Test Suite', () => {
   let userSession: { userId: string; email: string; token: string };
