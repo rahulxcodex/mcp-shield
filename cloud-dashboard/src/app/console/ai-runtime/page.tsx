@@ -67,9 +67,16 @@ export default function AIRuntimeConsole() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold tracking-tight text-white">AI Agent Runtime Security Platform</h1>
-                  <span className="px-2.5 py-0.5 text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full">
-                    Step 10 Moat Live
-                  </span>
+                  {sessions.length > 0 ? (
+                    <span className="px-2.5 py-0.5 text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Live Telemetry (security_events)
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 rounded-full">
+                      Zero Active Sessions
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
                   Unified execution security boundary for MCP servers, coding agents, browser bots & multi-agent swarms.
@@ -170,45 +177,64 @@ export default function AIRuntimeConsole() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-400">
-                  <th className="py-3 px-4 font-medium">Session ID</th>
-                  <th className="py-3 px-4 font-medium">Runtime Type</th>
-                  <th className="py-3 px-4 font-medium">Agent Name</th>
-                  <th className="py-3 px-4 font-medium">Delegation Depth</th>
-                  <th className="py-3 px-4 font-medium">Threats Neutralized</th>
-                  <th className="py-3 px-4 font-medium">Status</th>
-                  <th className="py-3 px-4 font-medium">Last Monitored Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {filteredSessions.map((s) => (
-                  <tr key={s.sessionId} className="hover:bg-slate-800/30 transition">
-                    <td className="py-3 px-4 font-mono text-slate-300">{s.sessionId}</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
-                        {s.agentType}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-medium text-slate-200">{s.agentName}</td>
-                    <td className="py-3 px-4 text-slate-300">Depth {s.delegationDepth} / 5</td>
-                    <td className="py-3 px-4">
-                      <span className="text-emerald-400 font-semibold">{s.threatsNeutralized} blocked</span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="flex items-center gap-1.5 text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-400 font-mono text-[11px] truncate max-w-xs">{s.lastAction}</td>
+          {loading ? (
+            <div className="p-8 text-center text-xs text-slate-400">Loading active agent sessions...</div>
+          ) : filteredSessions.length === 0 ? (
+            <div className="p-8 text-center space-y-3 bg-slate-950/40 rounded-lg border border-slate-800/80">
+              <Shield className="w-8 h-8 text-slate-500 mx-auto" />
+              <div className="text-sm font-semibold text-slate-300">No Active Agent Sessions Detected</div>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Connect your MCP Shield Gateway or start an agent execution with your API key to stream live telemetry into this console.
+              </p>
+              <Link
+                href="/guide"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition"
+              >
+                <span>Gateway Setup Guide</span>
+                <ExternalLink className="w-3 h-3" />
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400">
+                    <th className="py-3 px-4 font-medium">Session ID</th>
+                    <th className="py-3 px-4 font-medium">Runtime Type</th>
+                    <th className="py-3 px-4 font-medium">Agent Name</th>
+                    <th className="py-3 px-4 font-medium">Delegation Depth</th>
+                    <th className="py-3 px-4 font-medium">Threats Neutralized</th>
+                    <th className="py-3 px-4 font-medium">Status</th>
+                    <th className="py-3 px-4 font-medium">Last Monitored Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredSessions.map((s) => (
+                    <tr key={s.sessionId} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3 px-4 font-mono text-slate-300">{s.sessionId}</td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                          {s.agentType}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-medium text-slate-200">{s.agentName}</td>
+                      <td className="py-3 px-4 text-slate-300">Depth {s.delegationDepth} / 5</td>
+                      <td className="py-3 px-4">
+                        <span className="text-emerald-400 font-semibold">{s.threatsNeutralized} blocked</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="flex items-center gap-1.5 text-emerald-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 font-mono text-[11px] truncate max-w-xs">{s.lastAction}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>

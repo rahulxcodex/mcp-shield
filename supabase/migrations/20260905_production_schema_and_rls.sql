@@ -1,4 +1,4 @@
-﻿-- ============================================================================
+-- ============================================================================
 -- 🛡️ MCP-SHIELD PRODUCTION DATABASE SCHEMA & MULTI-TENANT RLS POLICIES
 -- Target: PostgreSQL 15+ / Supabase Production Tier
 -- Verification: Automated Schema Diff & RLS Policy Conformance Gates
@@ -125,6 +125,21 @@ CREATE TABLE IF NOT EXISTS security_events (
 CREATE INDEX IF NOT EXISTS idx_sec_events_proj_time ON security_events(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sec_events_type_risk ON security_events(project_id, event_type, risk_level);
 
+-- 9. Billing Records
+CREATE TABLE IF NOT EXISTS billing_records (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE NOT NULL,
+    stripe_invoice_id TEXT UNIQUE,
+    amount_cents BIGINT NOT NULL,
+    currency TEXT DEFAULT 'usd' NOT NULL,
+    status TEXT CHECK (status IN ('draft', 'open', 'paid', 'uncollectible', 'void')) DEFAULT 'open' NOT NULL,
+    invoice_pdf_url TEXT,
+    period_start TIMESTAMPTZ NOT NULL,
+    period_end TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_billing_records_org ON billing_records(organization_id, created_at DESC);
+
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ============================================================================
@@ -136,6 +151,7 @@ ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE policy_bundles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE security_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE billing_records ENABLE ROW LEVEL SECURITY;
 
 -- Helper function to check if current authenticated user belongs to the org
 CREATE OR REPLACE FUNCTION is_org_member(p_org_id UUID) RETURNS BOOLEAN AS 
@@ -152,6 +168,9 @@ END;
 CREATE POLICY org_select_policy ON organizations
     FOR SELECT USING (is_org_member(id));
 
+CREATE POLICY org_insert_policy ON organizations
+    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
 CREATE POLICY org_update_policy ON organizations
     FOR UPDATE USING (
         EXISTS (
@@ -159,6 +178,45 @@ CREATE POLICY org_update_policy ON organizations
             WHERE organization_id = organizations.id
             AND user_id = auth.uid()
             AND role IN ('owner', 'admin')
+        )
+    );
+
+-- RLS: Organization Members
+CREATE POLICY org_members_select_policy ON organization_members
+    FOR SELECT USING (is_org_member(organization_id));
+
+CREATE POLICY org_members_insert_policy ON organization_members
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM organization_members AS m
+            WHERE m.organization_id = organization_members.organization_id
+            AND m.user_id = auth.uid()
+            AND m.role IN ('owner', 'admin')
+        )
+        OR NOT EXISTS (
+            SELECT 1 FROM organization_members AS m
+            WHERE m.organization_id = organization_members.organization_id
+        )
+    );
+
+CREATE POLICY org_members_update_policy ON organization_members
+    FOR UPDATE USING (
+        EXISTS (
+            SELECT 1 FROM organization_members AS m
+            WHERE m.organization_id = organization_members.organization_id
+            AND m.user_id = auth.uid()
+            AND m.role IN ('owner', 'admin')
+        )
+    );
+
+CREATE POLICY org_members_delete_policy ON organization_members
+    FOR DELETE USING (
+        user_id = auth.uid()
+        OR EXISTS (
+            SELECT 1 FROM organization_members AS m
+            WHERE m.organization_id = organization_members.organization_id
+            AND m.user_id = auth.uid()
+            AND m.role IN ('owner', 'admin')
         )
     );
 
@@ -173,6 +231,16 @@ CREATE POLICY proj_insert_policy ON projects
             WHERE organization_id = projects.organization_id
             AND user_id = auth.uid()
             AND role IN ('owner', 'admin', 'member')
+        )
+    );
+
+CREATE POLICY proj_update_policy ON projects
+    FOR UPDATE USING (
+        EXISTS (
+            SELECT 1 FROM organization_members
+            WHERE organization_id = projects.organization_id
+            AND user_id = auth.uid()
+            AND role IN ('owner', 'admin')
         )
     );
 
@@ -195,6 +263,64 @@ CREATE POLICY api_keys_modify_policy ON api_keys
         EXISTS (
             SELECT 1 FROM organization_members
             WHERE organization_id = api_keys.organization_id
+            AND user_id = auth.uid()
+            AND role IN ('owner', 'admin')
+        )
+    );
+
+-- RLS: Audit Logs (Append-only immutable audit trail)
+CREATE POLICY audit_logs_select_policy ON audit_logs
+    FOR SELECT USING (is_org_member(organization_id));
+
+CREATE POLICY audit_logs_insert_policy ON audit_logs
+    FOR INSERT WITH CHECK (
+        auth.role() = 'authenticated' AND is_org_member(organization_id)
+    );
+
+-- RLS: Policy Bundles
+CREATE POLICY policy_bundles_select_policy ON policy_bundles
+    FOR SELECT USING (is_org_member(organization_id));
+
+CREATE POLICY policy_bundles_modify_policy ON policy_bundles
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM organization_members
+            WHERE organization_id = policy_bundles.organization_id
+            AND user_id = auth.uid()
+            AND role IN ('owner', 'admin')
+        )
+    );
+
+-- RLS: Security Events
+CREATE POLICY sec_events_select_policy ON security_events
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM projects p
+            JOIN organization_members m ON m.organization_id = p.organization_id
+            WHERE p.id = security_events.project_id
+            AND m.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY sec_events_insert_policy ON security_events
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM projects p
+            JOIN organization_members m ON m.organization_id = p.organization_id
+            WHERE p.id = security_events.project_id
+            AND m.user_id = auth.uid()
+        )
+    );
+
+-- RLS: Billing Records
+CREATE POLICY billing_select_policy ON billing_records
+    FOR SELECT USING (is_org_member(organization_id));
+
+CREATE POLICY billing_modify_policy ON billing_records
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM organization_members
+            WHERE organization_id = billing_records.organization_id
             AND user_id = auth.uid()
             AND role IN ('owner', 'admin')
         )

@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/utils/supabase/server';
+import { supabase as adminSupabase } from '@/lib/supabase';
+import { getAuthenticatedUserWithBearer } from '@/lib/authz';
+
+export const runtime = 'nodejs';
 
 interface ProvenanceRecord {
   serverId: string;
@@ -49,7 +54,14 @@ const KNOWN_SERVERS: ProvenanceRecord[] = [
 ];
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
+  try {
+    const supabase = await createClient();
+    const { user, error: authErr } = await getAuthenticatedUserWithBearer(req, supabase, adminSupabase);
+    if (!user || authErr) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication required' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
   const serverId = searchParams.get('serverId');
 
   if (serverId) {
@@ -73,9 +85,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, record });
   }
 
-  return NextResponse.json({
-    success: true,
-    totalServersTracked: KNOWN_SERVERS.length,
-    servers: KNOWN_SERVERS,
-  });
+    return NextResponse.json({
+      success: true,
+      totalServersTracked: KNOWN_SERVERS.length,
+      servers: KNOWN_SERVERS,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
+  }
 }

@@ -113,11 +113,45 @@ export async function POST(
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
     
-    // Search auth.users by email using admin API
-    const { data: users, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    const targetUser = users?.users.find(u => u.email === email);
+    // Controlled indexed lookup of target user (SEC-FINDING-009)
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data: profileUser } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email')
+      .ilike('email', normalizedEmail)
+      .maybeSingle();
+
+    let targetUserId = profileUser?.id;
+
+    if (!targetUserId) {
+      try {
+        const { data: authUser } = await (supabaseAdmin as any)
+          .schema('auth')
+          .from('users')
+          .select('id, email')
+          .eq('email', normalizedEmail)
+          .maybeSingle();
+
+        if (authUser?.id) {
+          targetUserId = authUser.id;
+          try {
+            await supabaseAdmin.from('profiles').upsert([{ id: authUser.id, email: authUser.email }]);
+          } catch {}
+        }
+      } catch {
+        // Fallback for environments where auth schema query is unavailable
+        const { data: userData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 });
+        const match = userData?.users?.find(u => u.email?.toLowerCase() === normalizedEmail);
+        if (match) {
+          targetUserId = match.id;
+          try {
+            await supabaseAdmin.from('profiles').upsert([{ id: match.id, email: match.email }]);
+          } catch {}
+        }
+      }
+    }
       
-    if (listError || !targetUser) {
+    if (!targetUserId) {
       return NextResponse.json({ error: 'User not found. They must sign up first.' }, { status: 404 });
     }
     
@@ -126,7 +160,7 @@ export async function POST(
       .insert([
         {
           organization_id: organizationId,
-          user_id: targetUser.id,
+          user_id: targetUserId,
           role
         }
       ])

@@ -230,12 +230,6 @@ export default function GeneralSettingsPage() {
             status: 'ACTIVE',
             expires_in_days: 0
           };
-          if (data?.isMaster) {
-            document.cookie = "mcp_master_elevated=true; path=/; max-age=2592000";
-            try {
-              localStorage.setItem('mcp_master_elevated', 'true');
-            } catch {}
-          }
           setKeys([imported, ...keys]);
           setAddKeySuccess(true);
           setTimeout(() => {
@@ -243,9 +237,6 @@ export default function GeneralSettingsPage() {
             setAddKeyValue("");
             setAddKeyName("");
             setAddKeySuccess(false);
-            if (data?.isMaster) {
-              window.location.reload();
-            }
           }, 1500);
           return;
         }

@@ -15,6 +15,7 @@ export interface ReleaseManifest {
     gateway: { path: string; version: string; commitSha: string };
     enterpriseIntel: { path: string; version: string; commitSha: string };
     licensing: { path: string; version: string; commitSha: string };
+    hfSpace: { path: string; version: string; commitSha: string; runtime: string };
   };
   provenanceConsistent: boolean;
 }
@@ -83,6 +84,12 @@ export function generateReleaseManifest(): ReleaseManifest {
         path: 'mcp-shield-licensing',
         version: licensingPkg.version || '1.0.0',
         commitSha: getGitSha(licensingDir),
+      },
+      hfSpace: {
+        path: 'deployment/app.py',
+        version: pkg.version,
+        commitSha: getGitSha(rootDir),
+        runtime: 'gradio/python',
       },
     },
     provenanceConsistent: true,

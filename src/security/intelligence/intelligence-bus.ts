@@ -1,4 +1,4 @@
-import { SecurityDecisionAction, EnforcementSource } from '../decision';
+import { SecurityDecisionAction, EnforcementSource, BayesianDecisionEngine } from '../decision';
 
 export type SignalScope = 'request' | 'session' | 'tool' | 'server' | 'organization';
 
@@ -151,12 +151,11 @@ export class SecurityIntelligenceBus {
       };
     }
 
-    // 3. Composite ML & Behavioral Fusion (Advisory-First)
-    let maxRisk = 0.0;
+    // 3. Composite ML & Behavioral Fusion (Advisory-First using Bayesian Evidence Combination)
+    const compositeRisk = BayesianDecisionEngine.calculatePosteriorRisk(signals);
     let confidenceSum = 0.0;
 
     for (const sig of signals) {
-      if (sig.severity > maxRisk) maxRisk = sig.severity;
       confidenceSum += sig.confidence;
       if (sig.severity >= 0.4) {
         primarySignals.push(sig);
@@ -166,23 +165,13 @@ export class SecurityIntelligenceBus {
 
     const avgConfidence = signals.length > 0 ? Number((confidenceSum / signals.length).toFixed(2)) : 1.0;
 
-    let action: SecurityDecisionAction = 'ALLOW';
-    let source: EnforcementSource = 'ml';
-
-    if (maxRisk >= 0.75) {
-      action = 'BLOCK';
-      source = 'composite';
-    } else if (maxRisk >= 0.50) {
-      action = 'PROMPT';
-    } else if (maxRisk >= 0.30) {
-      action = 'SANDBOX';
-    } else {
-      action = 'ALLOW';
-    }
+    // Multi-Attribute Utility Optimization
+    const action = BayesianDecisionEngine.optimizeAction(compositeRisk, avgConfidence, false);
+    const source: EnforcementSource = compositeRisk >= 0.75 ? 'composite' : 'ml';
 
     return {
       recommendedAction: action,
-      compositeRiskScore: maxRisk,
+      compositeRiskScore: compositeRisk,
       confidence: avgConfidence,
       enforcementSource: source,
       primarySignals,

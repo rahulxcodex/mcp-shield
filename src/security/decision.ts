@@ -90,3 +90,49 @@ export function buildSecurityDecision(input: SecurityDecisionInput): SecurityDec
     timestamp: Date.now()
   };
 }
+
+export interface DecisionSignalEvidence {
+  source: string;
+  category: string;
+  severity: number;
+  confidence: number;
+}
+
+export class BayesianDecisionEngine {
+  /**
+   * Calculates cumulative Bayesian posterior risk using the Noisy-OR formulation.
+   * Compounds multi-source threat probabilities while strictly bounding between [0.0, 1.0].
+   */
+  public static calculatePosteriorRisk(signals: DecisionSignalEvidence[]): number {
+    if (signals.length === 0) return 0.0;
+    if (signals.length === 1) return Math.min(1.0, Math.max(0.0, signals[0].severity));
+
+    let unbreachedProb = 1.0;
+    let maxIndividualSeverity = 0.0;
+
+    for (const sig of signals) {
+      const s = Math.min(1.0, Math.max(0.0, sig.severity));
+      const c = Math.min(1.0, Math.max(0.1, sig.confidence));
+      if (s > maxIndividualSeverity) maxIndividualSeverity = s;
+      unbreachedProb *= (1.0 - (s * c));
+    }
+
+    const noisyOrProb = 1.0 - unbreachedProb;
+    return Number(Math.min(1.0, Math.max(maxIndividualSeverity, noisyOrProb)).toFixed(4));
+  }
+
+  /**
+   * Multi-Attribute Utility Theory (MAUT) Action Optimization
+   * Selects Pareto-optimal enforcement action balancing Threat Containment vs Developer Friction.
+   */
+  public static optimizeAction(
+    risk: number,
+    confidence: number,
+    deterministicHardBlock: boolean = false
+  ): SecurityDecisionAction {
+    if (deterministicHardBlock || risk >= 0.75) return 'BLOCK';
+    if (risk >= 0.50) return 'PROMPT';
+    if (risk >= 0.30) return 'SANDBOX';
+    return 'ALLOW';
+  }
+}

@@ -61,17 +61,10 @@ export class RateLimiter {
     // 2. Per-tool rate limit & complexity budget check
     let record = this.counts.get(normalizedName);
     
-    // Prune stale records if map exceeds capacity
+    // O(1) LRU eviction when capacity ceiling is reached
     if (this.counts.size > this.MAX_TRACKED_TOOLS) {
-      for (const [key, val] of this.counts.entries()) {
-        if (now - val.firstSeen > this.windowMs) {
-          this.counts.delete(key);
-        }
-      }
-      if (this.counts.size > this.MAX_TRACKED_TOOLS) {
-        const oldestKey = this.counts.keys().next().value;
-        if (oldestKey) this.counts.delete(oldestKey);
-      }
+      const oldestKey = this.counts.keys().next().value;
+      if (oldestKey) this.counts.delete(oldestKey);
     }
 
     const isStale = !record || (now - record.firstSeen > this.windowMs);

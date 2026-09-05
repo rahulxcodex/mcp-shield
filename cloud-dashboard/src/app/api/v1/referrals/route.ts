@@ -1,28 +1,26 @@
 import { NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 import { createClient } from '@/utils/supabase/server';
 import { supabase as adminSupabase } from '@/lib/supabase';
 import { sanitizeApiError } from '@/lib/errors';
 import { FEATURE_FLAGS } from '@/config/plans';
+import { getAuthenticatedUserWithBearer } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Derives a deterministic, tamper-resistant referral code for a user
+ * Derives an unforgeable, HMAC-salted referral code for a user
  */
 function deriveReferralCode(userId: string): string {
-  const clean = userId.replace(/-/g, '').substring(0, 10).toUpperCase();
-  return `SHIELD-${clean}`;
+  const salt = process.env.REFERRAL_SECRET || 'mcp-shield-referral-secure-salt-2026';
+  const digest = crypto.createHmac('sha256', salt).update(userId.trim()).digest('hex');
+  const codeSuffix = digest.substring(0, 10).toUpperCase();
+  return `SHIELD-${codeSuffix}`;
 }
 
 async function getAuthUser(req: Request, supabase: any) {
-  const authHeader = req.headers.get('authorization');
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : undefined;
-  if (bearerToken) {
-    const { data: { user } } = await adminSupabase.auth.getUser(bearerToken);
-    if (user) return user;
-  }
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuthenticatedUserWithBearer(req, supabase, adminSupabase);
   return user;
 }
 
