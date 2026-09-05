@@ -162,7 +162,7 @@ export async function POST(req: Request) {
     return jsonError('UNAUTHORIZED_KEY', 'Invalid or unassociated API key prefix', 401, requestId);
   }
 
-  const activeRecord = keyRecords.find(r => !r.revoked && (!r.expires_at || new Date(r.expires_at).getTime() > now));
+  const activeRecord = (keyRecords as any[]).find((r: any) => !r.revoked && (!r.expires_at || new Date(r.expires_at).getTime() > now));
   if (!activeRecord) {
     return jsonError('REVOKED_KEY', 'API key has been revoked or expired', 401, requestId);
   }
