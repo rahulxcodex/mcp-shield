@@ -78,6 +78,9 @@ const POLICY_VERSION = '2026.09.4';
 
 function signPolicyBundle(payloadString: string, privateKeyPem?: string): string {
   if (!privateKeyPem) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('ED25519_SIGNING_KEY_REQUIRED: LICENSE_PRIVATE_KEY is required in production.');
+    }
     return crypto.createHash('sha256').update(payloadString).digest('base64');
   }
   try {
@@ -86,6 +89,9 @@ function signPolicyBundle(payloadString: string, privateKeyPem?: string): string
     return signature.toString('base64');
   } catch (err) {
     console.error('Ed25519 Policy Signing Error:', err);
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('POLICY_SIGNING_FAILED: Failed to sign policy manifest with Ed25519 key.');
+    }
     return crypto.createHash('sha256').update(payloadString).digest('base64');
   }
 }
