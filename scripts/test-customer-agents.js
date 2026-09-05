@@ -3,7 +3,7 @@ const { chromium, request } = require('playwright');
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:3000';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://magfptvxgxscmlzphhlq.supabase.co';
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hZ2ZwdHZ4Z3hzY21senBoaGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyODU5MTQsImV4cCI6MjEwMzg2MTkxNH0.6-4_-PYdVZwotuesyxTR0wykkhjM7vqdOSezbTwCr0o';
-const TEST_EMAIL = process.env.TEST_CUSTOMER_EMAIL || 'rahulsahygupta24@gmail.com';
+const TEST_EMAIL = process.env.TEST_CUSTOMER_EMAIL || 'customer-qa@mcp-shield.test';
 const TEST_PASSWORD = process.env.TEST_CUSTOMER_PASSWORD || 'TestPassword123!Secure';
 
 async function runCustomerAgents() {

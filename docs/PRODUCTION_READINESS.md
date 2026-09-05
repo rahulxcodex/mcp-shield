@@ -22,7 +22,24 @@ Production certification requires satisfying verifiable technical controls valid
 
 ---
 
-## 3. Trust Boundaries & Architecture Topology
+## 3. Service Level Objectives (SLOs) & Deployment Modes
+
+### Deployment Modes
+1. **Embedded Library Mode**: In-process Node.js library imported via `import { wrapToolServer } from 'mcpshld'`. Operates with sub-millisecond local evaluation and zero network hops.
+2. **Reverse Proxy / Sidecar Mode**: Local stdio or HTTP/SSE sidecar container running adjacent to the MCP tool host.
+3. **Enterprise Cloud Gateway Mode**: Authenticated multi-tenant proxy terminating TLS, querying the private Enterprise Intel service, and enforcing cryptographic policy bundles.
+
+### Latency & Availability SLOs
+- **Decision Latency P50**: $\le 250\ \mu\text{s}$ (local pipeline deterministic analysis).
+- **Decision Latency P95**: $\le 500\ \mu\text{s}$ (full composite pipeline evaluation).
+- **Decision Latency P99**: $\le 15{,}000\ \mu\text{s}$ (hard ceiling under heavy load).
+- **Throughput Capacity**: $\ge 10{,}000$ tool calls/sec on single commodity vCPU.
+- **Availability Target**: 99.95% uptime for Enterprise Intel and Licensing Control Plane.
+- **Circuit Breaker Fail-Closed Threshold**: 3 consecutive remote timeouts ($\ge 200\text{ ms}$) triggers local fail-closed containment mode.
+
+---
+
+## 4. Trust Boundaries & Architecture Topology
 
 ```
 +-----------------------------------------------------------------------------------+

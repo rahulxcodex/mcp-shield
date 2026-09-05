@@ -1,27 +1,27 @@
 {
-  "drillId": "DR-DRILL-1788576799066",
-  "timestamp": "2026-09-05T02:53:19.066Z",
+  "drillId": "DR-DRILL-1788582447953",
+  "timestamp": "2026-09-05T04:27:27.953Z",
   "rpoTargetMinutes": 60,
   "measuredRpoMinutes": 12,
   "rtoTargetHours": 4,
-  "measuredRtoSeconds": 0.006,
+  "measuredRtoSeconds": 0.003,
   "steps": [
     {
       "step": "Snapshot Integrity & AES-256-GCM Checksum Verification",
       "status": "PASS",
       "durationMs": 0,
-      "details": "Snapshot SHA-256 digest 0511ab77197bb9f9... verified without corruption"
+      "details": "Snapshot SHA-256 digest e49ba7e834f4a356... verified without corruption"
     },
     {
       "step": "Relational Schema & Foreign Key Rehydration",
       "status": "PASS",
-      "durationMs": 1,
+      "durationMs": 0,
       "details": "Rehydrated 5 primary tenant tables and verified foreign keys/unique indexes"
     },
     {
       "step": "KMS Asymmetric Key Recovery (Ed25519 Licensing & HMAC Secrets)",
       "status": "PASS",
-      "durationMs": 3,
+      "durationMs": 2,
       "details": "Asymmetric signing keys recovered and verified signature generation/validation cycle"
     },
     {

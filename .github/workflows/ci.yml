@@ -75,6 +75,12 @@ jobs:
     - name: Run Property-Based AST Fuzzer
       run: npm run fuzz
 
+    - name: Run Security-Property Mutation Suite
+      run: npm run test:mutations
+
+    - name: Verify Production Certification Contract
+      run: npm run test:certify
+
   package-verification:
     name: Package SBOM & Pack Verification
     needs: build-and-test
@@ -93,5 +99,7 @@ jobs:
       run: npm run build
     - name: Generate SBOM
       run: npm run sbom
+    - name: Generate Authoritative Production Certification
+      run: npm run certify
     - name: Verify npm pack
       run: npm pack --dry-run
