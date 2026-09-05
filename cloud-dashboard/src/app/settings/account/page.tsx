@@ -82,12 +82,12 @@ export default function AccountSettingsPage() {
     }
   };
 
-  const email = user?.email || 'rahulsahygupta24@gmail.com';
+  const email = user?.email || '';
   const metadata = user?.user_metadata || {};
-  const githubUser = metadata.user_name || 'rahulxcodex';
-  const fullName = metadata.full_name || 'Rahul Gupta';
-  const accountType = metadata.account_type || (email.includes('rahulsahygupta24') ? 'Master Admin' : 'Introductory Free Tier');
-  const isMaster = user?.app_metadata?.role === 'master_admin' || email.includes('rahulsahygupta24');
+  const githubUser = metadata.user_name || 'developer';
+  const fullName = metadata.full_name || 'Authorized User';
+  const isMaster = user?.app_metadata?.role === 'master_admin';
+  const accountType = metadata.account_type || (isMaster ? 'Master Admin' : 'Standard Tier');
 
   return (
     <div className="max-w-4xl space-y-6">

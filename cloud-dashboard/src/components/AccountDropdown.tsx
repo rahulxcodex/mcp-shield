@@ -66,7 +66,6 @@ export default function AccountDropdown({ user, onSignOut }: AccountDropdownProp
     : email[0]?.toUpperCase() || 'U';
 
   const isMasterAdmin =
-    email.toLowerCase() === 'rahulsahygupta24@gmail.com' ||
     user.app_metadata?.role === 'master_admin' ||
     (typeof document !== 'undefined' && document.cookie.includes('mcp_master_elevated=true'));
   const isEnterprise = accountTypeRaw.toLowerCase().includes('enterprise') || isMasterAdmin;

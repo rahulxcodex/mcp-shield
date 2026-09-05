@@ -10,16 +10,17 @@ RUN npm ci
 
 COPY . .
 RUN npm run build
+RUN npm prune --omit=dev && npm cache clean --force
 
 # Production runtime stage
 FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache tini python3 make g++
+RUN apk add --no-cache tini
 
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=builder /app/node_modules ./node_modules
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/bin ./bin

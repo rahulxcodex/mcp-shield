@@ -6,6 +6,9 @@ import { Sanitizer } from '../src/security/sanitizer';
 import { IpClassifier, EgressSecurityConfig } from '../src/security/ip-utils';
 import { PolicyEngine } from '../src/security/policy-engine';
 import { UnicodeNormalizer } from '../src/security/unicode-normalizer';
+import { PolicyRoutingEngine } from '../src/security/policy-routing';
+import { AuthorizationModule } from '../src/security/authorization';
+import * as crypto from 'crypto';
 
 export interface MutationReport {
   totalMutants: number;
@@ -119,6 +122,103 @@ export function runSecurityMutationSuite(): MutationReport {
           if (!res.hasTraversalAttempt) {
             killed = true;
             killerReason = 'Caught by path traversal signature invariant check';
+          }
+          break;
+        }
+        case 'MUTATE_IS_BLOCKED': {
+          const res = IpClassifier.checkEgressViolation('127.0.0.1', {
+            enabled: true,
+            allowMode: 'deny',
+            allowedDomains: [],
+            blockedDomains: [],
+            allowPrivateNetworks: false,
+            blockLoopback: true,
+            blockLinkLocal: true,
+            blockMetadataEndpoints: true
+          });
+          if (!res.isBlocked) {
+            killed = true;
+            killerReason = 'Caught by isBlocked egress enforcement invariant check';
+          }
+          break;
+        }
+        case 'MUTATE_AUTHORIZATION': {
+          const reg = new CapabilityManifestRegistry(true);
+          const dec = reg.verifyInvocation('unauthorized_admin_tool', {}, { shellExecution: true });
+          if (dec.authorized === true) {
+            killed = true;
+            killerReason = 'Caught by authorization enforcement invariant check';
+          }
+          break;
+        }
+        case 'REMOVE_TENANT_FILTER': {
+          const engine = new PolicyRoutingEngine();
+          let threw = false;
+          try {
+            engine.enforceIsolation({ tenantId: 'tenant-a', geoRegion: 'US', maxBlastRadius: 100 }, 'tenant-b');
+          } catch {
+            threw = true;
+          }
+          if (!threw) {
+            killed = true;
+            killerReason = 'Caught by cross-tenant isolation enforcement invariant check';
+          }
+          break;
+        }
+        case 'DISABLE_SIGNATURE_VERIFICATION': {
+          const authMod = new AuthorizationModule();
+          authMod.registerApprover('alice', 'fake-public-key-pem', 'org-default');
+          const reqId = authMod.initiateQuorumApproval('admin:mutate', 'org-default');
+          let threw = false;
+          try {
+            authMod.recordApproval(reqId, 'alice', 'totally-invalid-signature-hex-123456');
+          } catch {
+            threw = true;
+          }
+          if (!threw) {
+            killed = true;
+            killerReason = 'Caught by cryptographic signature verification invariant check';
+          }
+          break;
+        }
+        case 'REMOVE_SSRF_CHECKS': {
+          const cLoopback = IpClassifier.classify('127.0.0.1');
+          const cMetadata = IpClassifier.classify('169.254.169.254');
+          if (!cLoopback.isLoopback || !cMetadata.isMetadata) {
+            killed = true;
+            killerReason = 'Caught by SSRF loopback & cloud metadata invariant check';
+          }
+          break;
+        }
+        case 'BYPASS_DLP': {
+          const secret = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890';
+          const out = new Sanitizer().sanitize(`Secret token: ${secret}`);
+          if (out.includes(secret)) {
+            killed = true;
+            killerReason = 'Caught by DLP secret leak detection invariant check';
+          }
+          break;
+        }
+        case 'BREAK_REPLAY_PROTECTION': {
+          const authMod = new AuthorizationModule();
+          authMod.registerApprover('bob', 'shared-secret-key-123', 'org-default');
+          const reqId1 = authMod.initiateQuorumApproval('tool:exec', 'org-default');
+          const data = `${reqId1}:bob:tool:exec`;
+          const validSig = crypto.createHmac('sha256', 'shared-secret-key-123').update(data).digest('hex');
+          
+          let threwOnReplay = false;
+          try {
+            authMod.recordApproval(reqId1, 'bob', validSig);
+            const reqId2 = authMod.initiateQuorumApproval('tool:exec', 'org-default');
+            authMod.recordApproval(reqId2, 'bob', validSig);
+          } catch (e: any) {
+            if (e.message?.includes('Replay attack detected') || e.message?.includes('already')) {
+              threwOnReplay = true;
+            }
+          }
+          if (!threwOnReplay) {
+            killed = true;
+            killerReason = 'Caught by nonce replay protection invariant check';
           }
           break;
         }
