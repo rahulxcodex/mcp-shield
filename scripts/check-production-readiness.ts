@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { verifyIpBoundary } from './verify-ip-boundary';
 
 interface ChecklistItem {
   id: string;
@@ -48,21 +49,25 @@ function runChecklistVerification() {
     let checkPassed = true;
     let detail = '';
 
-    if (control.verificationMethod === 'file_exists') {
-      const targetPath = path.resolve(__dirname, '..', control.target);
-      if (!fs.existsSync(targetPath)) {
-        checkPassed = false;
-        detail = `Target file missing: ${control.target}`;
-      } else {
-        detail = `File verified: ${control.target}`;
-      }
+    const targetPath = path.resolve(__dirname, '..', control.target);
+    if (!fs.existsSync(targetPath)) {
+      checkPassed = false;
+      detail = `Target file missing: ${control.target}`;
     } else {
-      detail = `Control logic active: ${control.title}`;
+      detail = `Target verified: ${control.target}`;
+    }
+
+    if (checkPassed && control.verificationMethod === 'boundary_check') {
+      const boundaryResult = verifyIpBoundary();
+      if (!boundaryResult.passed) {
+        checkPassed = false;
+        detail = `IP Boundary check failed: ${boundaryResult.violations.join(', ')}`;
+      }
     }
 
     if (checkPassed) {
       passed++;
-      console.log(` [PASS] [${control.severity.padEnd(8)}] ${control.id}: ${control.title}`);
+      console.log(` [PASS] [${control.severity.padEnd(8)}] ${control.id}: ${control.title} (${control.target})`);
     } else {
       failures++;
       console.error(` [FAIL] [${control.severity.padEnd(8)}] ${control.id}: ${control.title} - ${detail}`);

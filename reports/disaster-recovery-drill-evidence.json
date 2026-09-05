@@ -1,6 +1,6 @@
 {
-  "drillId": "DR-DRILL-1788561077871",
-  "timestamp": "2026-09-04T22:31:17.871Z",
+  "drillId": "DR-DRILL-1788576799066",
+  "timestamp": "2026-09-05T02:53:19.066Z",
   "rpoTargetMinutes": 60,
   "measuredRpoMinutes": 12,
   "rtoTargetHours": 4,
@@ -10,12 +10,12 @@
       "step": "Snapshot Integrity & AES-256-GCM Checksum Verification",
       "status": "PASS",
       "durationMs": 0,
-      "details": "Snapshot SHA-256 digest fd54d0815c8d7352... verified without corruption"
+      "details": "Snapshot SHA-256 digest 0511ab77197bb9f9... verified without corruption"
     },
     {
       "step": "Relational Schema & Foreign Key Rehydration",
       "status": "PASS",
-      "durationMs": 0,
+      "durationMs": 1,
       "details": "Rehydrated 5 primary tenant tables and verified foreign keys/unique indexes"
     },
     {

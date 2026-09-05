@@ -62,4 +62,26 @@ describe('Config Safety, Tamper Protection & Path Resolution', () => {
     expect(safety.isSafe).toBe(false);
     expect(safety.warnings[0]).toContain('Catch-all allow rule');
   });
+
+  it('CFG-04: Environment validator rejects placeholder secrets in production mode', () => {
+    const { validateEnvironment } = require('../../src/config/environment');
+
+    // Valid production config succeeds
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        MCP_SHIELD_ENV: 'production',
+        MCP_SHIELD_API_KEY: 'mcpshld_live_abc1234567890abcdef1234567890',
+        MCP_SHIELD_CLOUD_URL: 'https://cloud.mcp-shield.com/api/v1/telemetry/ingest',
+      })
+    ).not.toThrow();
+
+    // Placeholder secret in production fails closed
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+        MCP_SHIELD_API_KEY: 'placeholder_key_for_testing_only_12345',
+      })
+    ).toThrow(/Insecure fallback secret detected/);
+  });
 });
