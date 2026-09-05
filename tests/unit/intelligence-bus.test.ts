@@ -91,4 +91,35 @@ describe('SecurityIntelligenceBus & Signal Fusion (Roadmap Section 7.2)', () => 
     expect(fusion.recommendedAction).toBe('PROMPT');
     expect(fusion.compositeRiskScore).toBe(0.65);
   });
+
+  it('compounds multiple concurrent advisory signals into elevated Bayesian posterior risk', () => {
+    const multiSignals: SecuritySignal[] = [
+      {
+        signalId: 'sig-ml-1',
+        source: 'tabular-risk-model',
+        category: 'COMPLEXITY_SPIKE',
+        severity: 0.60,
+        confidence: 0.90,
+        timestamp: Date.now(),
+        scope: 'request',
+        evidence: {}
+      },
+      {
+        signalId: 'sig-ml-2',
+        source: 'text-security-classifier',
+        category: 'PROMPT_INJECTION',
+        severity: 0.60,
+        confidence: 0.90,
+        timestamp: Date.now(),
+        scope: 'request',
+        evidence: {}
+      }
+    ];
+
+    const fusion = SecurityIntelligenceBus.fuseSignals(multiSignals);
+    // Bayesian Noisy-OR: 1 - (1 - 0.54)*(1 - 0.54) = 1 - 0.2116 = 0.7884 -> exceeds 0.75 threshold
+    expect(fusion.compositeRiskScore).toBeGreaterThanOrEqual(0.75);
+    expect(fusion.recommendedAction).toBe('BLOCK');
+    expect(fusion.enforcementSource).toBe('composite');
+  });
 });

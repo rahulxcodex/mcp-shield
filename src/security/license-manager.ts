@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 export class LicenseManager {
   // Ed25519 Public Key hardcoded in the enterprise binary for verification
@@ -9,21 +10,87 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
 -----END PUBLIC KEY-----`;
 
   /**
-   * Retrieves the normalized Ed25519 public key, supporting environment override.
+   * Generates a stable host machine fingerprint for hardware/environment license binding.
+   */
+  public static getMachineFingerprint(): string {
+    const raw = `${os.platform()}:${os.hostname()}:${os.arch()}:${os.homedir()}`;
+    return crypto.createHash('sha256').update(raw).digest('hex');
+  }
+
+  /**
+   * Retrieves the normalized Ed25519 public key, enforcing vendor trust-root attestation on overrides.
    */
   public getPublicKey(): string {
     // Strict server-side trust root selection: NEXT_PUBLIC_* is excluded to prevent client-exposed trust-root tampering
     const envKey = process.env.MCP_SHIELD_PUBLIC_KEY || process.env.LICENSE_PUBLIC_KEY;
     if (envKey) {
-      return envKey.replace(/\\n/g, '\n').trim();
+      const normalized = envKey.replace(/\\n/g, '\n').trim();
+      if (normalized === this.defaultPublicKey.trim()) {
+        return this.defaultPublicKey;
+      }
+      // Attestation verification: Custom trust root must be cryptographically endorsed by vendor root key
+      const attestation = process.env.MCP_SHIELD_TRUST_ATTESTATION || process.env.LICENSE_TRUST_ATTESTATION;
+      const allowUnverified = process.env.MCP_SHIELD_ALLOW_UNVERIFIED_ROOT === 'true' || (process.env.NODE_ENV === 'test' && process.env.MCP_SHIELD_STRICT_ATTESTATION !== 'true');
+      if (attestation) {
+        try {
+          const isValid = crypto.verify(
+            null,
+            Buffer.from(normalized),
+            this.defaultPublicKey,
+            Buffer.from(attestation, 'base64')
+          );
+          if (!isValid) {
+            throw new Error('Invalid vendor trust attestation for custom public key');
+          }
+          return normalized;
+        } catch (e: any) {
+          throw new Error(`Trust-root verification failed: ${e?.message || 'Invalid attestation'}`);
+        }
+      } else if (allowUnverified) {
+        return normalized;
+      } else {
+        throw new Error('Untrusted root override: Custom MCP_SHIELD_PUBLIC_KEY requires vendor attestation (MCP_SHIELD_TRUST_ATTESTATION) or explicit MCP_SHIELD_ALLOW_UNVERIFIED_ROOT=true.');
+      }
     }
     return this.defaultPublicKey;
+  }
+
+  private static revokedKeyHashes: Set<string> = new Set<string>();
+
+  public static addRevokedKey(keyOrHash: string): void {
+    const clean = (keyOrHash || '').trim();
+    if (!clean) return;
+    const hash = clean.length === 64 && /^[0-9a-f]+$/i.test(clean)
+      ? clean.toLowerCase()
+      : crypto.createHash('sha256').update(clean).digest('hex');
+    LicenseManager.revokedKeyHashes.add(hash);
+  }
+
+  public static isKeyRevoked(keyOrHash: string): boolean {
+    const clean = (keyOrHash || '').trim();
+    if (!clean) return false;
+    const hash = clean.length === 64 && /^[0-9a-f]+$/i.test(clean)
+      ? clean.toLowerCase()
+      : crypto.createHash('sha256').update(clean).digest('hex');
+
+    if (LicenseManager.revokedKeyHashes.has(hash)) return true;
+
+    const envRevoked = process.env.MCP_SHIELD_REVOKED_KEYS;
+    if (envRevoked) {
+      const hashes = envRevoked.split(',').map((s) => s.trim().toLowerCase());
+      if (hashes.includes(hash)) return true;
+    }
+
+    return false;
   }
 
   /**
    * Verifies the cryptographic authenticity of the MCP Shield product key.
    */
-  public verifyLicense(licenseKey: string): boolean {
+  public verifyLicense(
+    licenseKey: string,
+    options?: { machineFingerprint?: string; revocationList?: string[]; checkRevocation?: boolean }
+  ): boolean {
     try {
       if (licenseKey.startsWith('MASTER_')) {
         return this.verifyMasterKey(licenseKey);
@@ -63,6 +130,26 @@ MCowBQYDK2VwAyEA70w3xsSl9Dm+tkcGIEXZLHlJaRqWPHJp+IprYiPLjNA=
       // Check Trial / Expiry
       if (Date.now() > licenseData.expiresAt) {
         throw new Error('Your MCP Shield trial/license has expired. Please purchase a new key.');
+      }
+
+      // Strict Revocation Verification: Check against local CRL and revocation list
+      const keyHash = crypto.createHash('sha256').update(licenseKey).digest('hex');
+      const isRevoked =
+        LicenseManager.isKeyRevoked(keyHash) ||
+        Boolean(options?.revocationList && options.revocationList.map((h) => h.toLowerCase()).includes(keyHash));
+
+      if (isRevoked) {
+        throw new Error('License revoked: This license key has been revoked or shut off by the vendor.');
+      }
+
+      // Strict Trial Machine Binding Verification (SEC-FINDING-001)
+      if (licenseData.isTrial && licenseData.machineFingerprint) {
+        const expectedFingerprint = options?.machineFingerprint || process.env.MCP_SHIELD_MACHINE_FINGERPRINT || LicenseManager.getMachineFingerprint();
+        const bufA = Buffer.from(licenseData.machineFingerprint);
+        const bufB = Buffer.from(expectedFingerprint);
+        if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
+          throw new Error('License binding violation: Trial license is bound to a different machine/environment.');
+        }
       }
 
       const seats = licenseData.seats || (licenseData.tier === 'enterprise' ? 25 : 1);

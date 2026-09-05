@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/utils/supabase/server';
+import { supabase as adminSupabase } from '@/lib/supabase';
+import { getAuthenticatedUserWithBearer } from '@/lib/authz';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { user, error: authErr } = await getAuthenticatedUserWithBearer(req, supabase, adminSupabase);
+    if (!user || authErr) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication required' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { serverId = 'sim-mcp-server', toolName = 'execute_action', payload, activeTier = 'enterprise_strict' } = body;
 

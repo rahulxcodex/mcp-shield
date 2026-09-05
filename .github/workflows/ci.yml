@@ -23,6 +23,10 @@ jobs:
         cache: 'npm'
     - name: Install Dependencies
       run: npm ci
+    - name: Verify Native Dependencies & Supply Chain Integrity
+      run: npm run ci:verify-native
+    - name: Run Secret & Credential Hygiene Scanner
+      run: npm run ci:check-secrets
     - name: Verify Typecheck
       run: npm run typecheck
     - name: Compile Production Build

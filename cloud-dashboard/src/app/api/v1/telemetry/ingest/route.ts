@@ -1,212 +1,241 @@
-import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { verifyKeyHash, hashApiKey } from '@/lib/api-keys';
-import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
-import { sanitizeApiError } from '@/lib/errors';
-import crypto from 'crypto';
+import { createAdminSupabaseClient } from '@/lib/supabase';
+import { jsonSuccess, jsonError } from '@/lib/api-response';
+import { z } from 'zod';
+import * as crypto from 'crypto';
+import { getDistributedStateStore } from '@/lib/distributed-state';
+import { deriveTelemetryHmacSecret } from '@/lib/api-keys';
 
 export const runtime = 'nodejs';
 
-async function verifyHmacSignature(payload: string, timestamp: string, apiKey: string, expectedSignature: string): Promise<boolean> {
+// Replay cache to prevent re-submitting identical telemetry batches within the 5-minute window
+const recentNonceCache = new Map<string, number>();
+
+// In-memory sliding window rate limiter per project (120 batches per minute)
+const telemetryRateLimitMap = new Map<string, number[]>();
+
+function cleanReplayCache(now: number) {
+  for (const [nonce, expiresAt] of recentNonceCache.entries()) {
+    if (now > expiresAt) {
+      recentNonceCache.delete(nonce);
+    }
+  }
+}
+
+// Periodic eviction sweep to prevent memory leak from stale project rate-limit keys (SEC-FINDING-014)
+function cleanTelemetryRateLimits(now: number, windowMs: number = 60_000) {
+  for (const [projectId, timestamps] of telemetryRateLimitMap.entries()) {
+    const active = timestamps.filter(t => t > now - windowMs);
+    if (active.length === 0) {
+      telemetryRateLimitMap.delete(projectId);
+    } else if (active.length !== timestamps.length) {
+      telemetryRateLimitMap.set(projectId, active);
+    }
+  }
+}
+
+function checkTelemetryRateLimit(projectId: string, now: number): boolean {
+  cleanTelemetryRateLimits(now);
+  const windowMs = 60_000;
+  const maxBatches = 120;
+  const rawTimestamps = telemetryRateLimitMap.get(projectId);
+  const timestamps = (rawTimestamps || []).filter(t => t > now - windowMs);
+
+  if (rawTimestamps && timestamps.length === 0) {
+    telemetryRateLimitMap.delete(projectId);
+  }
+
+  if (timestamps.length >= maxBatches) {
+    telemetryRateLimitMap.set(projectId, timestamps);
+    return false;
+  }
+
+  timestamps.push(now);
+  telemetryRateLimitMap.set(projectId, timestamps);
+  return true;
+}
+
+// DLP Redaction on preview to prevent telemetry leakage
+export function redactSensitiveTelemetry(preview: unknown): unknown {
+  if (!preview) return null;
+  const str = typeof preview === 'string' ? preview : JSON.stringify(preview);
+
+  // Redact API keys, tokens, auth headers, and private keys
+  const redacted = str
+    .replace(/(?:mcpshld_live_|sk_live_|ghp_|gho_|ghu_|ghs_|glpat-)[A-Za-z0-9_\-]{16,}/g, '[REDACTED_API_KEY]')
+    .replace(/(?:Bearer\s+)[A-Za-z0-9_\-\.]{20,}/gi, 'Bearer [REDACTED_TOKEN]')
+    .replace(/-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/g, '[REDACTED_PRIVATE_KEY]')
+    .replace(/(?:"password"|"secret"|"token")\s*:\s*"[^"]+"/gi, '"secret":"[REDACTED]"');
+
   try {
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(apiKey),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    
-    const dataToSign = encoder.encode(`${timestamp}:${payload}`);
-    const signatureBuffer = await crypto.subtle.sign('HMAC', key, dataToSign);
-    
-    const signatureHex = Array.from(new Uint8Array(signatureBuffer))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-      
-    const bufA = Buffer.from(signatureHex, 'hex');
-    const bufB = Buffer.from(expectedSignature, 'hex');
-    if (bufA.length !== bufB.length) return false;
+    return JSON.parse(redacted);
+  } catch {
+    return redacted;
+  }
+}
+
+const TelemetryEventSchema = z.object({
+  sessionId: z.string().min(1).max(128),
+  eventType: z.string().min(1).max(64),
+  detector: z.string().max(64).optional(),
+  riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+  toolName: z.string().max(128).optional(),
+  reason: z.string().max(512).optional(),
+  sanitizedPreview: z.unknown().optional(),
+  clientTimestamp: z.number().optional(),
+});
+
+const TelemetryBatchSchema = z.object({
+  device: z.record(z.string(), z.unknown()).optional(),
+  events: z.array(TelemetryEventSchema).min(1, 'Events array must not be empty').max(100, 'Events array cannot exceed 100 entries'),
+});
+
+export function verifyHmac(payload: string, timestamp: string, key: string, expectedSignature: string): boolean {
+  try {
+    const dataToSign = `${timestamp}:${payload}`;
+    const hmac = crypto.createHmac('sha256', key).update(dataToSign).digest('hex');
+
+    const cleanExpected = (expectedSignature || '').trim().toLowerCase();
+    const cleanActual = hmac.toLowerCase();
+
+    if (cleanExpected.length !== 64 || cleanActual.length !== 64) return false;
+
+    const bufA = Buffer.from(cleanActual, 'hex');
+    const bufB = Buffer.from(cleanExpected, 'hex');
+    if (bufA.length !== 32 || bufB.length !== 32) return false;
+
     return crypto.timingSafeEqual(bufA, bufB);
   } catch {
     return false;
   }
 }
 
-import { extractKeyPrefix } from '@/lib/api-keys';
+export async function POST(req: Request) {
+  const requestId = req.headers.get('x-request-id') || `tel-${crypto.randomUUID()}`;
 
-export async function POST(request: Request) {
-  try {
-    const rawBody = await request.text();
-    const headers = request.headers;
-    const signature = headers.get('X-MCP-Shield-Signature');
-    const timestamp = headers.get('X-MCP-Shield-Timestamp');
-    const rawKeyHeader = headers.get('X-MCP-Shield-Key');
-    const authHeader = headers.get('Authorization');
+  const signature = req.headers.get('X-MCP-Shield-Signature');
+  const timestamp = req.headers.get('X-MCP-Shield-Timestamp');
+  const authHeader = req.headers.get('authorization') || '';
+  const clientProvidedKey = authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7).trim()
+    : (req.headers.get('X-MCP-Shield-Key') || '').trim();
 
-    const keyToken = rawKeyHeader || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null);
-
-    if (!signature || !timestamp || !keyToken) {
-      return NextResponse.json({ error: 'Missing security headers (Signature, Timestamp, or Key required)' }, { status: 401 });
-    }
-    
-    const timeDiff = Math.abs(Date.now() - parseInt(timestamp, 10));
-    if (timeDiff > 10 * 60 * 1000) {
-      return NextResponse.json({ error: 'Request expired: timestamp drift exceeds 10 minutes' }, { status: 401 });
-    }
-
-    const keyPrefix = extractKeyPrefix(keyToken);
-
-    // Rate limiting: 1000 telemetry submissions per minute per prefix/IP
-    const clientIp = getClientIp(request);
-    const rlCheck = globalRateLimiter.check(`telemetry_ingest:${keyPrefix}:${clientIp}`, 1000, 60 * 1000);
-    if (!rlCheck.allowed) {
-      return NextResponse.json({ error: 'Telemetry ingestion rate limit exceeded.' }, { status: 429 });
-    }
-
-    let hmacKey: string | null = null;
-    let projectId: string | null = null;
-    let apiKeyRecordId: string | null = null;
-    let isKeyValid = false;
-
-    const hasSupabaseConfig = Boolean(
-      process.env.NEXT_PUBLIC_SUPABASE_URL && 
-      process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder.supabase.co'
-    );
-
-    if (hasSupabaseConfig) {
-      try {
-        const { data: apiKeyData } = await supabase
-          .from('api_keys')
-          .select('id, key_hash, project_id, expires_at, status')
-          .eq('key_prefix', keyPrefix)
-          .maybeSingle();
-
-        if (apiKeyData) {
-          if (apiKeyData.status === 'revoked') {
-            return NextResponse.json({ error: 'API Key has been revoked. Please rotate your key in the console.' }, { status: 401 });
-          }
-
-          if (apiKeyData.expires_at && new Date(apiKeyData.expires_at).getTime() < Date.now()) {
-            return NextResponse.json({ error: 'API Key expired. Please renew your key in the console.' }, { status: 401 });
-          }
-
-          projectId = apiKeyData.project_id;
-          apiKeyRecordId = apiKeyData.id;
-
-          // Constant-time SHA-256 hash verification
-          if (apiKeyData.key_hash) {
-            if (verifyKeyHash(keyToken, apiKeyData.key_hash)) {
-              isKeyValid = true;
-              hmacKey = keyToken;
-            } else if (apiKeyData.key_hash === keyToken) {
-              // Backward compatibility for legacy plaintext records
-              isKeyValid = true;
-              hmacKey = keyToken;
-            }
-          }
-        }
-      } catch (dbErr: any) {
-        console.warn('[INGEST_DB_NOTICE]', dbErr?.message);
-      }
-    }
-
-    // STRICT PRODUCTION INVARIANT: Development fallback keys are NEVER permitted in production
-    const isDevOrTest = process.env.NODE_ENV === 'test' || !hasSupabaseConfig;
-    if (!isKeyValid && isDevOrTest) {
-      if (keyPrefix.startsWith('mcp_live_default') || keyPrefix === 'dev-prefix-1' || keyToken.startsWith('mcp_live_sec_demo')) {
-        hmacKey = keyToken;
-        isKeyValid = true;
-        projectId = 'proj-sandbox-01';
-      }
-    }
-
-    if (!isKeyValid || !hmacKey) {
-      return NextResponse.json({ error: 'Invalid or unauthenticated API Key' }, { status: 401 });
-    }
-
-    const isValidSig = await verifyHmacSignature(rawBody, timestamp, hmacKey, signature);
-    if (!isValidSig) {
-      if (!isDevOrTest || !keyPrefix.startsWith('mcp_live_default')) {
-        return NextResponse.json({ error: 'Invalid HMAC Signature' }, { status: 401 });
-      }
-    }
-
-    let payload: any = {};
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
-    }
-
-    const { events, installation, device } = payload;
-    if (!events || !Array.isArray(events)) {
-      return NextResponse.json({ error: 'Invalid payload: missing events array' }, { status: 400 });
-    }
-
-    const installationId = installation?.installationId || 'unknown_inst';
-    const environment = installation?.environment || 'production';
-    const serverReceivedAt = new Date().toISOString();
-
-    const records = events.map((e: any, idx: number) => ({
-      event_id: e.eventId || `evt_${installationId}_${Date.now()}_${idx}`,
-      session_id: e.sessionId || 'anonymous',
-      event_type: e.eventType || 'BLOCK',
-      detector: e.detector || 'Tree-sitter AST',
-      risk_level: e.riskLevel || 'HIGH',
-      tool_name: e.toolName || 'unknown',
-      reason: e.reason || 'Security policy interception',
-      sanitized_preview: e.sanitizedPreview || null,
-      client_timestamp: e.clientTimestamp || serverReceivedAt,
-      created_at: serverReceivedAt,
-      sequence_number: e.sequenceNumber || idx,
-      project_id: projectId
-    }));
-
-    if (hasSupabaseConfig && projectId) {
-      try {
-        // Deduplicated insert: ignore duplicates if event_id already exists
-        const { error: insertError } = await supabase
-          .from('security_events')
-          .upsert(records, { onConflict: 'event_id', ignoreDuplicates: true });
-
-        if (insertError) {
-          // If table schema does not yet have event_id column, fallback to standard insert
-          await supabase.from('security_events').insert(
-            records.map(({ event_id, sequence_number, ...rest }) => rest)
-          );
-        }
-
-        // Asynchronously update key last_used_at and agent heartbeat
-        if (apiKeyRecordId) {
-          supabase.from('api_keys').update({ last_used_at: serverReceivedAt }).eq('id', apiKeyRecordId).then(() => {});
-        }
-        if (device?.hostname) {
-          supabase.from('agent_instances').upsert({
-            project_id: projectId,
-            instance_name: device.hostname,
-            hostname: device.hostname,
-            os: device.platform,
-            client_name: payload.clientVersion || 'mcpshld',
-            shield_version: payload.clientVersion || '1.0.12',
-            status: 'ONLINE',
-            last_heartbeat_at: serverReceivedAt
-          }, { onConflict: 'project_id, hostname' }).then(() => {});
-        }
-      } catch (dbErr: any) {
-        console.warn('[INGEST_DB_INSERT_WARN]', dbErr?.message);
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      processed: records.length,
-      serverReceivedAt,
-      environment
-    });
-  } catch (err: unknown) {
-    return sanitizeApiError(err, 'Failed to process telemetry ingest');
+  if (!signature || !timestamp || !clientProvidedKey) {
+    return jsonError('MISSING_HEADERS', 'Missing required security headers (Signature, Timestamp, Key)', 401, requestId);
   }
-}
 
+  // 1. Clock skew check (max 5 minutes)
+  const now = Date.now();
+  const parsedTimestamp = parseInt(timestamp, 10);
+  if (isNaN(parsedTimestamp) || Math.abs(now - parsedTimestamp) > 5 * 60 * 1000) {
+    return jsonError('TIMESTAMP_OUT_OF_BOUNDS', 'Request timestamp clock skew exceeds 5-minute allowance', 401, requestId);
+  }
+
+  const rawBody = await req.text();
+
+  // 2. High-Entropy Nonce & Distributed Replay Protection (SEC-FINDINGS 005 & 012)
+  const keyPrefix = clientProvidedKey.length >= 16 ? clientProvidedKey.substring(0, 16) : clientProvidedKey;
+  const nonce = req.headers.get('X-MCP-Shield-Nonce') ||
+    crypto.createHash('sha256').update(`${keyPrefix}:${timestamp}:${rawBody}`).digest('hex');
+
+  const distributedStore = getDistributedStateStore();
+  const isNonceFresh = await distributedStore.consumeNonce(nonce, 300);
+  if (!isNonceFresh) {
+    return jsonError('REPLAY_DETECTED', 'Replay detected: Nonce has already been consumed', 401, requestId);
+  }
+
+  // Backward compatibility check for local memory cache
+  cleanReplayCache(now);
+  if (recentNonceCache.has(nonce)) {
+    return jsonError('REPLAY_DETECTED', 'Replay detected: Nonce has already been consumed', 401, requestId);
+  }
+  recentNonceCache.set(nonce, now + 5 * 60 * 1000);
+
+  const supabaseAdmin = createAdminSupabaseClient();
+
+  // 3. Resolve Project and Key from Key Prefix
+  const { data: keyRecords, error: keyErr } = await supabaseAdmin
+    .from('api_keys')
+    .select('id, project_id, key_hash, revoked, expires_at')
+    .eq('key_prefix', keyPrefix);
+
+  if (keyErr || !keyRecords || keyRecords.length === 0) {
+    return jsonError('UNAUTHORIZED_KEY', 'Invalid or unassociated API key prefix', 401, requestId);
+  }
+
+  const activeRecord = (keyRecords as any[]).find((r: any) => !r.revoked && (!r.expires_at || new Date(r.expires_at).getTime() > now));
+  if (!activeRecord) {
+    return jsonError('REVOKED_KEY', 'API key has been revoked or expired', 401, requestId);
+  }
+
+  // 4. Verify API Key Authenticity & Separate HMAC Secret Material (SEC-FINDING-003)
+  // Constant-time comparison: Verifier key_hash is one-way SHA-256 and never used as symmetric secret
+  const computedHash = crypto.createHash('sha256').update(clientProvidedKey).digest('hex');
+  const bufComputed = Buffer.from(computedHash);
+  const bufExpected = Buffer.from(activeRecord.key_hash);
+  const isKeyValid = bufComputed.length === bufExpected.length && crypto.timingSafeEqual(bufComputed, bufExpected);
+
+  if (!isKeyValid) {
+    return jsonError('UNAUTHORIZED_KEY', 'API key cryptographic verification failed', 401, requestId);
+  }
+
+  // Derive separate HKDF secret from raw key so database key_hash leak cannot sign telemetry
+  const derivedHmacSecret = deriveTelemetryHmacSecret(clientProvidedKey);
+  const isValidSig =
+    verifyHmac(rawBody, timestamp, derivedHmacSecret, signature) ||
+    verifyHmac(rawBody, timestamp, clientProvidedKey, signature);
+
+  if (!isValidSig) {
+    return jsonError('INVALID_SIGNATURE', 'HMAC signature verification failed', 401, requestId);
+  }
+
+  // 5. Distributed & Per-Project Rate Limiting (SEC-FINDINGS 005 & 014)
+  const rlResult = await distributedStore.checkRateLimit(`telemetry_rl:${activeRecord.project_id}`, 120, 60);
+  if (!rlResult.allowed || !checkTelemetryRateLimit(activeRecord.project_id, now)) {
+    return jsonError('RATE_LIMITED', 'Telemetry ingestion rate limit exceeded for this project', 429, requestId);
+  }
+
+  // 6. Schema Validation
+  let bodyJson: unknown;
+  try {
+    bodyJson = JSON.parse(rawBody);
+  } catch {
+    return jsonError('MALFORMED_JSON', 'Request body must be valid JSON', 400, requestId);
+  }
+
+  const parseResult = TelemetryBatchSchema.safeParse(bodyJson);
+  if (!parseResult.success) {
+    return jsonError(
+      'VALIDATION_FAILED',
+      'Telemetry payload schema validation failed',
+      400,
+      requestId,
+      parseResult.error.issues.map(i => `${i.path.join('.')}: ${i.message}`)
+    );
+  }
+
+  // 7. Redact and Store Events
+  const eventsToInsert = parseResult.data.events.map(event => ({
+    project_id: activeRecord.project_id,
+    session_id: event.sessionId,
+    event_type: event.eventType,
+    detector: event.detector || null,
+    risk_level: event.riskLevel || 'LOW',
+    tool_name: event.toolName || null,
+    reason: event.reason || null,
+    sanitized_preview: event.sanitizedPreview ? JSON.stringify(redactSensitiveTelemetry(event.sanitizedPreview)) : null,
+    client_timestamp: event.clientTimestamp || now,
+  }));
+
+  const { error: insertErr } = await supabaseAdmin.from('security_events').insert(eventsToInsert);
+
+  if (insertErr) {
+    console.error('Failed to insert telemetry events:', insertErr);
+    return jsonError('STORAGE_ERROR', 'Failed to store security telemetry', 500, requestId);
+  }
+
+  return jsonSuccess({
+    success: true,
+    acceptedEvents: eventsToInsert.length,
+    projectId: activeRecord.project_id,
+  });
+}

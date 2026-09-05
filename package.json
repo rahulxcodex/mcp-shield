@@ -63,6 +63,8 @@
     "sbom": "cyclonedx-npm --output-format JSON --output-file mcp-shield.sbom.json",
     "ml:data": "python scripts/ml/mcp_dataset_builder.py",
     "ml:train": "python scripts/ml/statistical_diagnostics.py",
+    "ci:verify-native": "ts-node scripts/ci/verify-native-dependencies.ts",
+    "ci:check-secrets": "ts-node scripts/ci/check-no-secrets.ts",
     "prepack": "npm run build"
   },
   "keywords": [

@@ -1,14 +1,37 @@
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
+import { z } from 'zod';
 import { createClient } from '@/utils/supabase/server';
 import { supabase as adminSupabase } from '@/lib/supabase';
 import { generateApiKey, hashApiKey, validateApiKeyStructure, extractKeyPrefix } from '@/lib/api-keys';
 import { globalRateLimiter, getClientIp } from '@/lib/rate-limiter';
 import { sanitizeApiError } from '@/lib/errors';
 import { FEATURE_FLAGS } from '@/config/plans';
-import { authorizeRoute } from '@/lib/authz';
+import { authorizeRoute, getAuthenticatedUserWithBearer } from '@/lib/authz';
 
 export const runtime = 'nodejs';
+
+const CreateKeySchema = z.object({
+  name: z.string().trim().min(1, 'Name cannot be empty').max(100, 'Name cannot exceed 100 characters').default('MCP Agent Token'),
+  clientType: z.string().trim().max(100).default('Generic MCP Client'),
+  expiresInDays: z.coerce.number().int().min(1, 'Expiration must be at least 1 day').max(365, 'Expiration cannot exceed 365 days').default(90),
+  seats: z.coerce.number().int().min(1, 'Seats must be at least 1').max(100, 'Seats cannot exceed 100').default(1),
+});
+
+const ImportKeySchema = z.object({
+  rawKey: z.string().trim().min(8, 'Key must be at least 8 characters').max(512, 'Key too long').refine((k) => !k.startsWith('MASTER_'), {
+    message: 'Master key import is strictly prohibited in customer endpoints. Use internal administrative tools.',
+  }),
+  name: z.string().trim().min(1, 'Name cannot be empty').max(100, 'Name cannot exceed 100 characters'),
+});
+
+const RotateKeySchema = z.object({
+  keyId: z.string().trim().min(1).optional(),
+  keyPrefix: z.string().trim().min(1).optional(),
+  expiresInDays: z.coerce.number().int().min(1, 'Expiration must be at least 1 day').max(365, 'Expiration cannot exceed 365 days').default(90),
+}).refine((data) => data.keyId || data.keyPrefix, {
+  message: 'Missing keyId or keyPrefix for rotation',
+});
 
 async function getOrCreateProject(supabaseUser: any, user: any): Promise<string | null> {
   try {
@@ -69,15 +92,8 @@ async function getOrCreateProject(supabaseUser: any, user: any): Promise<string 
   }
 }
 
-
 async function getAuthUser(req: Request, supabase: any) {
-  const authHeader = req.headers.get('authorization');
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : undefined;
-  if (bearerToken) {
-    const { data: { user } } = await adminSupabase.auth.getUser(bearerToken);
-    if (user) return user;
-  }
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuthenticatedUserWithBearer(req, supabase, adminSupabase);
   return user;
 }
 
@@ -154,10 +170,18 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const keyName = body.name?.trim() || 'MCP Agent Token';
-    const clientType = body.clientType || 'Generic MCP Client';
-    const expiresInDays = body.expiresInDays !== undefined && body.expiresInDays !== null ? Number(body.expiresInDays) : 90;
-    const seats = body.seats !== undefined && body.seats !== null ? Number(body.seats) : 1;
+    const parseResult = CreateKeySchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: parseResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+        },
+        { status: 400 }
+      );
+    }
+
+    const { name: keyName, clientType, expiresInDays, seats } = parseResult.data;
     const displayName = seats > 1 ? `${keyName} (${clientType} - ${seats} Seats Single Key)` : `${keyName} (${clientType})`;
 
     // Generate secure API key with unique lookup prefix and SHA-256 hash
@@ -175,12 +199,12 @@ export async function POST(req: Request) {
       if (FEATURE_FLAGS.ENFORCE_KEY_NON_REUSABILITY) {
         const { data: revokedCheck } = await adminSupabase
           .from('api_keys')
-          .select('id, expires_at')
+          .select('id, expires_at, revoked')
           .eq('key_hash', generated.keyHash)
           .maybeSingle();
 
         if (revokedCheck) {
-          const isRevoked = revokedCheck.expires_at && new Date(revokedCheck.expires_at).getTime() <= Date.now();
+          const isRevoked = revokedCheck.revoked || (revokedCheck.expires_at && new Date(revokedCheck.expires_at).getTime() <= Date.now());
           if (isRevoked) {
             return NextResponse.json(
               { error: 'This key has already been used or revoked. Used keys cannot be reused.' },
@@ -197,17 +221,22 @@ export async function POST(req: Request) {
       if (FEATURE_FLAGS.ENFORCE_SINGLE_KEY_LIMIT && projectId) {
         const { data: allProjectKeys } = await adminSupabase
           .from('api_keys')
-          .select('id, expires_at')
+          .select('id, expires_at, revoked')
           .eq('project_id', projectId);
 
         const activeIds = (allProjectKeys || [])
-          .filter((k: any) => !k.expires_at || new Date(k.expires_at).getTime() > Date.now())
+          .filter((k: any) => !k.revoked && (!k.expires_at || new Date(k.expires_at).getTime() > Date.now()))
           .map((k: any) => k.id);
 
         if (activeIds.length > 0) {
           await adminSupabase
             .from('api_keys')
-            .update({ expires_at: '1970-01-01T00:00:00.000Z' })
+            .update({
+              status: 'revoked',
+              revoked: true,
+              expires_at: '1970-01-01T00:00:00.000Z',
+              revocation_reason: 'Rotated by Single Active Key Policy'
+            })
             .in('id', activeIds);
         }
       }
@@ -220,6 +249,8 @@ export async function POST(req: Request) {
           name: displayName,
           key_prefix: generated.keyPrefix,
           key_hash: generated.keyHash, // Secure SHA-256 hash
+          status: 'active',
+          revoked: false,
           expires_at: generated.expiresAt,
           created_at: generated.createdAt
         }])
@@ -277,11 +308,17 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { keyId, keyPrefix, expiresInDays = 90 } = body;
-
-    if (!keyId && !keyPrefix) {
-      return NextResponse.json({ error: 'Missing keyId or keyPrefix for rotation' }, { status: 400 });
+    const parseResult = RotateKeySchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: parseResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        },
+        { status: 400 }
+      );
     }
+    const { keyId, keyPrefix, expiresInDays } = parseResult.data;
 
     // Check user's project ownership
     const { data: orgs } = await adminSupabase
@@ -356,7 +393,7 @@ export async function PATCH(req: Request) {
 /**
  * Import Existing Key: Accepts a pre-existing API key, validates format,
  * hashes it, and stores without server-side generation.
- * Used by enterprise users receiving distributed keys and master admin.
+ * Used by enterprise users receiving distributed keys.
  */
 export async function PUT(req: Request) {
   try {
@@ -380,39 +417,31 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { rawKey, name } = body;
-
-    if (!rawKey || !name?.trim()) {
-      return NextResponse.json({ error: 'Missing rawKey or name' }, { status: 400 });
+    const parseResult = ImportKeySchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: parseResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+        },
+        { status: 400 }
+      );
     }
 
+    const { rawKey, name } = parseResult.data;
     const trimmedKey = rawKey.trim();
-    if (trimmedKey.length < 8) {
-      return NextResponse.json({ error: 'Key must be at least 8 characters' }, { status: 400 });
-    }
-
-    const envMasterKey = (process.env.MCP_SHIELD_MASTER_KEY || '').trim();
-    let isMaster = false;
-    if (envMasterKey && trimmedKey.length === envMasterKey.length) {
-      try {
-        isMaster = crypto.timingSafeEqual(Buffer.from(trimmedKey), Buffer.from(envMasterKey));
-      } catch {
-        isMaster = false;
-      }
-    }
-
     const keyHash = hashApiKey(trimmedKey);
 
     // Enforce key non-reusability: once a key is revoked/used, it cannot be reused
     if (FEATURE_FLAGS.ENFORCE_KEY_NON_REUSABILITY) {
       const { data: existingRevoked } = await adminSupabase
         .from('api_keys')
-        .select('id, expires_at')
+        .select('id, expires_at, revoked')
         .eq('key_hash', keyHash)
         .maybeSingle();
 
       if (existingRevoked) {
-        const isRevoked = existingRevoked.expires_at && new Date(existingRevoked.expires_at).getTime() <= Date.now();
+        const isRevoked = existingRevoked.revoked || (existingRevoked.expires_at && new Date(existingRevoked.expires_at).getTime() <= Date.now());
         if (isRevoked) {
           return NextResponse.json(
             { error: 'This key has already been used or revoked. Used keys cannot be reused.' },
@@ -422,15 +451,13 @@ export async function PUT(req: Request) {
       }
     }
 
-    // For mcp_live_* keys, extract prefix normally. For others or master, derive prefix from hash.
+    // For mcp_live_* keys, extract prefix normally. For external keys, derive prefix from hash.
     const isMcpFormat = validateApiKeyStructure(trimmedKey);
-    const keyPrefix = isMaster
-      ? `mcp_master_${keyHash.substring(0, 8)}`
-      : isMcpFormat
+    const keyPrefix = isMcpFormat
       ? extractKeyPrefix(trimmedKey)
       : `ext_${keyHash.substring(0, 12)}`;
 
-    const displayName = isMaster ? `${name.trim()} (Master Admin)` : name.trim();
+    const displayName = name.trim();
     const now = new Date().toISOString();
 
     const projectId = await getOrCreateProject(supabase, user);
@@ -439,13 +466,13 @@ export async function PUT(req: Request) {
       // Check if this exact key is already active in this project
       const { data: existingActive } = await adminSupabase
         .from('api_keys')
-        .select('id, expires_at')
+        .select('id, expires_at, revoked')
         .eq('key_hash', keyHash)
         .eq('project_id', projectId)
         .maybeSingle();
 
       if (existingActive) {
-        const isRevoked = existingActive.expires_at && new Date(existingActive.expires_at).getTime() <= Date.now();
+        const isRevoked = existingActive.revoked || (existingActive.expires_at && new Date(existingActive.expires_at).getTime() <= Date.now());
         if (isRevoked) {
           return NextResponse.json(
             { error: 'This key has already been used or revoked. Used keys cannot be reused.' },
@@ -453,10 +480,9 @@ export async function PUT(req: Request) {
           );
         }
 
-        const res = NextResponse.json({
+        return NextResponse.json({
           success: true,
-          isMaster,
-          message: isMaster ? 'Master Key accepted and active.' : 'Key already imported and active.',
+          message: 'Key already imported and active.',
           key: {
             id: existingActive.id,
             name: displayName,
@@ -464,32 +490,28 @@ export async function PUT(req: Request) {
             status: 'active'
           }
         });
-        if (isMaster) {
-          res.cookies.set('mcp_master_elevated', 'true', {
-            path: '/',
-            maxAge: 30 * 24 * 60 * 60,
-            sameSite: 'lax',
-            httpOnly: false
-          });
-        }
-        return res;
       }
 
       // Enforce 1 active key per account rule: rotate previous active keys
       if (FEATURE_FLAGS.ENFORCE_SINGLE_KEY_LIMIT) {
         const { data: allProjectKeys } = await adminSupabase
           .from('api_keys')
-          .select('id, expires_at')
+          .select('id, expires_at, revoked')
           .eq('project_id', projectId);
 
         const activeIds = (allProjectKeys || [])
-          .filter((k: any) => !k.expires_at || new Date(k.expires_at).getTime() > Date.now())
+          .filter((k: any) => !k.revoked && (!k.expires_at || new Date(k.expires_at).getTime() > Date.now()))
           .map((k: any) => k.id);
 
         if (activeIds.length > 0) {
           await adminSupabase
             .from('api_keys')
-            .update({ expires_at: '1970-01-01T00:00:00.000Z' })
+            .update({
+              status: 'revoked',
+              revoked: true,
+              expires_at: '1970-01-01T00:00:00.000Z',
+              revocation_reason: 'Rotated by Single Active Key Policy on Key Import'
+            })
             .in('id', activeIds);
         }
       }
@@ -503,6 +525,8 @@ export async function PUT(req: Request) {
         name: displayName,
         key_prefix: keyPrefix,
         key_hash: keyHash,
+        status: 'active',
+        revoked: false,
         created_at: now
       }])
       .select('id')
@@ -513,10 +537,9 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Failed to store imported key in database' }, { status: 500 });
     }
 
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
-      isMaster,
-      message: isMaster ? 'Master Key accepted. Master administrator privileges elevated.' : 'Key imported successfully.',
+      message: 'Key imported successfully.',
       key: {
         id: inserted?.id || `key-import-${Date.now()}`,
         name: displayName,
@@ -524,17 +547,6 @@ export async function PUT(req: Request) {
         status: 'active',
       }
     });
-
-    if (isMaster) {
-      response.cookies.set('mcp_master_elevated', 'true', {
-        path: '/',
-        maxAge: 30 * 24 * 60 * 60,
-        sameSite: 'lax',
-        httpOnly: false
-      });
-    }
-
-    return response;
   } catch (err: unknown) {
     return sanitizeApiError(err, 'Failed to import API key');
   }

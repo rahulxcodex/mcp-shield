@@ -65,9 +65,7 @@ export default function AccountDropdown({ user, onSignOut }: AccountDropdownProp
         .toUpperCase()
     : email[0]?.toUpperCase() || 'U';
 
-  const isMasterAdmin =
-    user.app_metadata?.role === 'master_admin' ||
-    (typeof document !== 'undefined' && document.cookie.includes('mcp_master_elevated=true'));
+  const isMasterAdmin = user.app_metadata?.role === 'master_admin';
   const isEnterprise = accountTypeRaw.toLowerCase().includes('enterprise') || isMasterAdmin;
 
   let badgeText = 'Developer';

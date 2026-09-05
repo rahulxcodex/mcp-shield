@@ -39,7 +39,7 @@ function validateConfiguration(): AppConfig {
   }
 
   return {
-    supabaseUrl: supabaseUrl || 'https://magfptvxgxscmlzphhlq.supabase.co',
+    supabaseUrl: supabaseUrl || 'https://your-project-ref.supabase.co',
     supabaseServiceKey: supabaseServiceKey || 'test-service-key-for-local-mock-only',
     supabaseAnonKey: supabaseAnonKey || 'test-anon-key-for-local-mock-only',
     stripeSecretKey,

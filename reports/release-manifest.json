@@ -1,8 +1,8 @@
 {
   "product": "MCP Shield Zero-Trust Security Ecosystem",
   "version": "1.0.24",
-  "gitCommitSha": "e981459344e51acbe6eae224b95f2acbb6fdddbf",
-  "buildTimestamp": "2026-09-05T04:05:59.131Z",
+  "gitCommitSha": "a1928145e9ae1c0ae1f3d689b84b58f090e0e99c",
+  "buildTimestamp": "2026-09-05T11:02:59.311Z",
   "nodeRuntimeVersion": "v24.19.0",
   "dependencyLockHash": "3da0c3df6883ccbc88fd875d1660b6c8678a9097800cd33f0c7d1d752500d8ae",
   "sbomDigest": "79bbe2500ef966a14a1996608f5570453812dea5efce8d43f0cb50caeec60c15",
@@ -10,17 +10,23 @@
     "gateway": {
       "path": "mcp-shield",
       "version": "1.0.24",
-      "commitSha": "e981459344e51acbe6eae224b95f2acbb6fdddbf"
+      "commitSha": "a1928145e9ae1c0ae1f3d689b84b58f090e0e99c"
     },
     "enterpriseIntel": {
       "path": "mcp-shield-enterprise-intel",
       "version": "1.0.0",
-      "commitSha": "b8ff6b27d445cb57dbd9b446f88606616b348c0d"
+      "commitSha": "bd35d92d8fc659f9a0ca3db2f500fb31f92a1b80"
     },
     "licensing": {
       "path": "mcp-shield-licensing",
       "version": "0.1.0",
-      "commitSha": "3010c49bde9e15112273d04207513761db04dd09"
+      "commitSha": "5787a5d8a48d557b39fb889aea3276e8dc4036de"
+    },
+    "hfSpace": {
+      "path": "deployment/app.py",
+      "version": "1.0.24",
+      "commitSha": "a1928145e9ae1c0ae1f3d689b84b58f090e0e99c",
+      "runtime": "gradio/python"
     }
   },
   "provenanceConsistent": true

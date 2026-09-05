@@ -1,3 +1,103 @@
+import { SupabaseClient, User } from '@supabase/supabase-js';
+
+export type OrganizationRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+const ROLE_HIERARCHY: Record<OrganizationRole, number> = {
+  owner: 4,
+  admin: 3,
+  member: 2,
+  viewer: 1,
+};
+
+export interface MembershipRecord {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role: OrganizationRole;
+  created_at: string;
+}
+
+export async function getAuthenticatedUser(supabase: SupabaseClient): Promise<{ user: User | null; error: string | null }> {
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
+      return { user: null, error: error?.message || 'Authentication required' };
+    }
+    return { user, error: null };
+  } catch (err: any) {
+    return { user: null, error: err?.message || 'Authentication failed' };
+  }
+}
+
+export async function verifyOrgMembership(
+  supabase: SupabaseClient,
+  organizationId: string,
+  userId: string,
+  requiredRole: OrganizationRole = 'member'
+): Promise<{ authorized: boolean; role?: OrganizationRole; error?: string }> {
+  if (!organizationId || !userId) {
+    return { authorized: false, error: 'Missing organization ID or user ID' };
+  }
+
+  const { data: membership, error } = await supabase
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error || !membership) {
+    return {
+      authorized: false,
+      error: 'Forbidden: You are not an authorized member of this organization',
+    };
+  }
+
+  const userRole = membership.role as OrganizationRole;
+  const userLevel = ROLE_HIERARCHY[userRole] || 0;
+  const requiredLevel = ROLE_HIERARCHY[requiredRole] || 0;
+
+  if (userLevel < requiredLevel) {
+    return {
+      authorized: false,
+      role: userRole,
+      error: `Forbidden: Requires '${requiredRole}' role or higher, but your role is '${userRole}'`,
+    };
+  }
+
+  return { authorized: true, role: userRole };
+}
+
+export function validateRoleAssignment(actorRole: OrganizationRole, requestedRole: string): { valid: boolean; error?: string } {
+  const allowedRoles: OrganizationRole[] = ['admin', 'member', 'viewer'];
+
+  if (requestedRole === 'owner') {
+    return {
+      valid: false,
+      error: 'Forbidden: Owner role cannot be assigned directly. Use dedicated owner transfer workflow.',
+    };
+  }
+
+  if (!allowedRoles.includes(requestedRole as OrganizationRole)) {
+    return {
+      valid: false,
+      error: `Invalid role '${requestedRole}'. Allowed roles: ${allowedRoles.join(', ')}`,
+    };
+  }
+
+  const actorLevel = ROLE_HIERARCHY[actorRole] || 0;
+  const targetLevel = ROLE_HIERARCHY[requestedRole as OrganizationRole] || 0;
+
+  if (actorLevel <= targetLevel && actorRole !== 'owner') {
+    return {
+      valid: false,
+      error: `Forbidden: Cannot assign a role equal to or higher than your own (${actorRole})`,
+    };
+  }
+
+  return { valid: true };
+}
+
 export type AuthRole = 'system_admin' | 'owner' | 'admin' | 'enterprise_admin' | 'member' | 'viewer';
 
 export type AuthAction =
@@ -68,6 +168,9 @@ export class AuthorizationService {
     ])
   };
 
+  /**
+   * Evaluates if principal has authority to perform action on resource
+   */
   public static authorize(
     principal: AuthPrincipal,
     action: AuthAction,
@@ -103,62 +206,94 @@ export class AuthorizationService {
   }
 }
 
-export interface SupabaseUserSession {
-  id: string;
-  email?: string;
-  app_metadata?: {
-    role?: string;
-    organization_id?: string;
-    plan?: string;
-  };
-  user_metadata?: Record<string, any>;
-}
-
-export function principalFromSession(
-  user: SupabaseUserSession,
-  orgIdHeader?: string
-): AuthPrincipal {
-  const isMasterAdmin =
-    user.app_metadata?.role === 'master_admin' ||
-    user.id === process.env.MASTER_ADMIN_USER_ID;
-
-  const isEnterpriseAdmin =
-    user.app_metadata?.role === 'enterprise_admin' ||
-    user.app_metadata?.plan === 'enterprise';
-
-  let role: AuthRole = 'member';
-  if (isMasterAdmin) {
-    role = 'system_admin';
-  } else if (isEnterpriseAdmin) {
-    role = 'enterprise_admin';
-  } else if (user.app_metadata?.role === 'owner') {
-    role = 'owner';
-  } else if (user.app_metadata?.role === 'admin') {
-    role = 'admin';
-  } else if (user.app_metadata?.role === 'viewer') {
-    role = 'viewer';
-  }
-
-  const organizationId =
-    orgIdHeader ||
-    user.app_metadata?.organization_id ||
-    `org-${user.id.substring(0, 8)}`;
-
-  return {
-    userId: user.id,
-    organizationId,
-    role,
-    isSystemAdmin: isMasterAdmin,
-    isEnterpriseAdmin
-  };
-}
-
 export function authorizeRoute(
-  user: SupabaseUserSession,
+  user: User,
   action: AuthAction,
   resource?: AuthResource,
-  orgIdHeader?: string
+  organizationId?: string
 ): AuthResult {
-  const principal = principalFromSession(user, orgIdHeader);
+  const isMaster =
+    user.app_metadata?.role === 'master_admin' ||
+    (Boolean(process.env.MASTER_ADMIN_USER_ID) && user.id === process.env.MASTER_ADMIN_USER_ID) ||
+    (Boolean(process.env.MASTER_ADMIN_EMAIL) && (user.email || '').toLowerCase() === (process.env.MASTER_ADMIN_EMAIL || '').toLowerCase());
+
+  if (isMaster) {
+    return { authorized: true, role: 'system_admin' };
+  }
+
+  const role = (user.app_metadata?.role as AuthRole) || 'member';
+  const principal: AuthPrincipal = {
+    userId: user.id,
+    organizationId: organizationId || (user.app_metadata?.organization_id as string | undefined),
+    role,
+    isSystemAdmin: isMaster,
+    isEnterpriseAdmin: user.app_metadata?.plan === 'enterprise' || user.app_metadata?.role === 'enterprise_admin'
+  };
+
   return AuthorizationService.authorize(principal, action, resource);
 }
+
+export async function getAuthenticatedUserWithBearer(
+  req: Request,
+  supabase: SupabaseClient,
+  adminSupabase?: SupabaseClient
+): Promise<{ user: User | null; error: string | null }> {
+  try {
+    const authHeader = req.headers.get('authorization');
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : undefined;
+    if (bearerToken && adminSupabase) {
+      const { data: { user }, error: bearerErr } = await adminSupabase.auth.getUser(bearerToken);
+      if (user && !bearerErr) return { user, error: null };
+    }
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
+      return { user: null, error: error?.message || 'Authentication required' };
+    }
+    return { user, error: null };
+  } catch (err: any) {
+    return { user: null, error: err?.message || 'Authentication failed' };
+  }
+}
+
+export interface TenantAuthContext {
+  user: User;
+  organizationId: string;
+  role: OrganizationRole;
+}
+
+export type TenantRouteHandler = (
+  req: Request,
+  context: TenantAuthContext,
+  params?: any
+) => Promise<Response>;
+
+export function withTenantAuth(
+  requiredRole: OrganizationRole,
+  handler: TenantRouteHandler
+) {
+  return async (req: Request, routeProps?: { params?: Promise<any> | any }): Promise<Response> => {
+    const rawParams = routeProps?.params;
+    const params = rawParams instanceof Promise ? await rawParams : (rawParams || {});
+    const orgId = params.id || params.organizationId || req.headers.get('x-organization-id');
+
+    if (!orgId) {
+      return Response.json({ error: 'Missing organization context' }, { status: 400 });
+    }
+
+    const { createClient } = await import('../utils/supabase/server');
+    const supabase = await createClient();
+    const { user, error: userError } = await getAuthenticatedUser(supabase);
+
+    if (!user || userError) {
+      return Response.json({ error: 'Unauthorized: Authentication required' }, { status: 401 });
+    }
+
+    const authCheck = await verifyOrgMembership(supabase, orgId, user.id, requiredRole);
+    if (!authCheck.authorized) {
+      return Response.json({ error: authCheck.error || 'Forbidden: Access denied' }, { status: 403 });
+    }
+
+    return handler(req, { user, organizationId: orgId, role: authCheck.role || requiredRole }, params);
+  };
+}
+

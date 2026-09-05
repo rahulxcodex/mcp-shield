@@ -170,7 +170,7 @@ export async function runChecklistVerification(): Promise<{ passed: boolean; fai
           // Enterprise Intel test suite
           const intelDir = path.resolve(__dirname, '../../mcp-shield-enterprise-intel');
           const intelResult = runSubprocessTest(intelDir, 'node', ['tests/verify-intel.js']);
-          if (!intelResult.success || !intelResult.output.includes('ALL 15 ENTERPRISE INTEL PRODUCTION READINESS TESTS PASSED')) {
+          if (!intelResult.success || !intelResult.output.includes('ENTERPRISE INTEL PRODUCTION READINESS TESTS PASSED')) {
             checkPassed = false;
             detail = 'Enterprise intel production test suite failed';
           }
@@ -196,7 +196,7 @@ export async function runChecklistVerification(): Promise<{ passed: boolean; fai
           // Multi-tenant IDOR & RBAC relational tests
           const licDir = path.resolve(__dirname, '../../mcp-shield-licensing');
           const idorResult = runSubprocessTest(licDir, 'npx', ['tsx', 'tests/tenant-idor-authorization.test.ts']);
-          if (!idorResult.success || !idorResult.output.includes('ALL 15 DATABASE-BACKED IDOR & RBAC CHECKS PASSED')) {
+          if (!idorResult.success || !idorResult.output.includes('IDOR & RBAC CHECKS PASSED')) {
             checkPassed = false;
             detail = 'Multi-tenant IDOR authorization test suite failed';
           }

@@ -371,23 +371,13 @@ export default function ConsolePage() {
           status: 'active'
         };
         setApiKeys((prev) => [importedEntry, ...prev.map((k) => ({ ...k, status: 'revoked' as const }))]);
-        setAddExistingSuccess(data.message || (data.isMaster ? 'Master Key Accepted! Master Admin Privileges Granted.' : 'Key imported successfully!'));
-
-        if (data.isMaster) {
-          document.cookie = "mcp_master_elevated=true; path=/; max-age=2592000";
-          try {
-            localStorage.setItem('mcp_master_elevated', 'true');
-          } catch {}
-        }
+        setAddExistingSuccess(data.message || 'Key imported successfully!');
 
         setTimeout(() => {
           setIsAddExistingOpen(false);
           setAddExistingKey('');
           setAddExistingName('');
           setAddExistingSuccess(null);
-          if (data.isMaster) {
-            window.location.reload();
-          }
         }, 1200);
       }
     } catch {

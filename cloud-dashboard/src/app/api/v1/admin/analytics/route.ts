@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createAdminSupabaseClient } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +21,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Forbidden: Master admin access required' }, { status: 403 });
     }
 
-    // Query real operational metrics from authoritative database
+    // Query real operational metrics from authoritative database using admin client
+    // (Bypasses RLS to capture complete cross-tenant aggregates for master admin)
+    const adminSupabase = createAdminSupabaseClient();
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -31,11 +34,11 @@ export async function GET(req: Request) {
       { count: threatsBlocked24h },
       { data: recentEvents }
     ] = await Promise.all([
-      supabase.from('organizations').select('*', { count: 'exact', head: true }),
-      supabase.from('agent_instances').select('*', { count: 'exact', head: true }).eq('status', 'ONLINE'),
-      supabase.from('security_events').select('*', { count: 'exact', head: true }).gte('created_at', twentyFourHoursAgo),
-      supabase.from('security_events').select('*', { count: 'exact', head: true }).in('event_type', ['BLOCK', 'QUARANTINE']).gte('created_at', twentyFourHoursAgo),
-      supabase.from('security_events').select('id, event_type, risk_level, tool_name, reason, created_at').order('created_at', { ascending: false }).limit(10)
+      adminSupabase.from('organizations').select('*', { count: 'exact', head: true }),
+      adminSupabase.from('agent_instances').select('*', { count: 'exact', head: true }).eq('status', 'ONLINE'),
+      adminSupabase.from('security_events').select('*', { count: 'exact', head: true }).gte('created_at', twentyFourHoursAgo),
+      adminSupabase.from('security_events').select('*', { count: 'exact', head: true }).in('event_type', ['BLOCK', 'QUARANTINE']).gte('created_at', twentyFourHoursAgo),
+      adminSupabase.from('security_events').select('id, event_type, risk_level, tool_name, reason, created_at').order('created_at', { ascending: false }).limit(10)
     ]);
 
     const analyticsPayload = {

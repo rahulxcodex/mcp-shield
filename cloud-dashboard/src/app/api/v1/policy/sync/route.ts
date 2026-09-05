@@ -1,5 +1,8 @@
+import { createClient } from '@/utils/supabase/server';
 import { createAdminSupabaseClient } from '@/lib/supabase';
-import { jsonSuccess, jsonError } from '@/lib/errors';
+import { getAuthenticatedUser, verifyOrgMembership } from '@/lib/authz';
+import { resolveProjectFromApiKey } from '@/lib/api-keys';
+import { jsonSuccess, jsonError } from '@/lib/api-response';
 import * as crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -19,6 +22,8 @@ export interface SignedPolicyManifest {
   policyVersion: string;
   organizationId: string;
   projectId?: string;
+  policyType: 'baseline' | 'tenant_custom';
+  isBaselineOnly: boolean;
   issuedAt: number;
   expiresAt: number;
   algorithm: 'Ed25519';
@@ -76,49 +81,114 @@ const BASELINE_PRODUCTION_RULES: PolicyRule[] = [
 
 const POLICY_VERSION = '2026.09.4';
 
-function signPolicyBundle(payloadString: string, privateKeyPem?: string): string {
+export function signPolicyBundle(payloadString: string, privateKeyPem?: string): string {
   if (!privateKeyPem) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('ED25519_SIGNING_KEY_REQUIRED: LICENSE_PRIVATE_KEY is required in production.');
+    if (process.env.NODE_ENV === 'test') {
+      const { privateKey } = crypto.generateKeyPairSync('ed25519');
+      const signature = crypto.sign(null, Buffer.from(payloadString), privateKey);
+      return signature.toString('base64');
     }
-    return crypto.createHash('sha256').update(payloadString).digest('base64');
+    throw new Error('ED25519_SIGNING_KEY_REQUIRED: Policy manifests must be signed with LICENSE_PRIVATE_KEY.');
   }
+
   try {
     const formattedKey = privateKeyPem.replace(/\\n/g, '\n').trim();
     const signature = crypto.sign(null, Buffer.from(payloadString), formattedKey);
     return signature.toString('base64');
-  } catch (err) {
-    console.error('Ed25519 Policy Signing Error:', err);
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('POLICY_SIGNING_FAILED: Failed to sign policy manifest with Ed25519 key.');
-    }
-    return crypto.createHash('sha256').update(payloadString).digest('base64');
+  } catch (err: any) {
+    console.error('Ed25519 Policy Signing Error:', err.message);
+    throw new Error(`POLICY_SIGNING_FAILED: Failed to sign policy manifest with Ed25519 private key: ${err.message}`);
   }
 }
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const organizationIdParam = url.searchParams.get('organization_id') || 'org-global';
-  const projectIdParam = url.searchParams.get('project_id') || undefined;
+  const organizationIdParam = url.searchParams.get('organization_id');
+  const projectIdParam = url.searchParams.get('project_id');
+  const apiKeyHeader = req.headers.get('X-MCP-Shield-Key') || req.headers.get('x-api-key');
 
-  const etag = `W/"policy-${POLICY_VERSION}-${organizationIdParam}-${projectIdParam || 'all'}"`;
+  let effectiveOrgId = organizationIdParam || 'org-global';
+  let effectiveProjectId = projectIdParam || undefined;
+
+  // 1. Authenticate via User Session OR Project API Key
+  if (apiKeyHeader) {
+    const supabaseAdmin = createAdminSupabaseClient();
+    const keyResolution = await resolveProjectFromApiKey(supabaseAdmin, apiKeyHeader);
+    if (!keyResolution.valid || !keyResolution.projectId) {
+      return jsonError('UNAUTHORIZED_API_KEY', 'Invalid or revoked API key', 401);
+    }
+    effectiveProjectId = keyResolution.projectId;
+    if (keyResolution.organizationId) {
+      effectiveOrgId = keyResolution.organizationId;
+    }
+  } else {
+    const supabase = await createClient();
+    const { user, error: authErr } = await getAuthenticatedUser(supabase);
+    if (authErr || !user) {
+      return jsonError('UNAUTHORIZED', 'Authentication required (Session or X-MCP-Shield-Key)', 401);
+    }
+
+    if (organizationIdParam) {
+      const memberCheck = await verifyOrgMembership(supabase, organizationIdParam, user.id, 'viewer');
+      if (!memberCheck.authorized) {
+        return jsonError('FORBIDDEN', memberCheck.error || 'Access denied', 403);
+      }
+    }
+  }
+
+  // 2. Assemble Policy Bundle with Tenant Custom Rules (SEC-FINDING-008)
+  let rules = [...BASELINE_PRODUCTION_RULES];
+  let policyVersion = POLICY_VERSION;
+  let isBaselineOnly = true;
+  let policyType: 'baseline' | 'tenant_custom' = 'baseline';
+
+  try {
+    const supabaseAdmin = createAdminSupabaseClient();
+    const { data: customBundle } = await supabaseAdmin
+      .from('policy_bundles')
+      .select('version, rules')
+      .eq('organization_id', effectiveOrgId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (customBundle) {
+      if (customBundle.version) {
+        policyVersion = `${POLICY_VERSION}-${customBundle.version}`;
+      }
+      if (Array.isArray(customBundle.rules) && customBundle.rules.length > 0) {
+        // Merge tenant custom rules with baseline production rules (custom rules take precedence)
+        const customRuleIds = new Set(customBundle.rules.map((r: any) => r.id));
+        const filteredBaseline = BASELINE_PRODUCTION_RULES.filter(r => !customRuleIds.has(r.id));
+        rules = [...customBundle.rules, ...filteredBaseline];
+        isBaselineOnly = false;
+        policyType = 'tenant_custom';
+      }
+    }
+  } catch (dbErr: any) {
+    console.warn('[POLICY_BUNDLE_DB_NOTICE]', dbErr?.message);
+  }
+
+  // 3. Compute ETag and Check Conditional Request
+  const etag = `W/"policy-${policyVersion}-${effectiveOrgId}-${effectiveProjectId || 'all'}"`;
   const ifNoneMatch = req.headers.get('if-none-match');
   if (ifNoneMatch === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag } });
   }
 
   const now = Date.now();
-  const expiresAt = now + 60 * 60 * 1000;
+  const expiresAt = now + 60 * 60 * 1000; // 1-hour cache TTL
 
   const unsignedManifest = {
     manifestVersion: '2.0.0',
-    policyVersion: POLICY_VERSION,
-    organizationId: organizationIdParam,
-    projectId: projectIdParam,
+    policyVersion,
+    organizationId: effectiveOrgId,
+    projectId: effectiveProjectId,
+    policyType,
+    isBaselineOnly,
     issuedAt: now,
     expiresAt,
     algorithm: 'Ed25519' as const,
-    rules: BASELINE_PRODUCTION_RULES,
+    rules,
   };
 
   const payloadString = JSON.stringify(unsignedManifest);

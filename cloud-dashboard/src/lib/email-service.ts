@@ -17,7 +17,46 @@ export interface EmailDispatchResult {
   error?: string;
 }
 
+export function sanitizeHeaderField(str: string): string {
+  if (!str || typeof str !== 'string') return '';
+  return str.replace(/[\r\n]+/g, ' ').trim();
+}
+
+export function escapeHtml(str: string): string {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function generateSupportEmailText(payload: SupportEmailPayload): string {
+  return [
+    `MCP-SHIELD SECURITY SUPPORT: ${payload.type.toUpperCase()}`,
+    `Ticket ID: ${payload.ticketId}`,
+    `Priority: ${payload.priority}`,
+    `From: ${payload.name} <${payload.email}>`,
+    `Submitted: ${payload.timestamp || new Date().toISOString()}`,
+    ``,
+    `SUBJECT: ${payload.subject}`,
+    ``,
+    `DETAILS:`,
+    payload.message,
+  ].join('\n');
+}
+
 export function generateSupportEmailHtml(payload: SupportEmailPayload): string {
+  const safeName = escapeHtml(payload.name);
+  const safeType = escapeHtml(payload.type);
+  const safePriority = escapeHtml(payload.priority);
+  const safeEmail = escapeHtml(payload.email);
+  const safeTicketId = escapeHtml(payload.ticketId);
+  const safeSubject = escapeHtml(payload.subject);
+  const safeMessage = escapeHtml(payload.message);
+  const safeTimestamp = escapeHtml(payload.timestamp || new Date().toUTCString());
+
   const priorityColor =
     payload.priority === 'Critical'
       ? '#ef4444'
@@ -35,49 +74,49 @@ export function generateSupportEmailHtml(payload: SupportEmailPayload): string {
   <body style="margin: 0; padding: 24px; background-color: #090a0f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f1f5f9;">
     <div style="max-width: 600px; margin: 0 auto; background-color: #0f172a; border-radius: 12px; overflow: hidden; border: 1px solid #1e293b; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);">
       <div style="background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%); padding: 24px;">
-        <h1 style="margin: 0; font-size: 20px; color: #000; font-weight: 800; letter-spacing: -0.5px;">??? MCP-SHIELD SECURITY SUPPORT</h1>
-        <p style="margin: 4px 0 0 0; color: #064e3b; font-size: 13px; font-weight: 600;">Incoming ${payload.type.toUpperCase()} Notification</p>
+        <h1 style="margin: 0; font-size: 20px; color: #000; font-weight: 800; letter-spacing: -0.5px;">MCP-SHIELD SECURITY SUPPORT</h1>
+        <p style="margin: 4px 0 0 0; color: #064e3b; font-size: 13px; font-weight: 600;">Incoming ${safeType.toUpperCase()} Notification</p>
       </div>
       
       <div style="padding: 24px;">
         <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; border-bottom: 1px solid #1e293b; padding-bottom: 16px;">
           <tr>
             <td style="color: #94a3b8; padding: 6px 0; width: 130px;">Ticket ID:</td>
-            <td style="color: #38bdf8; font-family: monospace; font-weight: bold; font-size: 14px;">${payload.ticketId}</td>
+            <td style="color: #38bdf8; font-family: monospace; font-weight: bold; font-size: 14px;">${safeTicketId}</td>
           </tr>
           <tr>
             <td style="color: #94a3b8; padding: 6px 0;">Inquiry Type:</td>
-            <td style="color: #f1f5f9; font-weight: 600;">${payload.type}</td>
+            <td style="color: #f1f5f9; font-weight: 600;">${safeType}</td>
           </tr>
           <tr>
             <td style="color: #94a3b8; padding: 6px 0;">Priority:</td>
-            <td><span style="background-color: ${priorityColor}22; color: ${priorityColor}; padding: 2px 8px; border-radius: 4px; font-weight: bold; border: 1px solid ${priorityColor}44;">${payload.priority}</span></td>
+            <td><span style="background-color: ${priorityColor}22; color: ${priorityColor}; padding: 2px 8px; border-radius: 4px; font-weight: bold; border: 1px solid ${priorityColor}44;">${safePriority}</span></td>
           </tr>
           <tr>
             <td style="color: #94a3b8; padding: 6px 0;">Sender Name:</td>
-            <td style="color: #f1f5f9;">${payload.name}</td>
+            <td style="color: #f1f5f9;">${safeName}</td>
           </tr>
           <tr>
             <td style="color: #94a3b8; padding: 6px 0;">Sender Email:</td>
-            <td><a href="mailto:${payload.email}" style="color: #38bdf8; text-decoration: none;">${payload.email}</a></td>
+            <td><a href="mailto:${safeEmail}" style="color: #38bdf8; text-decoration: none;">${safeEmail}</a></td>
           </tr>
           <tr>
             <td style="color: #94a3b8; padding: 6px 0;">Submitted At:</td>
-            <td style="color: #94a3b8;">${payload.timestamp || new Date().toUTCString()}</td>
+            <td style="color: #94a3b8;">${safeTimestamp}</td>
           </tr>
         </table>
 
         <div style="margin-bottom: 24px;">
           <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 6px; font-weight: 700;">Subject</div>
           <div style="font-size: 16px; font-weight: bold; color: #f8fafc; background-color: #1e293b; padding: 12px; border-radius: 8px; border-left: 4px solid #38bdf8;">
-            ${payload.subject}
+            ${safeSubject}
           </div>
         </div>
 
         <div style="margin-bottom: 24px;">
           <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 6px; font-weight: 700;">Inquiry / Complaint Details</div>
           <div style="font-size: 14px; line-height: 1.6; color: #cbd5e1; background-color: #1e293b; padding: 16px; border-radius: 8px; white-space: pre-wrap; word-break: break-word;">
-${payload.message}
+${safeMessage}
           </div>
         </div>
 
@@ -93,9 +132,14 @@ ${payload.message}
 }
 
 export async function sendSupportEmail(payload: SupportEmailPayload): Promise<EmailDispatchResult> {
-  const emailSubject = `[MCP-SHIELD ${payload.type.toUpperCase()}] ${payload.ticketId}: ${payload.subject}`;
+  const safeName = sanitizeHeaderField(payload.name);
+  const safeEmail = sanitizeHeaderField(payload.email);
+  const safeSubject = sanitizeHeaderField(payload.subject);
+  const safeTicketId = sanitizeHeaderField(payload.ticketId);
+  const emailSubject = `[MCP-SHIELD ${payload.type.toUpperCase()}] ${safeTicketId}: ${safeSubject}`;
+  const textBody = generateSupportEmailText(payload);
   const html = generateSupportEmailHtml(payload);
-  const targetRecipient = payload.recipient || process.env.SUPPORT_ROUTING_EMAIL || 'support@mcpshield.com';
+  const targetRecipient = sanitizeHeaderField(payload.recipient || process.env.SUPPORT_ROUTING_EMAIL || 'support@mcpshield.com');
 
   // 1. Primary: Resend REST API (https://resend.com)
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -111,8 +155,9 @@ export async function sendSupportEmail(payload: SupportEmailPayload): Promise<Em
         body: JSON.stringify({
           from: fromAddress,
           to: [targetRecipient],
-          reply_to: payload.email,
+          reply_to: safeEmail,
           subject: emailSubject,
+          text: textBody,
           html: html
         })
       });
@@ -149,12 +194,18 @@ export async function sendSupportEmail(payload: SupportEmailPayload): Promise<Em
             to: [{ email: targetRecipient }]
           }],
           from: { email: fromAddress, name: 'MCP Shield Support' },
-          reply_to: { email: payload.email, name: payload.name },
+          reply_to: { email: safeEmail, name: safeName },
           subject: emailSubject,
-          content: [{
-            type: 'text/html',
-            value: html
-          }]
+          content: [
+            {
+              type: 'text/plain',
+              value: textBody,
+            },
+            {
+              type: 'text/html',
+              value: html,
+            },
+          ]
         })
       });
 

@@ -9,6 +9,7 @@ Provides:
 import os
 import time
 import json
+import html
 import joblib
 import numpy as np
 import gradio as gr
@@ -175,13 +176,14 @@ def analyze_risk(
     if not signals: signals.append("Normal baseline behavior")
 
     family_badge_color = "#10b981" if top_family == "BENIGN" else "#ef4444"
+    safe_tool_name = html.escape(str(tool_name or 'unnamed_tool'))
 
     output_html = f"""
     <div style="padding: 20px; border-radius: 12px; background: #0f172a; color: white; font-family: sans-serif;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
             <div>
                 <span style="font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Target Tool</span>
-                <h2 style="margin: 4px 0 0 0; color: #f8fafc;">{tool_name or 'unnamed_tool'}</h2>
+                <h2 style="margin: 4px 0 0 0; color: #f8fafc;">{safe_tool_name}</h2>
             </div>
             <div style="text-align: right;">
                 <span style="font-size: 12px; color: #94a3b8;">Decision Tier</span>
