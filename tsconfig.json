@@ -117,7 +117,8 @@
     "dist",
     "dist/**/*",
     "node_modules",
-    "scripts/verify-website.ts"
+    "scripts/verify-website.ts",
+    "scripts/verify-p0-security.ts"
   ],
   "ts-node": {
     "compilerOptions": {
