@@ -1,6 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
+import { appConfig } from './config';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+export const supabase = createClient(appConfig.supabaseUrl, appConfig.supabaseServiceKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+});
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const createAdminSupabaseClient = () => {
+  return createClient(appConfig.supabaseUrl, appConfig.supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+};

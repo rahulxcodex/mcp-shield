@@ -5,6 +5,7 @@ import { sanitizeApiError } from '@/lib/errors';
 import { FEATURE_FLAGS } from '@/config/plans';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
  * Derives a deterministic, tamper-resistant referral code for a user

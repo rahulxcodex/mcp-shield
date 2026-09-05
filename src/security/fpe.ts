@@ -9,7 +9,13 @@ export class FormatPreservingEncryptor {
   private key: Buffer;
 
   constructor(options?: FpeOptions) {
-    const rawKey = options?.secretKey || process.env.MCP_SHIELD_FPE_KEY || 'default-mcp-shield-fpe-master-secret-key-32b';
+    let rawKey = options?.secretKey || process.env.MCP_SHIELD_FPE_KEY;
+    if (!rawKey) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('[MCP-SHIELD] FPE_KEY_REQUIRED: Format-preserving encryption requires an explicit secretKey or MCP_SHIELD_FPE_KEY in production.');
+      }
+      rawKey = 'default-mcp-shield-fpe-master-secret-key-32b';
+    }
     this.key = crypto.createHash('sha256').update(rawKey).digest();
   }
 

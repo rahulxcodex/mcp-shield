@@ -9,6 +9,8 @@
  * - Local heuristic evaluators allow offline CLI execution and zero-latency local development.
  */
 
+import { intelServiceCircuitBreaker } from './circuit-breaker';
+
 export interface RemoteIntelEvaluationResult {
   riskScore: number;
   verdict: 'ALLOW' | 'MONITOR' | 'CHALLENGE' | 'QUARANTINE' | 'BLOCK';
@@ -408,49 +410,78 @@ export class SecurityIntelligenceEngine {
       'https://mcp-shield-enterprise-intel.onrender.com';
 
     if (apiKey && apiKey.startsWith('mcpshld_live_')) {
-      try {
+      const remoteCall = async (): Promise<RemoteIntelEvaluationResult> => {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1200); // 1.2s bounded timeout
+        const timeout = setTimeout(() => controller.abort(), 1200);
 
-        const response = await fetch(`${endpoint}/api/v1/intel/scoring`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-          },
-          body: JSON.stringify({
-            toolName: params.toolName,
-            serverFingerprint: params.serverFingerprint,
-            astEntropy: params.astEntropy,
-            untrustedEgressRequested: params.untrustedEgressRequested,
-            toolCallFrequencyInWindow: params.toolCallFrequencyInWindow || 1,
-            credentialCanaryHits: params.credentialCanaryHits || 0,
-            unverifiedBinaryDrift: params.unverifiedBinaryDrift || false,
-            recentAnomalySequences: params.recentAnomalySequences || [],
-          }),
-          signal: controller.signal,
-        });
+        try {
+          // Primary attempt: /api/v1/decision, with fallback to /api/v1/intel/scoring
+          const primaryUrl = `${endpoint}/api/v1/decision`;
+          const response = await fetch(primaryUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+            },
+            body: JSON.stringify({
+              toolName: params.toolName,
+              serverFingerprint: params.serverFingerprint,
+              astEntropy: params.astEntropy,
+              untrustedEgressRequested: params.untrustedEgressRequested,
+              toolCallFrequencyInWindow: params.toolCallFrequencyInWindow || 1,
+              credentialCanaryHits: params.credentialCanaryHits || 0,
+              unverifiedBinaryDrift: params.unverifiedBinaryDrift || false,
+              recentAnomalySequences: params.recentAnomalySequences || [],
+            }),
+            signal: controller.signal,
+          });
 
-        clearTimeout(timeout);
+          clearTimeout(timeout);
 
-        if (response.ok) {
-          const json = await response.json();
-          if (json.data && typeof json.data.riskScore === 'number') {
-            return {
-              riskScore: json.data.riskScore,
-              verdict: json.data.verdict,
-              reasoningVector: json.data.reasoningVector || [],
-              recommendedAction: json.data.recommendedAction || 'Enforce cloud policy',
-              source: 'REMOTE_ENTERPRISE_INTEL',
-            };
+          if (response.ok) {
+            const json = await response.json();
+            if (json.data && typeof json.data.riskScore === 'number') {
+              return {
+                riskScore: json.data.riskScore,
+                verdict: json.data.decision || json.data.verdict,
+                reasoningVector: json.data.reasonCodes || json.data.reasoningVector || [],
+                recommendedAction: json.data.recommendedAction || 'Enforce cloud policy',
+                source: 'REMOTE_ENTERPRISE_INTEL',
+              };
+            }
           }
+          throw new Error(`Remote intel HTTP status ${response.status}`);
+        } catch (err) {
+          clearTimeout(timeout);
+          throw err;
         }
+      };
+
+      try {
+        return await intelServiceCircuitBreaker.execute(remoteCall, () => {
+          throw new Error('CircuitBreaker fallback triggered');
+        });
       } catch {
-        // Fall through to local fallback on network error or timeout
+        // High-Risk Fail-Closed Invariant:
+        // If high-risk vectors are present, fail-closed rather than granting permissive access
+        const isHighRisk =
+          params.untrustedEgressRequested ||
+          (params.credentialCanaryHits && params.credentialCanaryHits > 0) ||
+          params.astEntropy >= 7.0;
+
+        if (isHighRisk) {
+          return {
+            riskScore: 85,
+            verdict: 'BLOCK',
+            reasoningVector: ['REMOTE_INTEL_UNAVAILABLE', 'HIGH_RISK_VECTOR_FAIL_CLOSED'],
+            recommendedAction: 'Fail-closed block: remote intelligence unreachable for high-risk capability request',
+            source: 'LOCAL_FALLBACK',
+          };
+        }
       }
     }
 
-    // Local deterministic fallback
+    // Local deterministic fallback for standard low-risk calls
     const localScore = this.calculateRiskScore({
       serverId: params.serverFingerprint || 'local',
       toolName: params.toolName,
