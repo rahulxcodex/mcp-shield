@@ -1,10 +1,6 @@
 import { SecuritySession } from '../session';
 import { CapabilityManifestRegistry, CapabilityBrokerDecision } from '../../security/capability-manifest';
-import { ASTAnalyzer } from '../../security/ast-analyzer';
-import { PowerShellASTAnalyzer } from '../../security/powershell-analyzer';
-import { CmdAnalyzer } from '../../security/cmd-analyzer';
 import { UnicodeNormalizer } from '../../security/unicode-normalizer';
-import { MultiInterpreterAnalyzer } from '../../security/multi-interpreter-analyzer';
 import { Evidence } from '../../security/policy-engine';
 import { ToolCapabilities } from '../../security/capabilities';
 import { UnifiedInterpreterClassifier } from '../../security/interpreter-analyzer';
@@ -17,19 +13,13 @@ export interface ToolSecurityAnalysisResult {
 }
 
 export class ToolGuard {
-  private astAnalyzer: ASTAnalyzer;
-  private psAnalyzer: PowerShellASTAnalyzer;
-  private cmdAnalyzer: CmdAnalyzer;
   private manifestRegistry: CapabilityManifestRegistry;
   private interpreterClassifier: UnifiedInterpreterClassifier;
 
   constructor(
-    private session: SecuritySession,
+    public readonly session: SecuritySession,
     manifestRegistry?: CapabilityManifestRegistry
   ) {
-    this.astAnalyzer = new ASTAnalyzer();
-    this.psAnalyzer = new PowerShellASTAnalyzer();
-    this.cmdAnalyzer = new CmdAnalyzer(this.psAnalyzer);
     this.manifestRegistry = manifestRegistry || new CapabilityManifestRegistry(false);
     this.interpreterClassifier = new UnifiedInterpreterClassifier();
   }
@@ -48,7 +38,7 @@ export class ToolGuard {
   }
 
   public analyzeToolParameters(
-    toolName: string,
+    _toolName: string,
     rawArgs: Record<string, any>,
     isShellTool: boolean = false
   ): ToolSecurityAnalysisResult {

@@ -2,10 +2,8 @@ import { ProtocolValidator } from '../../src/core/protocol-validator';
 import { CapabilityManifestRegistry, ToolCapabilityManifest } from '../../src/security/capability-manifest';
 import { SecuritySession } from '../../src/core/session';
 import { CanaryManager } from '../../src/security/canary';
-import { COWFileSystem } from '../../src/sandbox/cow-fs';
 import { IngressGuard } from '../../src/core/guards/ingress-guard';
 import { ToolGuard } from '../../src/core/guards/tool-guard';
-import { ExecutionBroker } from '../../src/core/broker/execution-broker';
 import { OutputGuard } from '../../src/core/guards/output-guard';
 import { LifecycleManager } from '../../src/core/lifecycle/lifecycle-manager';
 import * as fs from 'fs';
@@ -184,10 +182,8 @@ describe('Capability Execution Broker & Guards Security Suite', () => {
   describe('Guards & Broker Interactions', () => {
     let session: SecuritySession;
     let canaryManager: CanaryManager;
-    let cowFs: COWFileSystem;
     let ingressGuard: IngressGuard;
     let toolGuard: ToolGuard;
-    let executionBroker: ExecutionBroker;
     let outputGuard: OutputGuard;
     let stagingDir: string;
 
@@ -196,10 +192,8 @@ describe('Capability Execution Broker & Guards Security Suite', () => {
       await session.start();
       canaryManager = new CanaryManager();
       stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-shield-broker-test-'));
-      cowFs = new COWFileSystem(stagingDir);
       ingressGuard = new IngressGuard(session, canaryManager);
       toolGuard = new ToolGuard(session);
-      executionBroker = new ExecutionBroker(session, cowFs);
       outputGuard = new OutputGuard(session, canaryManager);
     });
 

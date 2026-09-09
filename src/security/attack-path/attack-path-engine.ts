@@ -1,5 +1,5 @@
-import { AttackPath, AttackNode, SecurityDecision } from './attack-path-types';
-import { ToxicFlowEngine, ToxicFlowViolation } from '../dataflow/toxic-flow-engine';
+import { AttackPath, SecurityDecision } from './attack-path-types';
+import { ToxicFlowEngine } from '../dataflow/toxic-flow-engine';
 
 export interface ChainEvaluationResult {
   isDangerous: boolean;

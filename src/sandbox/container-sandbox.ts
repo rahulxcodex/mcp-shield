@@ -1,4 +1,4 @@
-import { spawn, ChildProcess, execSync } from 'child_process';
+import { execSync } from 'child_process';
 import * as path from 'path';
 
 export interface ContainerSandboxOptions {
@@ -43,7 +43,7 @@ export class ContainerSandbox {
       image: customOptions.image || 'node:20-alpine',
       network: customOptions.network || 'none',
       readOnlyRoot: customOptions.readOnlyRoot ?? true,
-      readOnlyWorkspace: customOptions.readOnlyWorkspace ?? false,
+      readOnlyWorkspace: customOptions.readOnlyWorkspace ?? true,
       memoryLimit: customOptions.memoryLimit || '512m',
       cpuQuota: customOptions.cpuQuota || '1.0',
       dropCapabilities: customOptions.dropCapabilities || ['ALL'],

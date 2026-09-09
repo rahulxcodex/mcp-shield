@@ -68,7 +68,7 @@ export class SecurityReplayEngine {
    */
   public async replayEvents(
     events: ReplayInputEvent[],
-    config: ReplayConfig = {}
+    _config: ReplayConfig = {}
   ): Promise<ReplaySummaryReport> {
     const comparisons: ReplayComparisonResult[] = [];
     let totalRiskDelta = 0;

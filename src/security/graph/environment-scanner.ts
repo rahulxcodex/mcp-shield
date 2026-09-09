@@ -6,7 +6,7 @@
  * enumerates dangerous multi-tool compositions, and generates actionable remediations.
  */
 
-import { SecurityGraph, AttackGraphNode, AttackGraphEdge, AttackPathAnalysisResult } from './security-graph';
+import { SecurityGraph } from './security-graph';
 import { ToolCapabilities } from '../capabilities';
 
 export interface DiscoveredTool {

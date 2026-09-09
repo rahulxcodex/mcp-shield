@@ -5,7 +5,7 @@ import { UnicodeNormalizer } from '../unicode-normalizer';
 import { IpClassifier, EgressSecurityConfig } from '../ip-utils';
 import { Sanitizer } from '../sanitizer';
 import { PolicyEngine } from '../policy-engine';
-import { PolicyRoutingEngine, TenantContext } from '../policy-routing';
+import { PolicyRoutingEngine } from '../policy-routing';
 import { AuthorizationModule } from '../authorization';
 
 export type MutationType =

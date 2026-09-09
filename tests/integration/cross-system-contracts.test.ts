@@ -73,7 +73,6 @@ describe('Cross-System Contracts & Security Invariants', () => {
 
     it('should assign unique eventId and incrementing sequence numbers', () => {
       const publisher = new CloudTelemetryPublisher({ enabled: true, apiKey: 'mcp_live_test0101_secret' });
-      const emittedEvents: SecurityTelemetryPayload[] = [];
 
       // Intercept queue
       (publisher as any).queue = [];

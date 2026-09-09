@@ -1,1 +1,0 @@
-export const HL7_MUMPS = true;

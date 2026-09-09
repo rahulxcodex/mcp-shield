@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { PowerShellASTAnalyzer } from './powershell-analyzer';
 
 export interface CmdAnalysisResult {

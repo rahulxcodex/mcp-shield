@@ -10,7 +10,7 @@
  * - Validates models in offline holdout evaluation before shadow deployment
  */
 
-import { ProprietaryAttackCorpusStore, ConfirmedSecurityEvent } from './proprietary-attack-corpus';
+import { ProprietaryAttackCorpusStore } from './proprietary-attack-corpus';
 import { AdversarialAttackGenerator, MutationFamily } from '../adversarial/adversarial-generator';
 import { FeatureVector, FeatureExtractor } from './feature-extractor';
 

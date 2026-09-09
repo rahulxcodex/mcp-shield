@@ -1,7 +1,6 @@
 import { SecretSanitizer } from '../../src/security/sanitizer';
 import { RateLimiter } from '../../src/security/rate-limiter';
 import { JsonRpcStreamFramer } from '../../src/core/stream-framing';
-import { PolicyEngine } from '../../src/security/policy-engine';
 import { ASTAnalyzer } from '../../src/security/ast-analyzer';
 
 jest.setTimeout(30000);

@@ -1,6 +1,6 @@
 import { SecuritySession } from '../session';
 import { CanaryManager } from '../../security/canary';
-import { ProtocolValidator, ProtocolValidationResult } from '../protocol-validator';
+import { ProtocolValidator } from '../protocol-validator';
 import { ResponseSecurityPipeline } from '../../security/response/response-security-pipeline';
 import { McpSurfaceInspector } from '../../security/protocol/mcp-surface-inspector';
 
@@ -74,7 +74,10 @@ export class OutputGuard {
 
       for (const tool of message.result.tools) {
         try {
-          this.session.registerTool(tool.name, tool.description || '', tool.inputSchema || {});
+          this.session.registerTool(tool.name, tool.description || '', tool.inputSchema || {}, {
+            annotations: (tool as any).annotations,
+            executionMetadata: (tool as any).executionMetadata
+          });
         } catch (e: any) {
           onLog({ type: 'schema_violation', reason: e.message });
           onKillChild();

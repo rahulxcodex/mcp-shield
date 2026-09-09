@@ -6,7 +6,6 @@
  * human feedback labels, and regression replay suites.
  */
 
-import { SecurityEvidence } from '../evidence';
 import { hashCanonicalJson } from '../canonical-json';
 
 export type IncidentOutcome = 'BLOCKED' | 'QUARANTINED' | 'FALSE_POSITIVE' | 'BYPASS_DETECTED' | 'CONFIRMED_EXPLOIT';

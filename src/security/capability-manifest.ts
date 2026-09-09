@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import { ToolCapabilities } from './capabilities';
 import { hashCanonicalJson } from './canonical-json';
 import { PathSecurityResolver } from './path-resolver';

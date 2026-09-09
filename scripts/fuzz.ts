@@ -1,6 +1,4 @@
 import fc from 'fast-check';
-import * as fs from 'fs';
-import * as path from 'path';
 import { ProtocolValidator } from '../src/core/protocol-validator';
 import { RequestDispatcher } from '../src/core/dispatcher';
 import { ASTAnalyzer } from '../src/security/ast-analyzer';

@@ -162,7 +162,7 @@ export class ResponseSecurityPipeline {
       return snippets;
     }
 
-    for (const [key, val] of Object.entries(obj)) {
+    for (const val of Object.values(obj)) {
       if (typeof val === 'string') {
         snippets.push(val);
       } else if (typeof val === 'object' && val !== null) {

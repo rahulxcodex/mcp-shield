@@ -1,4 +1,4 @@
-import { AttackCorpusRegistry, AttackCorpusEntry, ExpectedDecision } from '../attack-corpus';
+import { AttackCorpusRegistry, ExpectedDecision } from '../attack-corpus';
 
 export type MutationFamily =
   | 'URL_ENCODING'

@@ -1,4 +1,4 @@
-import { SecurityEvidence, ThreatCategory } from './evidence';
+import { SecurityEvidence } from './evidence';
 import { ASTAnalyzer } from './ast-analyzer';
 import { PowerShellASTAnalyzer } from './powershell-analyzer';
 import { CmdAnalyzer } from './cmd-analyzer';

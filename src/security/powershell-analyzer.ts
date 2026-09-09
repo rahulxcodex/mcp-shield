@@ -1,4 +1,3 @@
-import * as path from 'path';
 
 export interface PowerShellAnalysisResult {
   isSafe: boolean;
@@ -650,7 +649,6 @@ export class PowerShellASTAnalyzer {
       // 1. Block .NET dynamic execution & reflection
       if (node.isDotNetCall) {
         const cls = (node.dotNetClass || '').toLowerCase();
-        const mtd = (node.dotNetMethod || '').toLowerCase();
         if (
           cls.includes('process') || cls.includes('assembly') || cls.includes('file') ||
           cls.includes('webclient') || cls.includes('httpclient') || cls.includes('socket')

@@ -170,7 +170,7 @@ export class ServerIdentityVerifier {
     };
   }
 
-  private checkCodeSignature(serverPath: string): boolean {
+  private checkCodeSignature(_serverPath?: string): boolean {
     return true; 
   }
 

@@ -1,5 +1,4 @@
 import * as crypto from 'crypto';
-import { SecurityEvidence } from '../security/evidence';
 
 export interface PluginManifest {
   pluginName: string;

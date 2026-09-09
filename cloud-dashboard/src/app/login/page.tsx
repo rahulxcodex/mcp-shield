@@ -360,6 +360,12 @@ function LoginForm() {
                     ? 'Sign In'
                     : 'Send Magic Link'}
                 </button>
+                <p className="text-[11px] text-slate-500 text-center leading-normal pt-1">
+                  By continuing, you agree to MCP Shield's{' '}
+                  <Link href="/terms" className="text-slate-400 hover:text-emerald-400 underline underline-offset-2">Terms of Service</Link>
+                  {' '}and{' '}
+                  <Link href="/privacy" className="text-slate-400 hover:text-emerald-400 underline underline-offset-2">Privacy Policy</Link>.
+                </p>
               </form>
             </div>
           )}

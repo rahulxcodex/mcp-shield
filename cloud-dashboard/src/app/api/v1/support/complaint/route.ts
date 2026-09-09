@@ -17,7 +17,12 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { name, email, type = 'Complaint', priority = 'Medium', subject, message } = body;
+    const { name, email, type = 'Complaint', priority = 'Medium', subject, message, website_trap } = body;
+
+    // Honeypot spam rejection
+    if (website_trap && typeof website_trap === 'string' && website_trap.trim().length > 0) {
+      return NextResponse.json({ error: 'Automated submission rejected.' }, { status: 400 });
+    }
 
     // Strict input validation & size bounding
     if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 254) {

@@ -69,8 +69,6 @@ export class InstallScriptAnalyzer {
     sourceFile: string,
     findings: MaliciousScriptFinding[]
   ): void {
-    const lower = command.toLowerCase();
-
     // 1. Reverse Shell Patterns
     if (
       /nc(?:\.traditional)?\s+-[e|c]\b/i.test(command) ||

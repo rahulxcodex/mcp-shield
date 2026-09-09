@@ -435,7 +435,7 @@ export class ASTAnalyzer {
     return { isSafe: true };
   }
 
-  private classifyInterpreterMode(cmdName: string, args: string[]): {
+  private classifyInterpreterMode(_cmdName: string, args: string[]): {
     mode: 'SAFE_ARGS' | 'SCRIPT_FILE' | 'INLINE_CODE' | 'DYNAMIC_CODE';
     detail?: string;
   } {

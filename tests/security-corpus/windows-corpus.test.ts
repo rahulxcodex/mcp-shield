@@ -1,13 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ASTAnalyzer } from '../../src/security/ast-analyzer';
-import { PowerShellASTAnalyzer } from '../../src/security/powershell-analyzer';
-import { CmdAnalyzer } from '../../src/security/cmd-analyzer';
 
 describe('Windows Adversarial Security Corpus Regression Harness', () => {
   let astAnalyzer: ASTAnalyzer;
-  let psAnalyzer: PowerShellASTAnalyzer;
-  let cmdAnalyzer: CmdAnalyzer;
 
   const loadCorpus = (fileName: string) => {
     const fullPath = path.join(__dirname, 'windows', fileName);
@@ -20,8 +16,6 @@ describe('Windows Adversarial Security Corpus Regression Harness', () => {
 
   beforeAll(() => {
     astAnalyzer = new ASTAnalyzer();
-    psAnalyzer = new PowerShellASTAnalyzer();
-    cmdAnalyzer = new CmdAnalyzer(psAnalyzer);
   });
 
   describe('1. PowerShell Bypass Corpus (powershell-bypass.json)', () => {

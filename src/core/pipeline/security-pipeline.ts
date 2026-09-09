@@ -1,6 +1,5 @@
-import { SecurityEvidence, ThreatCategory } from '../../security/evidence';
+import { SecurityEvidence } from '../../security/evidence';
 import { ToolCapabilities, CapabilityInferencer, CapabilityEvidence } from '../../security/capabilities';
-import { UnicodeNormalizer } from '../../security/unicode-normalizer';
 import { UnifiedInterpreterClassifier } from '../../security/interpreter-analyzer';
 import { PathSecurityResolver } from '../../security/path-resolver';
 import { FeatureExtractor, FeatureVector } from '../../security/ml/feature-extractor';

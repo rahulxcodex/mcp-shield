@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import { SecretVault } from './vault';
 
 export type SecretConfidence = 'KNOWN_SECRET' | 'LIKELY_SECRET' | 'HIGH_ENTROPY' | 'BENIGN_HIGH_ENTROPY';
@@ -118,6 +117,34 @@ export const MODULAR_SECRET_DETECTORS: ModularSecretDetector[] = [
     regex: /SG\.[a-zA-Z0-9_\-\.]{66}/g,
     confidence: 'KNOWN_SECRET',
     validator: (m) => m.startsWith('SG.')
+  },
+  {
+    name: 'IBAN_EUROPE',
+    provider: 'Banking/Financial',
+    regex: /[A-Z]{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}(?:[A-Z0-9]?){0,16}/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.length >= 15 && m.length <= 34
+  },
+  {
+    name: 'INDIAN_PAN',
+    provider: 'Government/Financial',
+    regex: /[A-Z]{5}[0-9]{4}[A-Z]/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(m)
+  },
+  {
+    name: 'INDIAN_AADHAAR',
+    provider: 'Government/PII',
+    regex: /\b[2-9][0-9]{3}\s[0-9]{4}\s[0-9]{4}\b/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => m.replace(/\s/g, '').length === 12
+  },
+  {
+    name: 'BRAZILIAN_CPF',
+    provider: 'Government/PII',
+    regex: /\b[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}\b/g,
+    confidence: 'KNOWN_SECRET',
+    validator: (m) => /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(m)
   }
 ];
 
@@ -127,16 +154,24 @@ export const SECRET_PATTERNS = MODULAR_SECRET_DETECTORS.map(d => ({ name: d.name
 export const HONEY_TOKENS = process.env.MCP_SHIELD_HONEY_TOKENS ? process.env.MCP_SHIELD_HONEY_TOKENS.split(',') : [];
 
 // Combine all patterns into a single Regex. Capture groups map to patterns.
-const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9\-_]{20,})|(xox[baprs]-[a-zA-Z0-9\-_]{10,})|(ghp_[a-zA-Z0-9]{30,40}|github_pat_[a-zA-Z0-9_]{30,}|gho_[a-zA-Z0-9]{30,40}|ghu_[a-zA-Z0-9]{30,40}|ghs_[a-zA-Z0-9]{30,40}|ghr_[a-zA-Z0-9]{30,40})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,}|rk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----[\s\S]+?-----END (?:[A-Z0-9_-]+ )?PRIVATE KEY-----)|(sbp_[a-zA-Z0-9]{40})|(SK[0-9a-fA-F]{32})|(SG\.[a-zA-Z0-9_\-\.]{66})|\b([a-zA-Z0-9+\/_\-]{40,}={0,2})\b/g;
+const COMPOUND_REGEX = /((?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16})|(sk-ant-api03-[a-zA-Z0-9\-_]{20,})|(sk-(?:proj-)?[a-zA-Z0-9\-_]{20,})|(xox[baprs]-[a-zA-Z0-9\-_]{10,})|(ghp_[a-zA-Z0-9]{30,40}|github_pat_[a-zA-Z0-9_]{30,}|gho_[a-zA-Z0-9]{30,40}|ghu_[a-zA-Z0-9]{30,40}|ghs_[a-zA-Z0-9]{30,40}|ghr_[a-zA-Z0-9]{30,40})|(AIza[0-9A-Za-z\-_]{35})|(sk_(?:live|test)_[0-9a-zA-Z]{24,}|rk_(?:live|test)_[0-9a-zA-Z]{24,})|(hf_[a-zA-Z0-9]{34,})|(glpat-[0-9a-zA-Z\-_]{20,})|(ey[A-Za-z0-9\-_=]{10,}\.ey[A-Za-z0-9\-_=]{10,}\.[A-Za-z0-9\-_=]{10,})|(-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----[\s\S]+?-----END (?:[A-Z0-9_-]+ )?PRIVATE KEY-----)|(sbp_[a-zA-Z0-9]{40})|(SK[0-9a-fA-F]{32})|(SG\.[a-zA-Z0-9_\-\.]{66})|([A-Z]{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}(?:[A-Z0-9]?){0,16})|([A-Z]{5}[0-9]{4}[A-Z])|(\b[2-9][0-9]{3}\s[0-9]{4}\s[0-9]{4}\b)|(\b[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}\b)|\b([a-zA-Z0-9+\/_\-]{40,}={0,2})\b/g;
 
 export class SecretSanitizer {
   private vault: SecretVault;
   private config?: any;
+  private customPatterns: { name: string; regex: RegExp }[] = [];
 
   constructor(config?: any) {
     this.config = config;
     const ttlMs = config?.vaultTtlMs;
     this.vault = new SecretVault(ttlMs);
+    if (config?.customPatterns && Array.isArray(config.customPatterns)) {
+      this.customPatterns = config.customPatterns;
+    }
+  }
+
+  public registerCustomPattern(name: string, regex: RegExp): void {
+    this.customPatterns.push({ name, regex });
   }
 
   private charFrequencies = new Uint32Array(256);
@@ -202,9 +237,9 @@ export class SecretSanitizer {
   }
 
   public sanitize(payload: string, context?: import('./vault').SecretContext): string {
-    return payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, google, stripe, hf, gitlab, jwt, ssh, supabase, twilio, sendgrid, highEntropy, offset, fullString) => {
-      // If it matched a known pattern (groups 1-14), register immediately
-      if (aws || anthropic || openai || slack || github || google || stripe || hf || gitlab || jwt || ssh || supabase || twilio || sendgrid) {
+    let result = payload.replace(COMPOUND_REGEX, (match, aws, anthropic, openai, slack, github, google, stripe, hf, gitlab, jwt, ssh, supabase, twilio, sendgrid, iban, pan, aadhaar, cpf, highEntropy, offset, fullString) => {
+      // If it matched a known pattern (groups 1-18), register immediately
+      if (aws || anthropic || openai || slack || github || google || stripe || hf || gitlab || jwt || ssh || supabase || twilio || sendgrid || iban || pan || aadhaar || cpf) {
         return this.registerSecret(match, context);
       }
       
@@ -241,6 +276,15 @@ export class SecretSanitizer {
       }
       return match;
     });
+
+    // Process any custom enterprise patterns
+    for (const pattern of this.customPatterns) {
+      result = result.replace(pattern.regex, (match) => {
+        return this.registerSecret(match, context);
+      });
+    }
+
+    return result;
   }
 
   public restore(payload: string, context?: import('./vault').SecretContext): string {

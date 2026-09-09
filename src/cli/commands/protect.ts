@@ -171,7 +171,7 @@ export class ProtectCommand {
     const shieldScript = shieldScriptPath || this.resolveShieldExecutable();
 
     if (config.mcpServers && Object.keys(config.mcpServers).length > 0) {
-      for (const [serverName, serverDetails] of Object.entries<McpServerEntry>(config.mcpServers)) {
+      for (const serverDetails of Object.values<McpServerEntry>(config.mcpServers)) {
         result.serverCount++;
 
         if (!serverDetails.command) continue;

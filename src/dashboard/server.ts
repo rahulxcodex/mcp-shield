@@ -56,7 +56,7 @@ export class DashboardServer {
       res.status(401).send('Unauthorized: Invalid or missing session credentials.');
     });
 
-    this.app.get('/', (req, res) => {
+    this.app.get('/', (_req, res) => {
       res.setHeader('Content-Type', 'text/html');
       res.send(getDashboardHtml(this.authToken, this.getPort()));
     });

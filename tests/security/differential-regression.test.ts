@@ -1,17 +1,11 @@
 import { DifferentialRegressionRunner } from '../../src/security/differential/differential-runner';
 import { ASTAnalyzer } from '../../src/security/ast-analyzer';
-import { PowerShellASTAnalyzer } from '../../src/security/powershell-analyzer';
-import { CmdAnalyzer } from '../../src/security/cmd-analyzer';
 
 describe('Roadmap Step 2 — Differential Regression Testing Suite', () => {
   let astAnalyzer: ASTAnalyzer;
-  let psAnalyzer: PowerShellASTAnalyzer;
-  let cmdAnalyzer: CmdAnalyzer;
 
   beforeEach(() => {
     astAnalyzer = new ASTAnalyzer();
-    psAnalyzer = new PowerShellASTAnalyzer();
-    cmdAnalyzer = new CmdAnalyzer(psAnalyzer);
   });
 
   it('runs differential comparison between ASTAnalyzer and baseline reference with zero unexpected divergence', () => {

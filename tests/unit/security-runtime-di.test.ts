@@ -1,4 +1,4 @@
-import { SecurityRuntime, InMemorySessionStore, InMemoryBehaviorStore, InMemoryReputationStore, InMemoryThreatCorpusStore } from '../../src/core/runtime/security-runtime';
+import { SecurityRuntime, InMemoryBehaviorStore } from '../../src/core/runtime/security-runtime';
 
 describe('SecurityRuntime & Dependency Injection (Roadmap Section 10)', () => {
   it('allows multiple independent runtime instances without shared mutable state', () => {

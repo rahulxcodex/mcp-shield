@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import { hashCanonicalJson } from './canonical-json';
 
 export interface ToolCapabilities {
@@ -36,6 +35,7 @@ export interface ToolProfile {
   readonly description: string;
   readonly inputSchema: any;
   readonly schemaHash: string;
+  readonly definitionHash?: string;
   readonly capabilities: ToolCapabilities;
   readonly executionClasses: readonly ExecutionClass[];
   readonly declaredCapabilities: ToolCapabilities;
@@ -290,9 +290,18 @@ export class CapabilityInferencer {
       adminPolicy?: Partial<ToolCapabilities>;
       signedManifest?: Partial<ToolCapabilities>;
       verifiedPublisher?: boolean;
+      annotations?: any;
+      executionMetadata?: any;
     }
   ): ToolProfile {
     const hash = this.hashSchema(schema);
+    const definitionHash = this.hashToolDefinition({
+      name: toolName,
+      description,
+      inputSchema: schema,
+      annotations: options?.annotations,
+      executionMetadata: options?.executionMetadata
+    });
     const inferred = this.infer(toolName, schema, description);
     const declared = this.getDeclared(schema);
     const resolved = this.resolveEffectiveCapabilities(toolName, schema, description, options);
@@ -317,6 +326,7 @@ export class CapabilityInferencer {
       description: description || '',
       inputSchema: schema,
       schemaHash: hash,
+      definitionHash,
       capabilities: inferred,
       executionClasses,
       declaredCapabilities: declared,
@@ -331,5 +341,21 @@ export class CapabilityInferencer {
 
   public static hashSchema(schema: any): string {
     return hashCanonicalJson(schema);
+  }
+
+  public static hashToolDefinition(tool: {
+    name: string;
+    description?: string;
+    inputSchema?: any;
+    annotations?: any;
+    executionMetadata?: any;
+  }): string {
+    return hashCanonicalJson({
+      name: (tool.name || '').trim(),
+      description: (tool.description || '').trim(),
+      inputSchema: tool.inputSchema || {},
+      annotations: tool.annotations || null,
+      executionMetadata: tool.executionMetadata || null
+    });
   }
 }

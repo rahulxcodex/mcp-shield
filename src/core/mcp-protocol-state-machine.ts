@@ -39,6 +39,14 @@ export class MCPProtocolStateMachine {
   private clientCapabilities: Record<string, any> = {};
   private serverCapabilities: Record<string, any> = {};
 
+  public getClientCapabilities(): Record<string, any> {
+    return this.clientCapabilities;
+  }
+
+  public getServerCapabilities(): Record<string, any> {
+    return this.serverCapabilities;
+  }
+
   constructor() {
     this.recordTransition(MCPProtocolState.CONNECTING, 'initial_connection');
   }
@@ -86,7 +94,6 @@ export class MCPProtocolStateMachine {
     }
 
     const method = message.method;
-    const isNotification = message.id === undefined || message.id === null;
 
     // Reject cancellation of initialize request
     if (method === 'notifications/cancelled' && message.params?.requestId !== undefined) {
@@ -225,7 +232,6 @@ export class MCPProtocolStateMachine {
   }
 
   private transition(to: MCPProtocolState, trigger: string, metadata?: Record<string, any>): void {
-    const from = this.state;
     this.state = to;
     this.recordTransition(to, trigger, metadata);
   }

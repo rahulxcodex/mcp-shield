@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import Link from 'next/link';
 import LandingNavbar from '@/components/LandingNavbar';
 import AttackSimulator from '@/components/AttackSimulator';
@@ -65,7 +65,7 @@ export default function HomePage() {
                 <a
                   href="https://github.com/rahulxcodex/mcp-shield"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-medium text-sm transition flex items-center justify-center gap-2"
                 >
                   <GithubIcon className="w-4 h-4" />
@@ -330,7 +330,7 @@ export default function HomePage() {
               <a
                 href="https://github.com/rahulxcodex/mcp-shield"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="w-full sm:w-auto px-8 py-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
               >
                 <GithubIcon className="w-4 h-4" />
@@ -343,29 +343,42 @@ export default function HomePage() {
 
       {/* FOOTER */}
       <footer className="border-t border-slate-800/80 bg-[#08090e] py-12 text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <div className="h-7 w-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-3">
+              <div className="h-7 w-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-bold text-slate-200">MCP-SHIELD</span>
+                <span className="text-slate-500 ml-2">Zero-Trust Model Context Protocol Gateway</span>
+              </div>
             </div>
+
+            <div className="flex items-center gap-6">
+              <a href="#features" className="hover:text-white transition">Features</a>
+              <a href="#simulator" className="hover:text-white transition">Simulator</a>
+              <a href="#install" className="hover:text-white transition">Installation</a>
+              <Link href="/guide" className="hover:text-white transition">Guide</Link>
+              <Link href="/console" className="hover:text-white transition text-emerald-400">Console</Link>
+              <a href="https://github.com/rahulxcodex/mcp-shield" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">
+                GitHub
+              </a>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800/60 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
+            <div className="flex flex-wrap items-center gap-5">
+              <Link href="/privacy" className="hover:text-slate-300 transition">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-slate-300 transition">Terms of Service</Link>
+              <Link href="/security" className="hover:text-slate-300 transition">Security Model</Link>
+              <Link href="/compliance" className="hover:text-slate-300 transition">Compliance</Link>
+              <Link href="/subprocessors" className="hover:text-slate-300 transition">Subprocessors</Link>
+            </div>
+
             <div>
-              <span className="font-bold text-slate-200">MCP-SHIELD</span>
-              <span className="text-slate-500 ml-2">Zero-Trust Model Context Protocol Gateway</span>
+              Open Source under Apache-2.0 &amp; MIT. © {new Date().getFullYear()} MCP Shield Project.
             </div>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <a href="#features" className="hover:text-white transition">Features</a>
-            <a href="#simulator" className="hover:text-white transition">Simulator</a>
-            <a href="#install" className="hover:text-white transition">Installation</a>
-            <Link href="/console" className="hover:text-white transition text-emerald-400">Console</Link>
-            <a href="https://github.com/rahulxcodex/mcp-shield" target="_blank" rel="noreferrer" className="hover:text-white transition">
-              GitHub
-            </a>
-          </div>
-
-          <div className="text-slate-500">
-            Open Source under Apache-2.0 & MIT.
           </div>
         </div>
       </footer>

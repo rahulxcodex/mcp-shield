@@ -10,9 +10,9 @@
  * Provides shared security graph, policy, identity, attack paths, ML intelligence, DLP, and audit.
  */
 
-import { SecurityEvidence, ThreatCategory } from '../evidence';
+import { SecurityEvidence } from '../evidence';
 import { FeatureExtractor, FeatureVector } from '../ml/feature-extractor';
-import { TabularRiskModel, ModelAPrediction } from '../ml/models/tabular-risk-model';
+import { TabularRiskModel } from '../ml/models/tabular-risk-model';
 import { TextSecurityClassifier } from '../ml/models/text-security-classifier';
 import { BehaviorAnomalyDetector } from '../ml/models/behavior-anomaly-detector';
 import { NoveltyScorer, NoveltyReport } from '../ml/novelty-scorer';

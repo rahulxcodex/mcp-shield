@@ -72,7 +72,7 @@ export class AuthorizationModule {
   /**
    * Issues Just-In-Time (JIT) least-privilege credentials
    */
-  public issueJitCredential(service: string, durationMinutes: number): string {
+  public issueJitCredential(_service?: string, _durationMinutes?: number): string {
     const token = crypto.randomBytes(32).toString('hex');
     return `JIT_${token}`;
   }

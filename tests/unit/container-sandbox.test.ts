@@ -49,8 +49,21 @@ describe('ContainerSandbox', () => {
     const dockerArgs = sandbox.buildDockerArgs('cat', ['file.txt']);
     const volumeIndex = dockerArgs.indexOf('-v');
     expect(volumeIndex).toBeGreaterThan(-1);
-    expect(dockerArgs[volumeIndex + 1]).toContain('/workspace:rw');
+    expect(dockerArgs[volumeIndex + 1]).toContain('/workspace:ro');
     expect(dockerArgs).toContain('-w');
     expect(dockerArgs).toContain('/workspace');
+  });
+
+  it('should allow writable workspace when readOnlyWorkspace is explicitly false', () => {
+    const sandbox = new ContainerSandbox({
+      enabled: true,
+      workspaceMount: '/custom/workspace',
+      readOnlyWorkspace: false
+    });
+
+    const dockerArgs = sandbox.buildDockerArgs('cat', ['file.txt']);
+    const volumeIndex = dockerArgs.indexOf('-v');
+    expect(volumeIndex).toBeGreaterThan(-1);
+    expect(dockerArgs[volumeIndex + 1]).toContain('/workspace:rw');
   });
 });

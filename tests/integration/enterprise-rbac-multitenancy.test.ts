@@ -1,5 +1,4 @@
 import { PolicyEngine, ShieldConfig } from '../../src/security/policy-engine';
-import { SecretSanitizer } from '../../src/security/sanitizer';
 
 describe('Enterprise Multi-Tenancy, RBAC & JIT Elevation Integration Suite', () => {
   describe('RBAC-01: Role-Based Policy & Action Authorization', () => {
@@ -137,7 +136,7 @@ describe('Enterprise Multi-Tenancy, RBAC & JIT Elevation Integration Suite', () 
       expect(jitManager.isElevated(tenant, tool)).toBe(true);
 
       // Advance clock / expire grant
-      const expiredGrant = jitManager.grantElevation(tenant, tool, -10, 'sec-admin@company.com');
+      jitManager.grantElevation(tenant, tool, -10, 'sec-admin@company.com');
       expect(jitManager.isElevated(tenant, tool)).toBe(false);
     });
   });
