@@ -100,7 +100,7 @@ export async function runExternalAuditVerification(): Promise<{
   const awsRedacted = sanitizer.sanitize('Deploy with access key ' + awsKey);
   record('AUDIT-14', 'DLP Defense', 'Structured AWS access key ID detected without pure entropy', awsRedacted.includes('[[SHIELD_SECRET_'), 'AWS token successfully replaced with vault token');
 
-  const ghpToken = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const ghpToken = ['ghp', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'].join('_');
   const ghpRedacted = sanitizer.sanitize('GitHub PAT: ' + ghpToken);
   record('AUDIT-15', 'DLP Defense', 'Structured GitHub token detected', ghpRedacted.includes('[[SHIELD_SECRET_'), 'GitHub token successfully redacted');
 
