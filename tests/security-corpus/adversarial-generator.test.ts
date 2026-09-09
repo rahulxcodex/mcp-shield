@@ -3,7 +3,6 @@ import { ASTAnalyzer } from '../../src/security/ast-analyzer';
 import { UnicodeNormalizer } from '../../src/security/unicode-normalizer';
 import { PathSecurityResolver } from '../../src/security/path-resolver';
 import { IpClassifier, EgressSecurityConfig } from '../../src/security/ip-utils';
-import { Sanitizer } from '../../src/security/sanitizer';
 
 describe('Roadmap Step 2 — Adversarial Attack Generator Pipeline', () => {
   const families: MutationFamily[] = [

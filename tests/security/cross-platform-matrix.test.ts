@@ -5,8 +5,6 @@ import { CmdAnalyzer } from '../../src/security/cmd-analyzer';
 import { IpClassifier, EgressSecurityConfig } from '../../src/security/ip-utils';
 
 describe('Roadmap Step 2 — Cross-Platform Security Matrix (Linux / Windows / macOS)', () => {
-  const platforms = ['linux', 'win32', 'darwin'] as const;
-
   describe('1. Path Handling Invariants across OS Semantics', () => {
     it('enforces traversal detection across Windows backslashes, forward slashes, and mixed separators', () => {
       const traversalPaths = [

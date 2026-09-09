@@ -1,6 +1,5 @@
 import { spawn, ChildProcess } from 'child_process';
 import { JsonRpcStreamFramer } from './stream-framing';
-import { ASTAnalyzer } from '../security/ast-analyzer';
 import { PromptBridge } from '../tui/prompt-bridge';
 import { COWFileSystem } from '../sandbox/cow-fs';
 import { DashboardServer } from '../dashboard/server';
@@ -10,7 +9,7 @@ import { RequestDispatcher } from './dispatcher';
 import { EvaluationContext, Evidence } from '../security/policy-engine';
 import { ConfigLoader } from '../security/config';
 import { NetworkEgressProxy } from '../security/network-proxy';
-import { CapabilityInferencer, ToolCapabilities } from '../security/capabilities';
+import { ToolCapabilities } from '../security/capabilities';
 import { CanaryManager } from '../security/canary';
 import { JITElevationManager } from '../security/jit-elevation';
 import { CloudTelemetryPublisher, SecurityTelemetryPayload } from '../cloud/telemetry';
@@ -43,7 +42,6 @@ export class ProxyServer implements Lifecycle {
   private outboundFramer = new JsonRpcStreamFramer();
   
   private session: SecuritySession;
-  private astAnalyzer = new ASTAnalyzer();
   private cowFs = new COWFileSystem();
   private dashboard: DashboardServer | null = null;
   private dispatcher: RequestDispatcher;
@@ -62,7 +60,7 @@ export class ProxyServer implements Lifecycle {
   constructor(
     private targetCmd: string,
     private targetArgs: string[],
-    private options: { enableDashboard?: boolean } = {}
+    private options: { enableDashboard?: boolean; shadowMode?: boolean; dryRun?: boolean } = {}
   ) {
     const config = ConfigLoader.load();
     this.session = new SecuritySession(config, targetCmd, targetArgs);
@@ -329,7 +327,7 @@ ${red}BLOCKED${reset}
         };
 
         const mode = this.session.policyEngine.getMode();
-        const isAuditMode = mode === 'audit';
+        const isAuditMode = mode === 'audit' || this.options.shadowMode || this.options.dryRun || process.env.MCP_SHIELD_SHADOW_MODE === 'true';
         const isWarnMode = mode === 'warn';
 
         if (action === 'quarantine' || action === 'block') {
@@ -356,25 +354,41 @@ ${red}BLOCKED${reset}
               if (action === 'quarantine') {
                  printMarketingBlock(toolName, rawArgs, 'CRITICAL', securityResult.reasonCode);
                  this.logAndBroadcast({ type: 'quarantine', toolName, reason: securityResult.reasonCode });
-                 this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: ${securityResult.reasonCode}`);
+                 this.sendErrorToHost(message.id, -32000, `SECURITY QUARANTINE: ${securityResult.reasonCode}`, {
+                   errorType: 'MCP_SHIELD_QUARANTINE',
+                   toolName,
+                   reason: securityResult.reasonCode
+                 });
                  if (this.child) { this.child.kill('SIGKILL'); }
                  return;
               } else {
                  printMarketingBlock(toolName, rawArgs, 'HIGH', securityResult.reasonCode);
                  this.logAndBroadcast({ type: 'policy_blocked', toolName, ruleId: securityResult.ruleId, reason: securityResult.reasonCode });
-                 this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: ${securityResult.reasonCode}`);
+                 this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED: ${securityResult.reasonCode}`, {
+                   errorType: 'MCP_SHIELD_POLICY_BLOCK',
+                   toolName,
+                   ruleId: securityResult.ruleId,
+                   reason: securityResult.reasonCode,
+                   recommendation: 'Operation rejected by MCP-Shield security firewall. Adjust tool parameters to comply with security policy or request operator elevation.'
+                 });
                  return;
               }
            }
         } else if (action === 'prompt') {
-           const jitStatus = this.jitManager.checkAndConsumeElevation(toolName);
-           if (jitStatus.elevated) {
-              this.logAndBroadcast({
-                type: 'jit_elevation_consumed',
-                toolName,
-                leaseId: jitStatus.lease?.leaseId,
-                remainingExecutions: jitStatus.lease?.remainingExecutions
-              });
+            const requestFingerprint = JITElevationManager.computeRequestFingerprint(
+              this.session.serverIdentity,
+              toolName,
+              sanitizedArgs,
+              securityResult.ruleId
+            );
+            const jitStatus = this.jitManager.checkAndConsumeElevation(toolName, requestFingerprint);
+            if (jitStatus.elevated) {
+               this.logAndBroadcast({
+                 type: 'jit_elevation_consumed',
+                 toolName,
+                 leaseId: jitStatus.lease?.leaseId,
+                 remainingExecutions: jitStatus.lease?.remainingExecutions
+               });
               try {
                 process.stderr.write(`\x1b[32m[MCP-SHIELD JIT] Tool '${toolName}' executed under active JIT elevation lease (${jitStatus.lease?.leaseId}).\x1b[0m\n`);
               } catch {}
@@ -417,6 +431,13 @@ ${red}BLOCKED${reset}
          if (restoration.restored) {
            message.params = restoration.restoredParams;
            this.logAndBroadcast({ type: 'secret_restored', toolName, trustLevel: registeredTool?.trustLevel, scope: restoration.scope });
+
+           const postRestorationError = this.validatePostRestoration(toolName, message.params?.arguments || message.params, registeredTool);
+           if (postRestorationError) {
+             this.logAndBroadcast({ type: 'policy_blocked', toolName, reason: postRestorationError });
+             this.sendErrorToHost(message.id, -32000, `SECURITY POLICY BLOCKED (POST-RESTORATION): ${postRestorationError}`);
+             return;
+           }
          } else if (registeredTool?.trustLevel === 'TRUSTED' && !registeredTool?.declaredCapabilities?.secretAccess) {
            this.logAndBroadcast({
              type: 'secret_restoration_skipped',
@@ -450,18 +471,62 @@ ${red}BLOCKED${reset}
     }
   }
 
-  private sendErrorToHost(id: any, code: number, message: string) {
-     const errorPayload = { jsonrpc: '2.0', id, error: { code, message } };
+  private sendErrorToHost(id: any, code: number, message: string, data?: any) {
+     const errorPayload: any = { jsonrpc: '2.0', id, error: { code, message } };
+     if (data !== undefined) {
+       errorPayload.error.data = data;
+     }
      try {
        process.stdout.write(JSON.stringify(errorPayload) + '\n');
      } catch {}
   }
 
   private sendSuccessToHost(id: any, result: any) {
-     const successPayload = { jsonrpc: '2.0', id, result };
-     try {
-       process.stdout.write(JSON.stringify(successPayload) + '\n');
-     } catch {}
+      const successPayload = { jsonrpc: '2.0', id, result };
+      try {
+        process.stdout.write(JSON.stringify(successPayload) + '\n');
+      } catch {}
+  }
+
+  private validatePostRestoration(
+    toolName: string,
+    restoredParams: any,
+    _registeredTool?: any
+  ): string | null {
+    if (!restoredParams) return null;
+    const isShellTool = /bash|shell|terminal|exec|run|do_cmd|cmd|powershell|pwsh|system/i.test(toolName);
+    const restoredArgs = (typeof restoredParams === 'object' && restoredParams.arguments) ? restoredParams.arguments : restoredParams;
+
+    // Invariant 1: Restored arguments must pass AST & interpreter security verification
+    const astResult = this.toolGuard.analyzeToolParameters(toolName, restoredArgs, isShellTool);
+    if (!astResult.isSafe) {
+      return `POST_RESTORATION_AST_VIOLATION: ${astResult.blockReason || 'Evasion or arbitrary code pattern identified in restored secret payload'}`;
+    }
+
+    // Invariant 2: Path traversal verification on restored parameters
+    const hasPathTraversal = (val: any, depth = 0): boolean => {
+      if (!val || depth > 8) return false;
+      if (typeof val === 'string') {
+        if (val.includes('../') || val.includes('..\\') || val.includes('%2e%2e') || val.includes('%2E%2E')) {
+          return true;
+        }
+      } else if (Array.isArray(val)) {
+        for (const item of val) {
+          if (hasPathTraversal(item, depth + 1)) return true;
+        }
+      } else if (typeof val === 'object') {
+        for (const k of Object.keys(val)) {
+          if (hasPathTraversal(val[k], depth + 1)) return true;
+        }
+      }
+      return false;
+    };
+
+    if (hasPathTraversal(restoredArgs)) {
+      return `POST_RESTORATION_PATH_TRAVERSAL: Directory traversal pattern detected in restored secret payload`;
+    }
+
+    return null;
   }
 
   public static buildSafeEnv(sourceEnv: any = process.env, options: { allowTrustOverrides?: boolean } = {}): any {

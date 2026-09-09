@@ -187,7 +187,7 @@ export class ToxicFlowEngine {
   private classifySource(
     name: string,
     caps: string[],
-    args: Record<string, any>
+    _args?: Record<string, any>
   ): { sourceType: SourceType; tags: TaintTag[] } | null {
     if (
       caps.some(c => c === 'database' || c === 'db' || /\b(?:database|sql|postgres|mysql|sqlite)\b/i.test(c)) ||
@@ -223,7 +223,7 @@ export class ToxicFlowEngine {
   private classifySink(
     name: string,
     caps: string[],
-    args: Record<string, any>
+    _args?: Record<string, any>
   ): SinkType | null {
     if (
       caps.some(c => /\b(?:network|upload|egress|http|webhook|socket)\b/i.test(c)) ||
@@ -291,7 +291,7 @@ export class ToxicFlowEngine {
   ): void {
     const rawArgs = JSON.stringify(args).toLowerCase();
 
-    for (const [id, tainted] of this.taintedObjects.entries()) {
+    for (const tainted of this.taintedObjects.values()) {
       let isCrossToolTransfer = false;
 
       // Check token intersection
@@ -330,7 +330,7 @@ export class ToxicFlowEngine {
   ): ToxicFlowViolation | null {
     const rawArgs = JSON.stringify(args).toLowerCase();
 
-    for (const [id, tainted] of this.taintedObjects.entries()) {
+    for (const tainted of this.taintedObjects.values()) {
       let hasDataLineage = false;
 
       // 1. Check direct token containment in sink arguments

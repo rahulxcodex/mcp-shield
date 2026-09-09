@@ -42,6 +42,10 @@ export class SecuritySession {
   private registeredToolNames: Set<string> = new Set();
   private allowToolsUpdate: boolean = false;
 
+  public getRegisteredToolNames(): Set<string> {
+    return new Set(this.registeredToolNames);
+  }
+
   public allowNextToolsUpdate(): void {
     this.allowToolsUpdate = true;
   }
@@ -117,11 +121,11 @@ export class SecuritySession {
     }
   }
 
-  public validateToolsSnapshot(tools: Array<{ name: string; description?: string; inputSchema?: any }>): void {
-    // Generate deterministic signature of tools list
+  public validateToolsSnapshot(tools: Array<{ name: string; description?: string; inputSchema?: any; annotations?: any; executionMetadata?: any }>): void {
+    // Generate deterministic signature of tools list including full tool definition (name, description, schema, annotations)
     const sortedSignatures = tools.map(t => {
-      const schemaHash = CapabilityInferencer.hashSchema(t.inputSchema || {});
-      return `${t.name}:${schemaHash}`;
+      const defHash = CapabilityInferencer.hashToolDefinition(t);
+      return `${t.name}:${defHash}`;
     }).sort().join('|');
 
     const snapshotHash = crypto.createHash('sha256').update(sortedSignatures).digest('hex');
@@ -136,7 +140,7 @@ export class SecuritySession {
         this.registeredToolNames = new Set(tools.map(t => t.name));
         this.allowToolsUpdate = false;
       } else {
-        throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool list altered dynamically without expected update notice.`);
+        throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool list or tool definitions altered dynamically without expected update notice.`);
       }
     }
   }
@@ -162,14 +166,30 @@ export class SecuritySession {
     return this.state;
   }
 
-  public registerTool(toolName: string, description: string, schema: any): RegisteredTool {
+  public registerTool(
+    toolName: string,
+    description: string,
+    schema: any,
+    extra?: { annotations?: any; executionMetadata?: any }
+  ): RegisteredTool {
     const hash = CapabilityInferencer.hashSchema(schema);
+    const defHash = CapabilityInferencer.hashToolDefinition({
+      name: toolName,
+      description,
+      inputSchema: schema,
+      annotations: extra?.annotations,
+      executionMetadata: extra?.executionMetadata
+    });
     
-    // Check if tool already exists and if the schema changed
+    // Check if tool already exists and if the definition or schema changed
     const existing = this.toolRegistry.get(toolName);
-    if (existing && existing.schemaHash !== hash) {
-      if (!this.allowToolsUpdate) {
-        throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool '${toolName}' changed its schema dynamically.`);
+    if (existing) {
+      const hasDefHashDrift = existing.definitionHash ? existing.definitionHash !== defHash : false;
+      const hasSchemaHashDrift = existing.schemaHash !== hash;
+      if (hasDefHashDrift || hasSchemaHashDrift) {
+        if (!this.allowToolsUpdate) {
+          throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool '${toolName}' changed its definition or description dynamically.`);
+        }
       }
     }
 
@@ -178,7 +198,8 @@ export class SecuritySession {
       toolName,
       description,
       schema,
-      existing
+      existing,
+      extra
     );
 
     this.toolRegistry.set(toolName, profile);

@@ -16,11 +16,13 @@ import { LicenseCommand } from './cli/commands/license';
 import { LicenseManager } from './security/license-manager';
 import { BenchmarkCommand } from './cli/commands/benchmark';
 import { AttackCorpusCommand } from './cli/commands/attack-corpus';
+import { AuditCommand } from './cli/commands/audit';
+import { ConfigLoader } from './security/config';
 
 export async function runCli(args: string[] = process.argv.slice(2)): Promise<void> {
   const command = args[0];
 
-  const bypassCommands = ['demo', 'install', 'license', 'enterprise', 'link', 'wrap', 'protect', 'scan', 'fix', 'dashboard', 'stats', 'report', 'replay', 'replay-eval', 'benchmark', 'attack-corpus'];
+  const bypassCommands = ['demo', 'install', 'license', 'enterprise', 'link', 'wrap', 'protect', 'scan', 'fix', 'dashboard', 'stats', 'report', 'replay', 'replay-eval', 'benchmark', 'attack-corpus', 'audit', 'config'];
   if (command && !bypassCommands.includes(command) && process.env.NODE_ENV !== 'test') {
     const licenseFile = path.join(os.homedir(), '.mcp-shield', 'license.key');
     if (fs.existsSync(licenseFile)) {
@@ -48,7 +50,34 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
   } else if (command === 'install') {
     InstallCommand.run();
   } else if (command === 'scan') {
-    ScanCommand.run();
+    let format: string | undefined;
+    let failOn: 'critical' | 'high' | 'medium' | undefined;
+    let json = false;
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === '--json') json = true;
+      else if (args[i].startsWith('--format=')) format = args[i].split('=')[1];
+      else if (args[i] === '--format' && args[i + 1]) { format = args[i + 1]; i++; }
+      else if (args[i].startsWith('--fail-on=')) failOn = args[i].split('=')[1] as any;
+      else if (args[i] === '--fail-on' && args[i + 1]) { failOn = args[i + 1] as any; i++; }
+    }
+    ScanCommand.run({ json, format, failOn });
+  } else if (command === 'audit') {
+    AuditCommand.run(args.slice(1));
+    process.exit(0);
+  } else if (command === 'config') {
+    if (args[1] === 'check' || args[1] === 'validate') {
+      try {
+        const config = ConfigLoader.load(args[2]);
+        console.log(`\x1b[32m✓ Configuration '${args[2] || 'shield.config.yaml'}' is valid (mode: ${config.mode || 'enforce'}).\x1b[0m`);
+        process.exit(0);
+      } catch (err: any) {
+        console.error(`\x1b[31m✗ Configuration error: ${err.message}\x1b[0m`);
+        process.exit(1);
+      }
+    } else {
+      console.log('Usage: mcp-shield config check [config-file]');
+      process.exit(0);
+    }
   } else if (command === 'fix') {
     FixCommand.run();
   } else if (command === 'link') {
@@ -66,10 +95,11 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
   } else if (command === 'wrap') {
     const dashDashIdx = args.indexOf('--');
     if (dashDashIdx === -1 || !args[dashDashIdx + 1]) {
-      console.error('Usage: mcp-shield wrap [--key <api-key>] [--url <cloud-url>] -- <downstream-command> [args...]');
+      console.error('Usage: mcp-shield wrap [--shadow] [--key <api-key>] [--url <cloud-url>] -- <downstream-command> [args...]');
       process.exit(1);
     }
 
+    let shadowMode = false;
     // Parse any pre-dash flags
     for (let i = 1; i < dashDashIdx; i++) {
       if (args[i] === '--key' && args[i + 1]) {
@@ -78,6 +108,8 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
       } else if (args[i] === '--url' && args[i + 1]) {
         process.env.MCP_SHIELD_CLOUD_URL = args[i + 1].trim();
         i++;
+      } else if (args[i] === '--shadow' || args[i] === '--dry-run') {
+        shadowMode = true;
       }
     }
 
@@ -85,7 +117,7 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
     const targetArgs = args.slice(dashDashIdx + 2);
 
     // Start the proxy with the downstream MCP server
-    const proxy = new ProxyServer(targetCmd, targetArgs, { enableDashboard: true });
+    const proxy = new ProxyServer(targetCmd, targetArgs, { enableDashboard: true, shadowMode });
     try {
       const code = await proxy.start();
       process.exit(code);
@@ -117,7 +149,9 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
       '  mcp-shield demo [--dashboard]   Run interactive attack simulation & security demo.',
       '  mcp-shield install              Quickly install and configure MCP-Shield.',
       '  mcp-shield license <key>        Activate your MCP Shield enterprise license.',
-      '  mcp-shield scan                 Scan your MCP servers for security vulnerabilities.',
+      '  mcp-shield scan [--format=sarif] Scan your MCP servers for security vulnerabilities.',
+      '  mcp-shield audit export/verify  Enterprise SIEM export (CEF/Syslog) & Merkle verification.',
+      '  mcp-shield config check [file]  Validate MCP-Shield configuration syntax.',
       '  mcp-shield fix                  Automatically generate and apply security policies.',
       '  mcp-shield protect              Auto-discover and protect MCP clients.',
       '  mcp-shield benchmark [--json]   Run official MCP Security Benchmark across 6 dimensions.',
@@ -128,7 +162,7 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
       '  mcp-shield stats [log_file]     View shareable security activity & blocked attacks report.',
       '  mcp-shield replay <log_file>    Replay and verify tamper-evident audit logs.',
       '  mcp-shield replay-eval <log>    Replay historical events & diff decisions against v2.0 engine.',
-      '  mcp-shield wrap -- <cmd> [args] Wrap an MCP server with the security gateway.'
+      '  mcp-shield wrap [--shadow] -- <cmd> [args] Wrap an MCP server with the security gateway.'
     ].join('\n'));
     process.exit(1);
   }

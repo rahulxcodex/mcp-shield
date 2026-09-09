@@ -1,7 +1,6 @@
 import { ASTAnalyzer } from '../src/security/ast-analyzer';
 import { SecretSanitizer } from '../src/security/sanitizer';
 import { PolicyEngine } from '../src/security/policy-engine';
-import { IpClassifier } from '../src/security/ip-utils';
 import { RateLimiter } from '../src/security/rate-limiter';
 
 /**

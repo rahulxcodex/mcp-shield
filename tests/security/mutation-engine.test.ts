@@ -1,4 +1,4 @@
-import { SecurityMutationEngine, SecurityMutant } from '../../src/security/mutation/mutation-engine';
+import { SecurityMutationEngine } from '../../src/security/mutation/mutation-engine';
 import { ASTAnalyzer } from '../../src/security/ast-analyzer';
 import { CapabilityManifestRegistry } from '../../src/security/capability-manifest';
 import { PathSecurityResolver } from '../../src/security/path-resolver';

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { CapabilityInferencer, ToolProfile } from '../../src/security/capabilities';
+import { CapabilityInferencer } from '../../src/security/capabilities';
 import { ContainerSandbox } from '../../src/sandbox/container-sandbox';
 import { COWFileSystem } from '../../src/sandbox/cow-fs';
 import { SecretVault } from '../../src/security/vault';

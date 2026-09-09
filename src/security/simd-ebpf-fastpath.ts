@@ -1,1 +1,0 @@
-export const SIMD_EBPF = true;

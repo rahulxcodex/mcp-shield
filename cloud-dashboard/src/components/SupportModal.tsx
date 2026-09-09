@@ -16,6 +16,7 @@ export default function SupportModal({ isOpen, onClose, defaultType = 'Complaint
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'Critical'>('Medium');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [websiteTrap, setWebsiteTrap] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ticketId: string; message: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export default function SupportModal({ isOpen, onClose, defaultType = 'Complaint
       const res = await fetch('/api/v1/support/complaint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, type, priority, subject, message }),
+        body: JSON.stringify({ name, email, type, priority, subject, message, website_trap: websiteTrap }),
       });
 
       const data = await res.json();
@@ -131,6 +132,20 @@ export default function SupportModal({ isOpen, onClose, defaultType = 'Complaint
                 <span>{errorMsg}</span>
               </div>
             )}
+
+            {/* Honeypot Anti-Spam Trap */}
+            <div className="sr-only" aria-hidden="true">
+              <label htmlFor="website_trap_field">Leave this field empty</label>
+              <input
+                id="website_trap_field"
+                type="text"
+                name="website_trap"
+                tabIndex={-1}
+                autoComplete="off"
+                value={websiteTrap}
+                onChange={(e) => setWebsiteTrap(e.target.value)}
+              />
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>

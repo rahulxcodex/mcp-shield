@@ -1,15 +1,7 @@
 import { PolicyEngine, ShieldConfig } from '../../src/security/policy-engine';
-import * as fs from 'fs';
-import * as yaml from 'js-yaml';
-import * as path from 'path';
-import * as os from 'os';
-
-const actualFs = jest.requireActual('fs');
-const actualYaml = jest.requireActual('js-yaml');
 
 describe('PolicyEngine', () => {
   let engine: PolicyEngine;
-  let tempConfigFile: string;
   
   const mockConfig: ShieldConfig = {
     version: '1.0',

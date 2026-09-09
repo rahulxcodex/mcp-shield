@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
 import { z } from 'zod';
 import { SecurityResult } from './types';
 import { IpClassifier, EgressSecurityConfig } from './ip-utils';
@@ -263,7 +262,7 @@ export class PolicyEngine {
         return;
       }
 
-      for (const [k, v] of Object.entries(obj)) {
+      for (const v of Object.values(obj)) {
         if (typeof v === 'string') {
           tryAddCandidate(v);
         } else if (typeof v === 'object' && v !== null) {

@@ -1,4 +1,3 @@
-import * as net from 'net';
 
 export interface IpClassification {
   normalizedIp: string;

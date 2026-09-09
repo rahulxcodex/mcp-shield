@@ -41,28 +41,6 @@ export class TabularRiskModel {
   public static readonly MODEL_ID = 'tool-action-risk-model';
   public static readonly MODEL_VERSION = 'v1.0.0';
 
-  // Feature weights for linear attribution baselines
-  private static readonly FEATURE_IMPORTANCE_WEIGHTS: Record<string, number> = {
-    req_shell_metachars: 1.8,
-    req_path_traversal_indicators: 2.2,
-    req_prompt_injection_signals: 2.0,
-    seq_trans_read_to_network: 1.9,
-    seq_trans_read_encode_network: 2.4,
-    seq_trans_db_export_upload: 2.5,
-    seq_trans_fs_archive_upload: 2.2,
-    tool_capability_mismatch: 1.7,
-    tool_schema_drift: 1.5,
-    req_special_ip_rep: 1.8,
-    req_secret_findings: 2.0,
-    prov_binary_hash_changed: 1.6,
-    tool_cap_secret_access: 1.2,
-    tool_cap_network_egress: 1.1,
-    tool_cap_process_spawn: 1.3,
-    tool_destructive_capability: 1.4,
-    req_entropy: 0.6,
-    req_encoding_count: 0.8
-  };
-
   /**
    * Sigmoid activation for probability calibration
    */

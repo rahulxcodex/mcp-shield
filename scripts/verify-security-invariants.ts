@@ -33,7 +33,7 @@ async function main() {
   assert('Initial protocol state is CONNECTING', sm.getState() === MCPProtocolState.CONNECTING);
 
   const initMsg = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { capabilities: {} } };
-  const evalRes = sm.evaluateClientMessage(initMsg);
+  sm.evaluateClientMessage(initMsg);
   assert('Transition to WAITING_FOR_INITIALIZE_RESPONSE after initialize', sm.getState() === MCPProtocolState.WAITING_FOR_INITIALIZE_RESPONSE);
 
   const prematureCall = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'read_file' } };

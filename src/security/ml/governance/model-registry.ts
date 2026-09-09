@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import { hashCanonicalJson } from '../../canonical-json';
 
 export type ModelDeploymentStatus = 'OFFLINE' | 'SHADOW' | 'CANARY' | 'PRODUCTION' | 'ROLLED_BACK';

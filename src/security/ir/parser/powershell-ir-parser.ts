@@ -8,7 +8,6 @@ export class PowerShellIRParser {
     // 1. Filesystem: Remove-Item / del / rm / ri / rmdir
     if (/\b(?:Remove-Item|ri|del|erase|rd|rmdir)\b/i.test(normalized)) {
       const isRecursive = /-(?:Recurse|r)\b/i.test(normalized);
-      const isForce = /-(?:Force|f)\b/i.test(normalized);
       const tokens = normalized.split(/\s+/).filter(t => !t.startsWith('-') && !/^(?:Remove-Item|ri|del|erase|rd|rmdir)$/i.test(t));
       const targetPath = tokens.length > 0 ? tokens[0] : 'unknown';
       const rootOrSystem = /^[C-Z]:\\?(\*)?$/i.test(targetPath) || targetPath === '\\' || targetPath === '/' || targetPath === '/*';

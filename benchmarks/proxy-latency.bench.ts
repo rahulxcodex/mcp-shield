@@ -317,7 +317,7 @@ export function runAllBenchmarks(): BenchmarkResult[] {
         const args = parsedMsg.params.arguments;
 
         // 2. DLP Sanitization
-        const sanitizedArgs = JSON.parse(sanitizer.sanitize(JSON.stringify(args)));
+        JSON.parse(sanitizer.sanitize(JSON.stringify(args)));
 
         // 3. Rate Limit Check
         rateLimiter.checkLimit(toolName);

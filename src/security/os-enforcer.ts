@@ -441,7 +441,6 @@ export class OSEnforcer {
     args: string[] = [],
     options: { allowLoopback?: boolean } = {}
   ): { executable: string; args: string[] } {
-    const unshareArgs = ['--net'];
     if (options.allowLoopback ?? true) {
       // Loopback up in new namespace
       return {

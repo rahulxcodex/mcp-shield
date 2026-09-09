@@ -1,4 +1,3 @@
-import { ThreatCategory } from './evidence';
 
 export type SecurityDecisionAction = 'ALLOW' | 'BLOCK' | 'PROMPT' | 'SANITIZE' | 'SANDBOX' | 'QUARANTINE';
 export type EnforcementSource = 'deterministic' | 'policy' | 'ml' | 'composite';
@@ -127,7 +126,7 @@ export class BayesianDecisionEngine {
    */
   public static optimizeAction(
     risk: number,
-    confidence: number,
+    _confidence: number,
     deterministicHardBlock: boolean = false
   ): SecurityDecisionAction {
     if (deterministicHardBlock || risk >= 0.75) return 'BLOCK';

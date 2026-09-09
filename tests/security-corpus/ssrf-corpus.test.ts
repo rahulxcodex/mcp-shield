@@ -1,6 +1,5 @@
-import { IpClassifier, EgressSecurityConfig, parseIpv4ToBigInt, parseIpv6ToBigInt } from '../../src/security/ip-utils';
-import { parseConnectAuthority, NetworkEgressProxy } from '../../src/security/network-proxy';
-import { PolicyEngine } from '../../src/security/policy-engine';
+import { IpClassifier, EgressSecurityConfig, parseIpv4ToBigInt } from '../../src/security/ip-utils';
+import { parseConnectAuthority } from '../../src/security/network-proxy';
 
 describe('SSRF & Canonical IP/CIDR Egress Regression Corpus', () => {
   const defaultConfig: EgressSecurityConfig = {

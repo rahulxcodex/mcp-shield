@@ -184,7 +184,7 @@ export default function LandingNavbar() {
           <a
             href="https://github.com/rahulxcodex/mcp-shield"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             aria-label="GitHub Repository"
             title="GitHub Repository"
             className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition shrink-0"

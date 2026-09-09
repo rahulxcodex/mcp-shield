@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import { ProvenanceDecision } from '../decision';
 
 export interface SchemaHistoryEntry {

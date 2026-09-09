@@ -48,7 +48,6 @@ const CLOUD_METADATA_HOSTS = new Set([
 
 export class AuthoritativeEgressEngine {
   private options: EgressPolicyOptions;
-  private dnsCache: Map<string, { ips: string[]; timestamp: number }> = new Map();
 
   constructor(options: EgressPolicyOptions = {}) {
     this.options = {

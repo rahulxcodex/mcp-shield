@@ -1,6 +1,4 @@
 import { performance } from 'perf_hooks';
-import * as fs from 'fs';
-import * as path from 'path';
 import { SecretSanitizer } from '../src/security/sanitizer';
 
 export interface LabeledBenchmarkEntry {

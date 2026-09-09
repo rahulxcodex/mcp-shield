@@ -1,9 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
-import * as fs from 'fs';
 import { PolicyEngine } from '../../src/security/policy-engine';
-import { ASTAnalyzer } from '../../src/security/ast-analyzer';
-import { SecretSanitizer } from '../../src/security/sanitizer';
 
 jest.setTimeout(30000);
 

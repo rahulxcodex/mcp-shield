@@ -22,7 +22,7 @@ export class ExecutionBroker {
   public async handleSandboxExecution(
     toolName: string,
     rawArgs: Record<string, any>,
-    requestId: any,
+    _requestId: any,
     onLog: (event: any) => void
   ): Promise<{ handled: boolean; success?: boolean; error?: string }> {
     const targetPath = rawArgs.path || rawArgs.file || rawArgs.filename || rawArgs.filepath || rawArgs.target;

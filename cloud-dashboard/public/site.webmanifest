@@ -1,0 +1,22 @@
+{
+  "name": "MCP Shield",
+  "short_name": "MCPShield",
+  "description": "Zero-Trust Security Gateway & Firewall for Model Context Protocol (MCP) and AI Agents",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090a0f",
+  "theme_color": "#090a0f",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

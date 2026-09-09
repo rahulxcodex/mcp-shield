@@ -1,1 +1,0 @@
-export const FINOPS_OTEL = true;

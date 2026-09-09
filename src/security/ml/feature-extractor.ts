@@ -9,7 +9,6 @@
  * - Provenance features (schema/binary fingerprints, historical violations)
  */
 
-import * as crypto from 'crypto';
 import { ToolCapabilities } from '../capabilities';
 import { SecurityEvidence } from '../evidence';
 import { isSpecialIpRepresentation } from '../ip-utils';

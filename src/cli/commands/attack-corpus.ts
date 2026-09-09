@@ -3,7 +3,7 @@
  * Compliant with Step 2 of the IP Value & VRIO Moat Roadmap
  */
 
-import { AttackCorpusRegistry, AttackCategory } from '../../security/attack-corpus';
+import { AttackCorpusRegistry } from '../../security/attack-corpus';
 import { SecurityIntelligenceEngine } from '../../security/intelligence-engine';
 import { MCPProtocolStateMachine } from '../../core/mcp-protocol-state-machine';
 

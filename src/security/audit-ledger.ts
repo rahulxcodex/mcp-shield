@@ -292,4 +292,72 @@ export class AuditComplianceLedger {
       computedMerkleRoot
     };
   }
+
+  public static exportToCef(exportData: AuditLedgerExport): string {
+    return exportData.events.map(event => {
+      const severity = event.action.includes('BLOCK') || event.action.includes('DENIED') ? '8' : '3';
+      const actor = event.actor || 'agent';
+      const action = event.action || 'INVOKE';
+      return `CEF:0|rahulxcodex|mcp-shield|1.0.25|${action}|${action}|${severity}|src=${actor} shost=mcp-shield msg=${action} event cs1=${event.payloadHash} cs1Label=PayloadHash cs2=${event.signature} cs2Label=Signature cs3=${exportData.merkleRoot} cs3Label=MerkleRoot`;
+    }).join('\n');
+  }
+
+  public static exportToSyslog(exportData: AuditLedgerExport): string {
+    return exportData.events.map(event => {
+      const pri = event.action.includes('BLOCK') || event.action.includes('DENIED') ? '<131>1' : '<134>1';
+      return `${pri} ${event.timestamp} mcp-shield mcpshld - - - [mcp@53427 seq="${event.sequenceNumber}" action="${event.action}" actor="${event.actor}" payloadHash="${event.payloadHash}" sig="${event.signature}"]`;
+    }).join('\n');
+  }
+
+  public static generateMerkleProof(
+    leaves: string[],
+    targetIndex: number
+  ): { leaf: string; proof: { position: 'left' | 'right'; hash: string }[] } {
+    if (targetIndex < 0 || targetIndex >= leaves.length) {
+      throw new Error(`Target index ${targetIndex} out of bounds for tree with ${leaves.length} leaves`);
+    }
+
+    let layer = [...leaves];
+    let index = targetIndex;
+    const proof: { position: 'left' | 'right'; hash: string }[] = [];
+
+    while (layer.length > 1) {
+      const nextLayer: string[] = [];
+      for (let i = 0; i < layer.length; i += 2) {
+        const left = layer[i];
+        const right = i + 1 < layer.length ? layer[i + 1] : left;
+
+        if (i === index || i + 1 === index) {
+          if (index % 2 === 0) {
+            proof.push({ position: 'right', hash: right });
+          } else {
+            proof.push({ position: 'left', hash: left });
+          }
+        }
+
+        const combined = crypto.createHash('sha256').update(left + right).digest('hex');
+        nextLayer.push(combined);
+      }
+      index = Math.floor(index / 2);
+      layer = nextLayer;
+    }
+
+    return { leaf: leaves[targetIndex], proof };
+  }
+
+  public static verifyMerkleProof(
+    leaf: string,
+    proof: { position: 'left' | 'right'; hash: string }[],
+    expectedRoot: string
+  ): boolean {
+    let current = leaf;
+    for (const step of proof) {
+      if (step.position === 'left') {
+        current = crypto.createHash('sha256').update(step.hash + current).digest('hex');
+      } else {
+        current = crypto.createHash('sha256').update(current + step.hash).digest('hex');
+      }
+    }
+    return current === expectedRoot;
+  }
 }

@@ -1,1 +1,0 @@
-export const TPI_QUORUM = true;
