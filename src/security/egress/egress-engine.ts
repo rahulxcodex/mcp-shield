@@ -323,4 +323,22 @@ export class AuthoritativeEgressEngine {
       });
     });
   }
+
+  /**
+   * Creates a DNS lookup callback pinned strictly to the verified IP,
+   * eliminating TOCTOU DNS rebinding during socket connection.
+   */
+  public createPinnedLookup(pinnedIp: string): (hostname: string, options: any, callback: (err: Error | null, address: string, family: number) => void) => void {
+    const family = net.isIP(pinnedIp);
+    return (_hostname: string, _options: any, callback: (err: Error | null, address: string, family: number) => void) => {
+      callback(null, pinnedIp, family);
+    };
+  }
+
+  /**
+   * Generates agent options with pinned lookup for http/https request agents.
+   */
+  public createPinnedAgentOptions(pinnedIp: string): { lookup: (hostname: string, options: any, callback: (err: Error | null, address: string, family: number) => void) => void } {
+    return { lookup: this.createPinnedLookup(pinnedIp) };
+  }
 }

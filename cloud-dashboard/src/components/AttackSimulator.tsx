@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { ShieldAlert, ShieldCheck, Play, Terminal, RefreshCw, Cpu, Lock, AlertTriangle, CheckCircle2 } from 'lucide-react';
@@ -76,6 +76,42 @@ const SCENARIOS: Scenario[] = [
     astAnalysis: 'Synthetic tripwire token match. Agent session identified as compromised. Immediate cryptographic isolation active.',
     sanitizedOutput: '{\n  "error": {\n    "code": -32099,\n    "message": "MCP-Shield Quarantine: Honeytoken tripped. Agent session locked. SOC2 alert dispatched."\n  }\n}',
     latencyMs: 0.09,
+  },
+  {
+    id: 'python-inline',
+    name: 'Python Inline Escape (-c)',
+    category: 'AST Injection',
+    toolName: 'run_terminal_command',
+    inputPayload: 'python3 -c "import os; os.system(\'rm -rf /\')"',
+    action: 'BLOCKED',
+    ruleViolated: 'RULE-INLINE-02: INLINE_INTERPRETER_EXECUTION_BLOCKED',
+    astAnalysis: 'MultiInterpreterAnalyzer detected python3 inline execution flag (-c) wrapping destructive shell command. Prohibited inline evaluation mode.',
+    sanitizedOutput: '{\n  "error": {\n    "code": -32001,\n    "message": "MCP-Shield Intercept: Inline interpreter code execution flag (-c) blocked under Zero-Trust Execution Policy."\n  }\n}',
+    latencyMs: 0.16,
+  },
+  {
+    id: 'chained-find-exec',
+    name: 'Chained find -exec Injection',
+    category: 'AST Injection',
+    toolName: 'run_terminal_command',
+    inputPayload: 'find . -name "*.tmp" -exec rm -rf / {} +',
+    action: 'BLOCKED',
+    ruleViolated: 'RULE-CHAIN-05: DANGEROUS_UTILITY_CHAINING_DENIED',
+    astAnalysis: 'Tree-sitter unrolled secondary command sequence inside find -exec argument array. Dangerous target "/" identified in recursive execution block.',
+    sanitizedOutput: '{\n  "error": {\n    "code": -32001,\n    "message": "MCP-Shield Intercept: Dangerous executable \'rm\' inside find -exec argument block denied."\n  }\n}',
+    latencyMs: 0.17,
+  },
+  {
+    id: 'hex-ssrf',
+    name: 'Alternate Hex IP SSRF (0xA9FEA9FE)',
+    category: 'SSRF & Metadata',
+    toolName: 'http_fetch',
+    inputPayload: 'GET http://0xA9FEA9FE/latest/meta-data/',
+    action: 'BLOCKED',
+    ruleViolated: 'RULE-NET-07: ALTERNATE_IP_ENCODING_PROHIBITED',
+    astAnalysis: 'IpClassifier normalized 0xA9FEA9FE to canonical decimal 169.254.169.254. Link-Local / Cloud Metadata boundary enforced.',
+    sanitizedOutput: '{\n  "error": {\n    "code": -32003,\n    "message": "MCP-Shield Intercept: Alternate hexadecimal IP encoding 0xA9FEA9FE resolved to blocked metadata host."\n  }\n}',
+    latencyMs: 0.15,
   },
 ];
 

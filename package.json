@@ -40,6 +40,8 @@
     "test:integration": "node scripts/run-tests.js tests/integration",
     "test:perf-gate": "ts-node scripts/bench-gate.ts",
     "test:security-gate": "node --expose-gc -r ts-node/register scripts/security-regression-gate.ts",
+    "test:audit-verify": "ts-node scripts/verify-external-audit.ts",
+    "audit:verify": "ts-node scripts/verify-external-audit.ts",
     "test:mutations": "ts-node scripts/mutation-test-runner.ts",
     "test:coverage-gate": "ts-node scripts/security-coverage-gate.ts",
     "test:attack-coverage": "node -r ts-node/register scripts/attack-family-coverage-gate.ts",

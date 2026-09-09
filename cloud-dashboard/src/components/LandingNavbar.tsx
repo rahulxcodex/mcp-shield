@@ -46,7 +46,7 @@ export default function LandingNavbar() {
             <div className="font-bold text-base sm:text-lg leading-tight flex items-center gap-2 text-white whitespace-nowrap">
               <span>MCP-SHIELD</span>
               <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono font-semibold tracking-wider whitespace-nowrap inline-flex items-center">
-                v2.4 LTS
+                Console v2.4 • Engine v1.0.25
               </span>
             </div>
             <div className="text-[11px] text-slate-400 hidden sm:block whitespace-nowrap">Model Context Protocol Security</div>

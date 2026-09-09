@@ -152,7 +152,7 @@ export default function SystemAdminPage() {
             <div className="text-2xl font-bold text-white">
               {overview ? `${overview.avgLatencyMs} ms` : '0.42 ms'}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">eBPF SIMD fastpath benchmark</div>
+            <div className="text-[11px] text-slate-500 mt-1">Native AST pipeline benchmark</div>
           </div>
         </div>
 
@@ -191,7 +191,7 @@ export default function SystemAdminPage() {
                 <Server className="w-4 h-4 text-emerald-400" />
                 <h2 className="text-sm font-semibold text-white">MCP Gateway & Proxy Telemetry</h2>
               </div>
-              <span className="text-[11px] text-slate-500">Live eBPF stream</span>
+              <span className="text-[11px] text-slate-500">Live telemetry stream</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 
 export default function StructuredData() {
   const schema = {
@@ -16,7 +16,7 @@ export default function StructuredData() {
           priceCurrency: 'USD',
         },
         description:
-          'Zero-Trust Security Gateway, eBPF & AST Firewall, and Bijective DLP Proxy for Model Context Protocol (MCP) and Autonomous AI Agents.',
+          'Zero-Trust Security Gateway, Native Tree-Sitter AST Firewall, and Bijective DLP Proxy for Model Context Protocol (MCP) and Autonomous AI Agents.',
         aggregateRating: {
           '@type': 'AggregateRating',
           ratingValue: '4.9',

@@ -8,6 +8,8 @@
 
 import * as crypto from 'crypto';
 import { SecurityIntelligenceEngine, RiskScoreBreakdown } from '../security/intelligence-engine';
+import { UnifiedInterpreterClassifier } from '../security/interpreter-analyzer';
+import { IpClassifier, EgressSecurityConfig } from '../security/ip-utils';
 
 export type AgentRuntimeType = 'mcp' | 'coding_agent' | 'browser_agent' | 'multi_agent' | 'aider' | 'langgraph' | 'autogen' | 'crewai';
 
@@ -59,15 +61,30 @@ export class AIRuntimeSecurityPlatform {
     toolName: string;
     intent: AgentExecutionIntent;
   }): SecurityEnforcementDecision {
-    const session = this.activeSessions.get(params.sessionId) || {
-      agentId: 'default-agent',
-      agentType: 'mcp',
-      sessionId: params.sessionId,
-      delegationDepth: 1,
-      maxAllowedDepth: 5,
-      principalUser: 'anonymous',
-      organizationId: 'org-default',
-    };
+    const session = this.activeSessions.get(params.sessionId);
+    if (!session) {
+      return {
+        allowed: false,
+        action: 'BLOCK',
+        riskScore: {
+          compositeScore: 100,
+          factors: {
+            capabilityRisk: 50,
+            behaviorAnomaly: 50,
+            provenanceRisk: 100,
+            destinationRisk: 0,
+            credentialExposure: 0,
+            policyViolations: 100,
+            historicalReputation: 0,
+          },
+          classification: 'CRITICAL',
+          rationale: ['Unregistered or anonymous AI agent session rejected fail-closed'],
+        },
+        violatedPolicies: ['SESSION-001: Unknown or unauthenticated agent session'],
+        auditId: `aud-${crypto.randomBytes(8).toString('hex')}`,
+        mitigationApplied: 'Enforce strict agent session registration before execution',
+      };
+    }
 
     const violatedPolicies: string[] = [];
     const auditId = `aud-${crypto.randomBytes(8).toString('hex')}`;
@@ -93,9 +110,15 @@ export class AIRuntimeSecurityPlatform {
 
     // 2. Coding Agent AST & Subshell Protection
     if (session.agentType === 'coding_agent' && params.intent.actionCategory === 'EXECUTE') {
-      const cmdStr = typeof params.intent.payload === 'string' ? params.intent.payload : JSON.stringify(params.intent.payload);
-      if (cmdStr.includes('rm -rf /') || cmdStr.includes('Format-Volume') || cmdStr.includes(':(){ :|:& };:')) {
-        violatedPolicies.push('CODE-002: Destructive Host Command Injection Detected');
+      const cmdStr = typeof params.intent.payload === 'string'
+        ? params.intent.payload
+        : (params.intent.payload?.command || params.intent.payload?.cmd || JSON.stringify(params.intent.payload));
+      
+      const classifier = new UnifiedInterpreterClassifier();
+      const analysis = classifier.analyze(cmdStr);
+      if (!analysis.isSafe) {
+        const reason = analysis.reason || 'Destructive host wipe command intercepted in coding agent terminal';
+        violatedPolicies.push(`CODE-002: Destructive Host Command Injection Detected: ${reason}`);
         return {
           allowed: false,
           action: 'BLOCK',
@@ -111,7 +134,7 @@ export class AIRuntimeSecurityPlatform {
               historicalReputation: 0,
             },
             classification: 'CRITICAL',
-            rationale: ['Destructive host wipe command intercepted in coding agent terminal'],
+            rationale: [reason],
           },
           violatedPolicies,
           auditId,
@@ -122,9 +145,36 @@ export class AIRuntimeSecurityPlatform {
 
     // 3. Browser Agent DOM & Exfiltration Protection
     if (session.agentType === 'browser_agent' && params.intent.actionCategory === 'NAVIGATE') {
-      const url = params.intent.targetResource || '';
-      if (url.includes('169.254.169.254') || url.includes('localhost') || url.includes('file:///etc/')) {
-        violatedPolicies.push('BROWSER-003: SSRF / Local Storage Navigation Hijack');
+      const urlStr = params.intent.targetResource || (typeof params.intent.payload === 'string' ? params.intent.payload : params.intent.payload?.url) || '';
+      let isEgressViolation = false;
+      let violationReason = '';
+
+      if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
+        try {
+          const parsed = new URL(urlStr);
+          const egressConfig: EgressSecurityConfig = {
+            enabled: true,
+            allowPrivateNetworks: false,
+            blockLoopback: true,
+            blockLinkLocal: true,
+            blockMetadataEndpoints: true
+          };
+          const check = IpClassifier.checkEgressViolation(parsed.hostname, egressConfig);
+          if (check.isBlocked) {
+            isEgressViolation = true;
+            violationReason = check.reason || 'SSRF / Private network navigation blocked';
+          }
+        } catch {
+          isEgressViolation = true;
+          violationReason = 'Malformed HTTP URL';
+        }
+      } else if (/^(?:javascript|data|file|vbscript):/i.test(urlStr) || urlStr.includes('..')) {
+        isEgressViolation = true;
+        violationReason = 'Local file or dangerous scheme navigation blocked';
+      }
+
+      if (isEgressViolation) {
+        violatedPolicies.push(`BROWSER-003: SSRF / Local Storage Navigation Hijack: ${violationReason}`);
         return {
           allowed: false,
           action: 'BLOCK',
@@ -132,7 +182,7 @@ export class AIRuntimeSecurityPlatform {
             serverId: session.agentId,
             toolName: params.toolName,
             actionType: 'browser_navigation',
-            destinationHost: url,
+            destinationHost: urlStr,
           }),
           violatedPolicies,
           auditId,

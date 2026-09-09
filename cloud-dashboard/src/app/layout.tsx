@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     "zero trust ai gateway",
     "antigravity mcp security",
     "prompt injection defense",
-    "ebpf ai proxy",
+    "native ast ai proxy",
   ],
   authors: [{ name: "MCP Shield Project", url: "https://github.com/rahulxcodex/mcp-shield" }],
   creator: "MCP Shield Project",
