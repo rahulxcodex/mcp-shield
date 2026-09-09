@@ -210,6 +210,13 @@ export class ToxicFlowEngine {
       return { sourceType: 'FILESYSTEM', tags: ['TAINT_SENSITIVE_FILE'] };
     }
 
+    if (
+      caps.some(c => /\b(?:external|fetch|search|scrape|browse|web|http_client)\b/i.test(c)) ||
+      /\b(?:search|fetch|scrape|browse|download|web_search|http_get)\b/i.test(name)
+    ) {
+      return { sourceType: 'EXTERNAL_NETWORK', tags: ['TAINT_UNTRUSTED_REMOTE'] };
+    }
+
     return null;
   }
 

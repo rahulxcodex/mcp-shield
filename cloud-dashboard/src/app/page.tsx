@@ -23,9 +23,9 @@ export default function HomePage() {
               {/* Release announcement badge */}
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-slate-700 text-xs text-slate-300 shadow-xl hover:border-emerald-500/50 transition">
                 <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                <span className="font-semibold text-emerald-400">MCP Shield 2.4 Released</span>
+                <span className="font-semibold text-emerald-400">Platform v2.4 • Engine mcpshld@1.0.25</span>
                 <span className="text-slate-500">|</span>
-                <span>Zero-Trust Model Context Protocol Firewall</span>
+                <span>Zero-Trust Policy & Capability Enforcement</span>
                 <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
               </div>
 
@@ -41,7 +41,7 @@ export default function HomePage() {
               {/* Subtitle */}
               <p className="text-base sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
                 Protect autonomous agents in Claude Desktop, Cursor, and custom frameworks from prompt injection,
-                AST shell command escalation, cloud metadata SSRF, and credential exfiltration in <strong className="text-emerald-400 font-semibold">&lt; 0.2ms</strong>.
+                AST shell command escalation, cloud metadata SSRF, and credential exfiltration with <strong className="text-emerald-400 font-semibold">&lt; 0.2ms local pipeline overhead</strong> (p50 microbenchmark).
               </p>
 
               {/* CTAs */}
@@ -77,7 +77,7 @@ export default function HomePage() {
               <div className="pt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center max-w-3xl mx-auto">
                 <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80">
                   <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">&lt; 0.2ms</div>
-                  <div className="text-xs text-slate-400 mt-0.5">Mean Latency</div>
+                  <div className="text-xs text-slate-400 mt-0.5">Pipeline p50 (Local)</div>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80">
                   <div className="text-xl sm:text-2xl font-black text-cyan-400 font-mono">Tree-sitter</div>
@@ -85,11 +85,11 @@ export default function HomePage() {
                 </div>
                 <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80">
                   <div className="text-xl sm:text-2xl font-black text-indigo-400 font-mono">FPE Bijective</div>
-                  <div className="text-xs text-slate-400 mt-0.5">DLP Tokenizer</div>
+                  <div className="text-xs text-slate-400 mt-0.5">DLP Canary Tokenizer</div>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80">
-                  <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono">SOC2 Ready</div>
-                  <div className="text-xs text-slate-400 mt-0.5">WORM Audit Logs</div>
+                  <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono">SOC2 Support</div>
+                  <div className="text-xs text-slate-400 mt-0.5">Merkle Audit Ledger</div>
                 </div>
               </div>
             </div>
@@ -234,10 +234,10 @@ export default function HomePage() {
                 <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 w-fit mb-4 group-hover:scale-110 transition">
                   <Zap className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-white mb-2">SIMD eBPF Fastpath</h3>
+                <h3 className="text-lg font-bold text-white mb-2">Native AST & Zero-Copy Token Fastpath</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Compiled hotpath rules execute in sub-millisecond time. Enjoy enterprise-grade security without adding
-                  human-noticeable latency to conversational agent workflows.
+                  Native C Tree-Sitter grammar engine and streaming zero-copy tokenization execute with sub-millisecond local
+                  pipeline overhead (&lt; 0.2ms p50). Security without conversational latency.
                 </p>
               </div>
 
@@ -246,10 +246,10 @@ export default function HomePage() {
                 <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400 w-fit mb-4 group-hover:scale-110 transition">
                   <FileText className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-white mb-2">Cryptographic WORM Audit</h3>
+                <h3 className="text-lg font-bold text-white mb-2">Cryptographic Merkle Audit Ledger</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Every tool call, policy evaluation, and blocked attempt is hashed with HMAC-SHA256 into a tamper-proof
-                  audit ledger, ready for SOC2, HIPAA, and ISO 27001 AI governance.
+                  Every tool call, policy evaluation, and blocked attempt is chained with HMAC-SHA256 into a tamper-evident
+                  audit ledger, supporting enterprise SOC2 CC6.1/CC6.6, HIPAA, and ISO 27001 AI governance.
                 </p>
               </div>
             </div>
@@ -278,7 +278,7 @@ export default function HomePage() {
                 <h3 className="font-bold text-sm text-slate-200 mb-2">How does MCP Shield integrate with my existing setup?</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   MCP Shield acts as a transparent command wrapper. In your Claude Desktop config (or Cursor mcp.json), you simply prepend
-                  <code className="text-emerald-400 font-mono"> npx @rahulxcodex/mcp-shield proxy -- </code> before your existing server command.
+                  <code className="text-emerald-400 font-mono"> npx mcpshld proxy -- </code> before your existing server command.
                   No code modifications to the MCP server or agent are required.
                 </p>
               </div>
@@ -286,7 +286,7 @@ export default function HomePage() {
               <div className="p-5 rounded-xl bg-[#08090e] border border-slate-800">
                 <h3 className="font-bold text-sm text-slate-200 mb-2">Is MCP Shield open-source and free to use?</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Yes, MCP Shield core is 100% open-source under the Apache-2.0 / MIT license. The cloud dashboard and console can be self-hosted
+                  Yes, MCP Shield core is 100% open-source under the MIT license. The cloud dashboard and console can be self-hosted
                   for free on GitHub, Vercel, and Supabase.
                 </p>
               </div>

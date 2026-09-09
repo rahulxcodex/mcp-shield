@@ -1,4 +1,5 @@
 import * as http from 'http';
+import * as https from 'https';
 import * as net from 'net';
 import * as dns from 'dns';
 import { PolicyEngine } from './policy-engine';
@@ -145,75 +146,198 @@ export class NetworkEgressProxy {
       res.end('Bad Request');
       return;
     }
-    
+
+    // Read request body safely with strict payload limits
+    let requestBody = Buffer.alloc(0);
     try {
-      const url = new URL(req.url);
-      const pinnedIp = await this.isAllowed(url.hostname);
-      if (!pinnedIp) {
-        res.writeHead(403);
-        res.end('Blocked by MCP-Shield Egress Policy');
-        return;
-      }
+      const chunks: Buffer[] = [];
+      let totalLength = 0;
+      const MAX_PROXY_BODY_SIZE = 10 * 1024 * 1024; // 10 MB bound
 
-      // Pin strictly to resolved IP to prevent DNS rebinding TOCTOU
-      const isIpv6 = net.isIPv6(pinnedIp);
-      const targetHost = isIpv6 ? `[${pinnedIp}]` : pinnedIp;
-
-      // Preserve original Host header for virtual hosting
-      const headers: http.OutgoingHttpHeaders = { ...(req.headers as any), host: url.host };
-
-      // Socket-level pinning: agent forces socket connect strictly to pre-validated pinned IP
-      const socketAgent = new http.Agent({
-        keepAlive: false,
-        lookup: (_hostname, _options, callback) => {
-          callback(null, pinnedIp, net.isIPv6(pinnedIp) ? 6 : 4);
-        }
-      });
-
-      const options: http.RequestOptions = {
-        hostname: pinnedIp,
-        host: targetHost,
-        port: url.port || 80,
-        path: url.pathname + url.search,
-        method: req.method,
-        headers,
-        agent: socketAgent
-      };
-
-      const proxyReq = http.request(options, async (proxyRes) => {
-        const statusCode = proxyRes.statusCode || 200;
-
-        // Intercept 3xx redirect responses to prevent SSRF redirect-hopping (e.g. into cloud metadata)
-        if ([301, 302, 303, 307, 308].includes(statusCode) && proxyRes.headers.location) {
-          try {
-            const redirectUrl = new URL(proxyRes.headers.location, url);
-            const redirectPinnedIp = await this.isAllowed(redirectUrl.hostname);
-            if (!redirectPinnedIp) {
-              res.writeHead(403);
-              res.end('Blocked by MCP-Shield Egress Policy: Unauthorized Redirect Target');
-              return;
-            }
-          } catch {
-            res.writeHead(400);
-            res.end('Malformed Redirect Location');
-            return;
+      await new Promise<void>((resolve, reject) => {
+        req.on('data', (chunk: Buffer) => {
+          totalLength += chunk.length;
+          if (totalLength > MAX_PROXY_BODY_SIZE) {
+            reject(new Error('PAYLOAD_TOO_LARGE'));
+          } else {
+            chunks.push(chunk);
           }
-        }
-
-        res.writeHead(statusCode, proxyRes.headers);
-        proxyRes.pipe(res, { end: true });
+        });
+        req.on('end', () => resolve());
+        req.on('error', reject);
       });
+      requestBody = Buffer.concat(chunks);
+    } catch (err: any) {
+      if (err.message === 'PAYLOAD_TOO_LARGE') {
+        res.writeHead(413);
+        res.end('Payload Too Large');
+      } else {
+        res.writeHead(400);
+        res.end('Bad Request: Stream Read Error');
+      }
+      return;
+    }
 
-      proxyReq.on('error', () => {
-        res.writeHead(502);
-        res.end('Bad Gateway');
-      });
-
-      req.pipe(proxyReq, { end: true });
+    let currentUrl: URL;
+    try {
+      if (req.url.startsWith('http://') || req.url.startsWith('https://')) {
+        currentUrl = new URL(req.url);
+      } else {
+        currentUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      }
     } catch {
       res.writeHead(400);
       res.end('Invalid URL');
+      return;
     }
+
+    const currentMethod = req.method || 'GET';
+    const currentHeaders: http.OutgoingHttpHeaders = { ...(req.headers as any) };
+    delete currentHeaders['proxy-connection'];
+    delete currentHeaders['proxy-authorization'];
+
+    let redirectCount = 0;
+    const maxRedirects = 5;
+    const visitedUrls = new Set<string>();
+
+    const executeHop = async (
+      targetUrl: URL,
+      method: string,
+      headers: http.OutgoingHttpHeaders,
+      body: Buffer
+    ): Promise<void> => {
+      if (visitedUrls.has(targetUrl.href)) {
+        res.writeHead(508);
+        res.end('Blocked by MCP-Shield: Redirect Loop Detected');
+        return;
+      }
+      visitedUrls.add(targetUrl.href);
+
+      const pinnedIp = await this.isAllowed(targetUrl.hostname);
+      if (!pinnedIp) {
+        res.writeHead(403);
+        res.end(
+          redirectCount > 0
+            ? 'Blocked by MCP-Shield Egress Policy: Unauthorized Redirect Target'
+            : 'Blocked by MCP-Shield Egress Policy'
+        );
+        return;
+      }
+
+      const isHttps = targetUrl.protocol === 'https:';
+      const isIpv6 = net.isIPv6(pinnedIp);
+      const targetHost = isIpv6 ? `[${pinnedIp}]` : pinnedIp;
+      const targetPort = targetUrl.port ? parseInt(targetUrl.port, 10) : (isHttps ? 443 : 80);
+
+      const hopHeaders: http.OutgoingHttpHeaders = { ...headers, host: targetUrl.host };
+
+      const agentOptions = {
+        keepAlive: false,
+        lookup: (_hostname: string, _options: any, callback: any) => {
+          callback(null, pinnedIp, isIpv6 ? 6 : 4);
+        }
+      };
+
+      const socketAgent = isHttps
+        ? new https.Agent({ ...agentOptions, servername: targetUrl.hostname })
+        : new http.Agent(agentOptions);
+
+      const requestOptions: http.RequestOptions = {
+        protocol: targetUrl.protocol,
+        hostname: pinnedIp,
+        host: targetHost,
+        port: targetPort,
+        path: (targetUrl.pathname || '/') + (targetUrl.search || ''),
+        method,
+        headers: hopHeaders,
+        agent: socketAgent
+      };
+
+      return new Promise<void>((resolve) => {
+        const requester = isHttps ? https.request : http.request;
+        const proxyReq = requester(requestOptions, async (proxyRes) => {
+          const statusCode = proxyRes.statusCode || 200;
+
+          // Intercept 3xx redirect responses to prevent SSRF redirect-hopping (e.g. into cloud metadata)
+          // The proxy follows redirects internally; the child never receives the raw 3xx or unproxied Location
+          if ([301, 302, 303, 307, 308].includes(statusCode) && proxyRes.headers.location) {
+            proxyRes.resume(); // drain response body cleanly
+
+            if (redirectCount >= maxRedirects) {
+              res.writeHead(508);
+              res.end('Blocked by MCP-Shield: Maximum Redirects Exceeded');
+              resolve();
+              return;
+            }
+
+            redirectCount++;
+            let nextUrl: URL;
+            try {
+              nextUrl = new URL(proxyRes.headers.location, targetUrl);
+            } catch {
+              res.writeHead(400);
+              res.end('Malformed Redirect Location');
+              resolve();
+              return;
+            }
+
+            if (nextUrl.protocol !== 'http:' && nextUrl.protocol !== 'https:') {
+              res.writeHead(400);
+              res.end('Blocked by MCP-Shield: Unsupported Redirect Protocol');
+              resolve();
+              return;
+            }
+
+            // Cross-origin redirect security: strip sensitive credentials across host boundaries
+            const nextHeaders: http.OutgoingHttpHeaders = { ...hopHeaders };
+            if (nextUrl.origin !== targetUrl.origin) {
+              delete nextHeaders['authorization'];
+              delete nextHeaders['cookie'];
+            }
+
+            let nextMethod = method;
+            let nextBody = body;
+            if (statusCode === 303) {
+              nextMethod = 'GET';
+              nextBody = Buffer.alloc(0);
+              delete nextHeaders['content-length'];
+              delete nextHeaders['content-type'];
+            } else if (statusCode === 301 || statusCode === 302) {
+              if (method !== 'GET' && method !== 'HEAD') {
+                nextMethod = 'GET';
+                nextBody = Buffer.alloc(0);
+                delete nextHeaders['content-length'];
+                delete nextHeaders['content-type'];
+              }
+            }
+
+            await executeHop(nextUrl, nextMethod, nextHeaders, nextBody);
+            resolve();
+            return;
+          }
+
+          // Terminal response: stream final response directly to client
+          res.writeHead(statusCode, proxyRes.headers);
+          proxyRes.pipe(res, { end: true });
+          proxyRes.on('end', () => resolve());
+        });
+
+        proxyReq.on('error', () => {
+          if (!res.headersSent) {
+            res.writeHead(502);
+            res.end('Bad Gateway');
+          }
+          resolve();
+        });
+
+        if (body.length > 0 && method !== 'GET' && method !== 'HEAD') {
+          proxyReq.write(body);
+        }
+        proxyReq.end();
+      });
+    };
+
+    await executeHop(currentUrl, currentMethod, currentHeaders, requestBody);
   }
 
   private async handleConnectRequest(req: http.IncomingMessage, clientSocket: net.Socket, head: Buffer) {

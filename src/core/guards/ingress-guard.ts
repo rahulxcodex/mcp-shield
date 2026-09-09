@@ -1,7 +1,8 @@
-﻿import { ProtocolValidator, ProtocolValidationResult } from '../protocol-validator';
+import { ProtocolValidator, ProtocolValidationResult } from '../protocol-validator';
 import { SecuritySession } from '../session';
 import { CanaryManager } from '../../security/canary';
 import { Evidence } from '../../security/policy-engine';
+import { validatePayloadBounds } from '../../security/budget/security-budget';
 
 export interface IngressEvaluationResult {
   allowed: boolean;
@@ -49,6 +50,22 @@ export class IngressGuard {
 
   public evaluateInboundSecurity(toolName: string, rawArgs: Record<string, any>): IngressEvaluationResult {
     const evidence: Evidence[] = [];
+
+    // 0. Pre-Parse Stream & Payload Bounds Check (DoS / OOM Defense)
+    const bounds = validatePayloadBounds(rawArgs);
+    if (!bounds.valid) {
+      evidence.push({
+        detector: 'security-budget',
+        finding: bounds.reason || 'PAYLOAD_BOUNDS_EXCEEDED: Argument complexity or size exceeds safety budget.',
+        risk: 'CRITICAL'
+      });
+      return {
+        allowed: false,
+        errorCode: -32600,
+        errorMessage: bounds.reason || 'PAYLOAD_BOUNDS_EXCEEDED',
+        evidence
+      };
+    }
 
     // 1. Canary / Honeypot Tool Tripwire Check
     if (this.canaryManager.isCanaryTool(toolName)) {

@@ -472,20 +472,36 @@ ${red}BLOCKED${reset}
   }
 
   private sendErrorToHost(id: any, code: number, message: string, data?: any) {
-     const errorPayload: any = { jsonrpc: '2.0', id, error: { code, message } };
-     if (data !== undefined) {
-       errorPayload.error.data = data;
-     }
-     try {
-       process.stdout.write(JSON.stringify(errorPayload) + '\n');
-     } catch {}
+    try {
+      const errorPayload: any = { jsonrpc: '2.0', id, error: { code, message } };
+      if (data !== undefined) {
+        errorPayload.error.data = data;
+      }
+      process.stdout.write(JSON.stringify(errorPayload) + '\n');
+    } catch (err: any) {
+      try {
+        process.stdout.write(JSON.stringify({
+          jsonrpc: '2.0',
+          id: id ?? null,
+          error: { code: -32603, message: `Serialization error: ${err?.message || 'Failed to serialize error payload'}` }
+        }) + '\n');
+      } catch {}
+    }
   }
 
   private sendSuccessToHost(id: any, result: any) {
+    try {
       const successPayload = { jsonrpc: '2.0', id, result };
+      process.stdout.write(JSON.stringify(successPayload) + '\n');
+    } catch (err: any) {
       try {
-        process.stdout.write(JSON.stringify(successPayload) + '\n');
+        process.stdout.write(JSON.stringify({
+          jsonrpc: '2.0',
+          id: id ?? null,
+          error: { code: -32603, message: `Failed to serialize success result to JSON: ${err?.message || 'Circular structure or invalid type'}` }
+        }) + '\n');
       } catch {}
+    }
   }
 
   private validatePostRestoration(

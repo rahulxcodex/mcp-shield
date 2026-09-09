@@ -75,3 +75,32 @@ export class BudgetTracker {
     };
   }
 }
+
+export function validatePayloadBounds(
+  val: any,
+  maxDepth = 32,
+  maxKeys = 1000,
+  maxStringLength = 65536
+): { valid: boolean; reason?: string } {
+  let keysCount = 0;
+  function walk(curr: any, depth: number): boolean {
+    if (depth > maxDepth) return false;
+    if (curr === null || typeof curr !== 'object') {
+      if (typeof curr === 'string' && curr.length > maxStringLength) {
+        return false;
+      }
+      return true;
+    }
+    const keys = Object.keys(curr);
+    keysCount += keys.length;
+    if (keysCount > maxKeys) return false;
+    for (const k of keys) {
+      if (!walk(curr[k], depth + 1)) return false;
+    }
+    return true;
+  }
+  if (!walk(val, 1)) {
+    return { valid: false, reason: `PAYLOAD_BOUNDS_EXCEEDED: Exceeded max depth (${maxDepth}), keys (${maxKeys}), or string length (${maxStringLength})` };
+  }
+  return { valid: true };
+}

@@ -29,54 +29,62 @@ export class ProtocolValidator {
    * Validates inbound JSON-RPC 2.0 message against protocol specification and complexity bounds.
    */
   public validateInbound(message: any): ProtocolValidationResult {
-    if (!message || typeof message !== 'object' || Array.isArray(message)) {
-      return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: Message must be a non-null object' };
-    }
-
-    // 1. JSON-RPC version enforcement
-    if (message.jsonrpc !== '2.0') {
-      return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: jsonrpc property must be exactly "2.0"' };
-    }
-
-    // 2. ID validation (if present)
-    if (message.id !== undefined && message.id !== null) {
-      const idType = typeof message.id;
-      if (idType !== 'string' && idType !== 'number') {
-        return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: id must be a string or number' };
-      }
-      if (idType === 'number' && (!Number.isInteger(message.id) || !Number.isFinite(message.id))) {
-        return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: numeric id must be a finite integer' };
+    try {
+      if (!message || typeof message !== 'object' || Array.isArray(message)) {
+        return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: Message must be a non-null object' };
       }
 
-      // Check for duplicate pending requests
-      if (this.pendingRequests.has(message.id)) {
-        return { valid: false, errorCode: -32600, errorMessage: `Invalid Request: Duplicate pending request id "${message.id}"` };
+      // 1. JSON-RPC version enforcement
+      if (message.jsonrpc !== '2.0') {
+        return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: jsonrpc property must be exactly "2.0"' };
       }
-    }
 
-    // 3. Method validation
-    if (typeof message.method !== 'string' || !message.method.trim()) {
-      return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: method must be a non-empty string' };
-    }
+      // 2. ID validation (if present)
+      if (message.id !== undefined && message.id !== null) {
+        const idType = typeof message.id;
+        if (idType !== 'string' && idType !== 'number') {
+          return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: id must be a string or number' };
+        }
+        if (idType === 'number' && (!Number.isInteger(message.id) || !Number.isFinite(message.id))) {
+          return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: numeric id must be a finite integer' };
+        }
 
-    // 4. Complexity & nesting depth validation (DoS prevention)
-    const complexityCheck = this.checkComplexity(message, 0, { keys: 0 });
-    if (!complexityCheck.valid) {
-      return complexityCheck;
-    }
+        // Check for duplicate pending requests
+        if (this.pendingRequests.has(message.id)) {
+          return { valid: false, errorCode: -32600, errorMessage: `Invalid Request: Duplicate pending request id "${message.id}"` };
+        }
+      }
 
-    // 5. Method-specific MCP payload validation
-    const methodValidation = this.validateMethodPayload(message.method, message.params);
-    if (!methodValidation.valid) {
-      return methodValidation;
-    }
+      // 3. Method validation
+      if (typeof message.method !== 'string' || !message.method.trim()) {
+        return { valid: false, errorCode: -32600, errorMessage: 'Invalid Request: method must be a non-empty string' };
+      }
 
-    // Record request for correlation tracking
-    if (message.id !== undefined && message.id !== null) {
-      this.pendingRequests.set(message.id, { method: message.method, timestamp: Date.now() });
-    }
+      // 4. Complexity & nesting depth validation (DoS prevention)
+      const complexityCheck = this.checkComplexity(message, 0, { keys: 0 });
+      if (!complexityCheck.valid) {
+        return complexityCheck;
+      }
 
-    return { valid: true };
+      // 5. Method-specific MCP payload validation
+      const methodValidation = this.validateMethodPayload(message.method, message.params);
+      if (!methodValidation.valid) {
+        return methodValidation;
+      }
+
+      // Record request for correlation tracking
+      if (message.id !== undefined && message.id !== null) {
+        this.pendingRequests.set(message.id, { method: message.method, timestamp: Date.now() });
+      }
+
+      return { valid: true };
+    } catch (err: any) {
+      return {
+        valid: false,
+        errorCode: -32600,
+        errorMessage: `Invalid Request: Exception during inbound validation (${err?.message || 'Unknown'})`
+      };
+    }
   }
 
   private validateMethodPayload(method: string, params: any): ProtocolValidationResult {
@@ -108,7 +116,9 @@ export class ProtocolValidator {
             if (argSize > this.MAX_ARGUMENT_BYTES) {
               return { valid: false, errorCode: -32600, errorMessage: `Argument payload size (${Math.round(argSize / 1024)} KB) exceeds maximum allowed ${Math.round(this.MAX_ARGUMENT_BYTES / 1024)} KB limit` };
             }
-          } catch {}
+          } catch {
+            return { valid: false, errorCode: -32600, errorMessage: 'Failed to serialize arguments for size validation: malformed structure or circular reference' };
+          }
         }
         break;
 
@@ -231,7 +241,16 @@ export class ProtocolValidator {
       }
 
       for (const k of keys) {
-        const val = obj[k];
+        let val: any;
+        try {
+          val = obj[k];
+        } catch {
+          return {
+            valid: false,
+            errorCode: -32600,
+            errorMessage: `Invalid Request: Failed to inspect property "${k}" (throwing getter or malformed property descriptor)`
+          };
+        }
         if (val && typeof val === 'object') {
           const res = this.checkComplexity(val, depth + 1, counter);
           if (!res.valid) return res;

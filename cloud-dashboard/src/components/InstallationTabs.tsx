@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { Copy, Check, Terminal, FileCode, CheckCircle2 } from 'lucide-react';
@@ -22,12 +22,10 @@ const TABS: TabItem[] = [
     "shielded-filesystem": {
       "command": "npx",
       "args": [
-        "-y",
-        "@rahulxcodex/mcp-shield",
+        "mcpshld@1.0.25",
         "proxy",
         "--",
         "npx",
-        "-y",
         "@modelcontextprotocol/server-filesystem",
         "/Users/username/Desktop"
       ]
@@ -66,7 +64,7 @@ const TABS: TabItem[] = [
     "shielded-cloud-ops": {
       "command": "npx",
       "args": [
-        "@rahulxcodex/mcp-shield",
+        "mcpshld@1.0.25",
         "proxy",
         "--cloud-telemetry",
         "--policy",
@@ -89,13 +87,11 @@ const TABS: TabItem[] = [
     "github-shielded": {
       "command": "npx",
       "args": [
-        "-y",
-        "@rahulxcodex/mcp-shield",
+        "mcpshld@1.0.25",
         "proxy",
         "--redact-secrets",
         "--",
         "npx",
-        "-y",
         "@modelcontextprotocol/server-github"
       ],
       "env": {
@@ -161,13 +157,13 @@ export default function InstallationTabs() {
               <Terminal className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs text-slate-400 font-mono">Global CLI Quickstart</div>
-              <div className="text-sm font-mono font-semibold text-emerald-300">npx @rahulxcodex/mcp-shield setup</div>
+              <div className="text-xs text-slate-400 font-mono">Canonical npm: <span className="text-emerald-400">mcpshld</span> (publisher: rahulxcodexx)</div>
+              <div className="text-sm font-mono font-semibold text-emerald-300">npx mcpshld setup</div>
             </div>
           </div>
           <button
             onClick={() => {
-              navigator.clipboard.writeText('npx @rahulxcodex/mcp-shield setup');
+              navigator.clipboard.writeText('npx mcpshld setup');
               setCopied(true);
               setTimeout(() => setCopied(false), 2000);
             }}

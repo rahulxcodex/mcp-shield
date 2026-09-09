@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import { Check, X, Shield, Zap } from 'lucide-react';
@@ -48,8 +48,8 @@ const COMPARISONS: Row[] = [
     regexWaf: false,
   },
   {
-    feature: 'Cryptographic WORM Audit Trails',
-    description: 'HMAC-signed tamper-evident ledger for SOC2, HIPAA, and ISO 27001 AI compliance.',
+    feature: 'Cryptographic Merkle Audit Trails',
+    description: 'HMAC-signed tamper-evident ledger supporting SOC2 CC6.1/CC6.6, HIPAA, and ISO 27001 AI governance.',
     mcpShield: true,
     rawMcp: false,
     regexWaf: 'Basic text logs',

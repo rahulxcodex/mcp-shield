@@ -109,18 +109,24 @@ export class COWFileSystem {
         if (!fs.existsSync(absoluteOriginalPath)) {
           throw new Error('COW TOCTOU DETECTED: Original file was deleted before commit.');
         }
-        const currentStat = fs.lstatSync(absoluteOriginalPath);
-        if (currentStat.isSymbolicLink()) {
-          throw new Error('COW TOCTOU DETECTED: Target was replaced with a symlink before commit.');
-        }
-        if (
-          currentStat.ino !== originalIdentity.ino ||
-          currentStat.dev !== originalIdentity.dev ||
-          (originalIdentity.mtimeMs !== undefined && currentStat.mtimeMs !== originalIdentity.mtimeMs) ||
-          (originalIdentity.ctimeMs !== undefined && currentStat.ctimeMs !== originalIdentity.ctimeMs) ||
-          (originalIdentity.size !== undefined && currentStat.size !== originalIdentity.size)
-        ) {
-          throw new Error('COW TOCTOU DETECTED: File identity changed (inode swap or file replacement).');
+        const fd = fs.openSync(absoluteOriginalPath, fs.constants.O_RDONLY);
+        try {
+          const currentStat = fs.fstatSync(fd);
+          const lstat = fs.lstatSync(absoluteOriginalPath);
+          if (lstat.isSymbolicLink()) {
+            throw new Error('COW TOCTOU DETECTED: Target was replaced with a symlink before commit.');
+          }
+          if (
+            currentStat.ino !== originalIdentity.ino ||
+            currentStat.dev !== originalIdentity.dev ||
+            (originalIdentity.mtimeMs !== undefined && currentStat.mtimeMs !== originalIdentity.mtimeMs) ||
+            (originalIdentity.ctimeMs !== undefined && currentStat.ctimeMs !== originalIdentity.ctimeMs) ||
+            (originalIdentity.size !== undefined && currentStat.size !== originalIdentity.size)
+          ) {
+            throw new Error('COW TOCTOU DETECTED: File identity changed (inode swap or file replacement).');
+          }
+        } finally {
+          fs.closeSync(fd);
         }
         if (originalIdentity.sha256 !== undefined) {
           const currentContent = fs.readFileSync(absoluteOriginalPath, 'utf8');
