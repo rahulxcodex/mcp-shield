@@ -31,4 +31,4 @@ npm run build
 
 ---
 
-*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*
+*MCP-Shield v1.0.27 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*
