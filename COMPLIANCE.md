@@ -170,3 +170,7 @@ mcp-shield audit-verify --log-dir .mcp-shield/logs
 # Run complete compliance and security regression suite
 npm test
 ```
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

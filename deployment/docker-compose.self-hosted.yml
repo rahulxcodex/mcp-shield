@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  mcp-shield-core:
+    image: ghcr.io/rahulxcodex/mcp-shield:1.0.25
+    container_name: mcp-shield-core
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - NODE_ENV=production
+      - AIR_GAP_OFFLINE=false
+      - FIPS_MODE=true
+      - PERSISTENT_AUDIT_SQLITE_PATH=/data/audit/audit-ledger.sqlite
+      - TIER2_CAUSAL_SIDECAR_ENABLED=true
+      - LMAX_RING_SIZE=1024
+    ports:
+      - "8080:8080"
+    volumes:
+      - mcp-shield-data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=100m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  mcp-shield-causal-sidecar:
+    image: ghcr.io/rahulxcodex/mcp-shield:1.0.25
+    container_name: mcp-shield-causal-sidecar
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    command: ["node", "dist/sidecar.js"]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - NODE_ENV=production
+      - FIPS_MODE=true
+      - TIER2_WORKER=true
+    volumes:
+      - mcp-shield-data:/data
+    depends_on:
+      - mcp-shield-core
+
+volumes:
+  mcp-shield-data:
+    driver: local

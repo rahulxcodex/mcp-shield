@@ -278,7 +278,7 @@ export class CloudTelemetryPublisher {
   }
 
   public async flush(): Promise<boolean> {
-    if (this.queue.length === 0 || !this.config.apiKey || !this.config.cloudEndpoint) {
+    if (!this.config.enabled || this.queue.length === 0 || !this.config.apiKey || !this.config.cloudEndpoint) {
       return true;
     }
 

@@ -158,7 +158,7 @@ To maintain a defensible IP moat and adhere to formal trade secret isolation sta
 |    - Local Zero-Trust Gateway & AST Firewall (CLI: mcp-shield, mcpshld)           |
 |    - Bijective Format-Preserving Encryption DLP Sanitizer                         |
 |    - Multi-Tenant Memory-Safe State Machine & Stream Framing                      |
-|    - Standard Security Benchmark Suite (49 suites / 713 tests)                    |
+|    - Standard Security Benchmark Suite (117 suites / 1,141 tests)                  |
 |    - Cloud Telemetry Emitter & Next.js Console (Deployed on Vercel)              |
 +-----------------------------------------+-----------------------------------------+
                                           |
@@ -180,4 +180,8 @@ To maintain a defensible IP moat and adhere to formal trade secret isolation sta
 2. **Cryptographic Signing Authority**: The Ed25519 private signing key (`LICENSE_PRIVATE_KEY`) is stored exclusively in Vercel KMS environment variables. The open-source client contains only the public verification key.
 3. **No Hardcoded Master Key Bypasses**: Client binaries never contain hardcoded master key hashes; master key verification requires explicit server-side environment configuration.
 4. **Verifiable In-Flight Delegation**: The public gateway delegates high-risk intelligence queries to `mcp-shield-enterprise-intel` via authenticated bearer RPC (`X-MCP-Shield-Key`), ensuring that proprietary models are never exposed via client-side decompilation.
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*
 

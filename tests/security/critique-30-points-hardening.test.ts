@@ -87,7 +87,8 @@ describe('30-Point External Critique Resolution & Hardening Suite', () => {
     beforeEach(() => {
       egress = new AuthoritativeEgressEngine({
         allowMode: 'allowlist',
-        allowedDomains: ['api.github.com']
+        allowedDomains: ['api.github.com'],
+        dnsResolver: async () => ['140.82.121.4']
       });
     });
 

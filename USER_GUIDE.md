@@ -252,3 +252,7 @@ If deploying a persistent background proxy daemon on Render's free tier:
 ---
 
 *Need help or enterprise support? Visit [mcpshield.dev](https://mcpshield.dev) or inspect the repository at [github.com/rahulxcodex/mcp-shield](https://github.com/rahulxcodex/mcp-shield).*
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

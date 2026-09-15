@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     }
 
     // Idempotency: avoid double-processing the same webhook event
-    if (!idempotencyStore.acquire(`stripe_event:${event.id}`)) {
+    if (!(await idempotencyStore.acquireAsync(`stripe_event:${event.id}`, event))) {
       return NextResponse.json({ received: true, alreadyProcessed: true });
     }
 
@@ -120,7 +120,7 @@ export async function POST(req: Request) {
       const notes = paymentEntity?.notes || {};
       const paymentId = paymentEntity?.id;
 
-      if (paymentId && !idempotencyStore.acquire(`rzp_webhook_evt:${paymentId}`)) {
+      if (paymentId && !(await idempotencyStore.acquireAsync(`rzp_webhook_evt:${paymentId}`, payload))) {
         return NextResponse.json({ received: true, alreadyProcessed: true });
       }
 

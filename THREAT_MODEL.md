@@ -85,7 +85,7 @@ To maintain credibility and avoid overpromising, MCP-Shield defines clear defens
    - Hardware-level timing attacks, cold-boot memory extraction, or microarchitectural vulnerabilities (Spectre/Meltdown) are out of scope.
 5. **Subjective Prompt Persuasion & Semantic Intent**:
    - MCP-Shield is an execution and data gateway enforcing deterministic syntactic rules, DLP redaction, and sandbox boundaries. It is not an LLM intent classifier and does not evaluate whether benign text is persuasive or manipulative.
-6. **Windows PowerShell and cmd.exe Semantic Parsing**:
+6. **Windows PowerShell and cmd.exe Semantic Parsing** *(Fully Implemented -- Listed Here for Boundary Clarity)*:
    - Multi-dialect semantic analysis is implemented across POSIX (`tree-sitter-bash`), PowerShell (`PowerShellASTAnalyzer` covering cmdlet aliases, parameter prefix matching, dynamic invocations `&`, base64 `-EncodedCommand` recursive inspection, and `$env:*` leakage), and cmd.exe (`CmdAnalyzer` covering carets, compound operators `&`/`&&`/`||`, delayed expansion `!VAR!`, and system tampering `vssadmin delete shadows`). All attack vectors are verified continuously in native Windows CI (`tests/security-corpus/windows/`).
 7. **Environment-Variable Egress Enforcement Boundary**:
    - Network egress filtering operates as an environment-level proxy shim (`HTTP_PROXY` / `HTTPS_PROXY`). It provides domain policy and DNS-rebinding protection for standard HTTP/HTTPS SDKs. Downstream tools initiating raw TCP sockets or deliberately ignoring proxy environment variables bypass this shim unless Docker container network isolation (`network=none`) is enabled.
@@ -128,4 +128,8 @@ To maintain resilience against novel attack techniques, MCP-Shield enforces:
 | 16 | **Container Escape Attacker** | Host kernel & hardware | Exploit container runtime vulnerability | Attacker uses `CAP_SYS_ADMIN` or shared volumes to break out | `--cap-drop=ALL` + `--security-opt=no-new-privileges` + read-only root | Container exit code and crash telemetry | Sandbox termination | Linux kernel 0-day container breakout | `container-sandbox.test.ts` |
 | 17 | **Credential Extraction Attacker** | API keys & passwords | Read secrets via prompt reflection or error messages | Prompt tool to echo environment variables or read `.env` | Ephemeral AES-256-GCM Secret Vault + Bijective tokenization | Pattern scanner + High-entropy Shannon detector | Secret replaced with `[[SHIELD_SECRET_*]]` | Extremely short low-entropy custom keys | `dlp-benchmark-validation.test.ts`, `vault.ts` |
 | 18 | **Resource Exhaustion Attacker** | CPU, Memory, Disk | Infinite tool loops or gigabyte payload flooding | Agent generates infinite requests or gigabyte output strings | ProtocolValidator nesting depth ($\le 32$) + 1MB output cap + rate limiter | Sliding-window token-bucket quota tracking | Request drop + HTTP 429 / JSON-RPC error | Distributed distributed client floods | `rate-limiter-concurrency.test.ts`, `protocol.test.ts` |
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*
 

@@ -18,11 +18,21 @@ import { BenchmarkCommand } from './cli/commands/benchmark';
 import { AttackCorpusCommand } from './cli/commands/attack-corpus';
 import { AuditCommand } from './cli/commands/audit';
 import { ConfigLoader } from './security/config';
+import { OfflineAirGapEnforcer } from './security/airgap/offline-enforcer';
+import { HumanOversightService } from './security/oversight/human-oversight-service';
 
 export async function runCli(args: string[] = process.argv.slice(2)): Promise<void> {
+  const invokedBin = path.basename(process.argv[1] || '');
+  if (invokedBin.includes('audit') && args[0] !== 'audit') {
+    args.unshift('audit');
+  }
   const command = args[0];
 
-  const bypassCommands = ['demo', 'install', 'license', 'enterprise', 'link', 'wrap', 'protect', 'scan', 'fix', 'dashboard', 'stats', 'report', 'replay', 'replay-eval', 'benchmark', 'attack-corpus', 'audit', 'config'];
+  if (args.includes('--offline')) {
+    OfflineAirGapEnforcer.activate();
+  }
+
+  const bypassCommands = ['demo', 'install', 'license', 'enterprise', 'link', 'wrap', 'protect', 'scan', 'fix', 'dashboard', 'stats', 'report', 'replay', 'replay-eval', 'benchmark', 'attack-corpus', 'audit', 'config', 'oversight'];
   if (command && !bypassCommands.includes(command) && process.env.NODE_ENV !== 'test') {
     const licenseFile = path.join(os.homedir(), '.mcp-shield', 'license.key');
     if (fs.existsSync(licenseFile)) {
@@ -76,6 +86,25 @@ export async function runCli(args: string[] = process.argv.slice(2)): Promise<vo
       }
     } else {
       console.log('Usage: mcp-shield config check [config-file]');
+      process.exit(0);
+    }
+  } else if (command === 'oversight') {
+    const sub = args[1];
+    const oversight = new HumanOversightService();
+    if (sub === 'list') {
+      const list = oversight.listPending();
+      console.log(JSON.stringify({ pending: list, count: list.length }, null, 2));
+      process.exit(0);
+    } else if (sub === 'approve' && args[2]) {
+      const res = oversight.approve(args[2], args[3] || 'cli-admin');
+      console.log(JSON.stringify(res, null, 2));
+      process.exit(0);
+    } else if (sub === 'reject' && args[2]) {
+      const res = oversight.reject(args[2], args[3] || 'cli-admin');
+      console.log(JSON.stringify(res, null, 2));
+      process.exit(0);
+    } else {
+      console.log('Usage: mcp-shield oversight [list | approve <id> [reviewer] | reject <id> [reviewer]]');
       process.exit(0);
     }
   } else if (command === 'fix') {

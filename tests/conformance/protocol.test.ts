@@ -146,4 +146,31 @@ describe('MCP Protocol Conformance & Security Suite', () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it('should process JSON-RPC 2.0 batch array requests and validate each item', () => {
+    const executed: any[] = [];
+    const errors: any[] = [];
+    const dispatcher = new RequestDispatcher(
+      async (msg) => {
+        executed.push(msg.id);
+      },
+      (msg, code, err) => {
+        errors.push({ id: msg?.id, code, err });
+      }
+    );
+
+    const batch = [
+      { jsonrpc: '2.0', id: 'b1', method: 'tools/list' },
+      { jsonrpc: '1.0', id: 'b2', method: 'invalid/version' },
+      { jsonrpc: '2.0', id: 'b3', method: 'tools/call', params: { name: 'safe_tool' } },
+    ];
+
+    for (const item of batch) {
+      dispatcher.enqueue(item);
+    }
+
+    expect(executed).toContain('b1');
+    expect(executed).toContain('b3');
+    expect(errors.some(e => e.id === 'b2')).toBe(true);
+  });
 });

@@ -8,13 +8,13 @@
 [![Security: Defense-in-Depth](https://img.shields.io/badge/Security-Defense--in--Depth-blue.svg)](SECURITY_ARCHITECTURE.md)
 [![Audit: Standalone Verified](https://img.shields.io/badge/Audit-Standalone%20Verified-brightgreen.svg)](scripts/verify-external-audit.ts)
 
-> 🛡️ **Production Status**: Production Ready (v1.0.24) • Verified Defense-in-Depth Broker • Includes Standalone Third-Party Audit Runner (`scripts/verify-external-audit.ts`).
+> 🛡️ **Production Status**: Production Ready (v1.0.25) • Verified Defense-in-Depth Broker • Includes Standalone Third-Party Audit Runner (`scripts/verify-external-audit.ts`).
 
 > **The Defense-in-Depth Policy & Capability Enforcement Broker, AST Shell Firewall & Bijective Secret Sanitizer for the Model Context Protocol (MCP) and Autonomous AI Agents.**
 
 ```bash
 # 🛡️ 1-Command Setup: Automatically protect Claude Desktop, Cursor, Windsurf, & Cline
-npx mcp-shield protect
+npx mcpshld protect
 ```
 
 ---
@@ -265,7 +265,7 @@ Security tools must be validated against hostile, adversarial pressure rather th
 - ⚠️ **Zero-Telemetry False Positive Reporting**: Report benign collisions via the [False Positive Template](.github/ISSUE_TEMPLATE/false_positive.yml).
 
 ```bash
-# Run the complete test suite (522 tests across 21 suites)
+# Run the complete test suite (1,141 tests across 117 suites)
 npm test
 
 # Run the adversarial bypass corpus regression suite
@@ -305,6 +305,7 @@ npm run test:coverage
 - 🚀 [Release Process](RELEASING.md) - Release cadence, versioning policy, and CI/CD publishing pipeline.
 - 📖 [Additional Resources](ADDITIONAL.md) - Curated references, specifications, and AI security guides.
 - 📜 [Code of Conduct](CODE_OF_CONDUCT.md) - Community participation standards.
+- 🏗️ [Architecture & Codebase Reference](ARCHITECTURE_REFERENCE.md) - Complete module catalog, public algorithm descriptions, and function reference.
 
 ---
 

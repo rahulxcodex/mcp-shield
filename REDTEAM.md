@@ -68,7 +68,7 @@ Submit your evasion payload through our [Bypass Challenge GitHub Issue Template]
 2. Add your dedicated regression test to [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts).
 
 ### Option C: Private Responsible Disclosure (Critical Zero-Days)
-For critical zero-day vulnerabilities (direct host arbitrary code execution, complete sandbox breakouts, zero-day key extraction), please report privately via **`security@example.com`** or via GitHub Private Security Advisories per [SECURITY.md](SECURITY.md).
+For critical zero-day vulnerabilities (direct host arbitrary code execution, complete sandbox breakouts, zero-day key extraction), please report privately via **`security@example.com`** (replace with your organization's security contact) or via GitHub Private Security Advisories per [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -81,4 +81,8 @@ Contributors who submit novel bypasses or hardening improvements are permanently
 - The [`tests/redteam/bypasses.test.ts`](tests/redteam/bypasses.test.ts) test headers
 
 Thank you for helping keep AI developer environments secure!
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*
 

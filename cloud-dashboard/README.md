@@ -1,4 +1,4 @@
-﻿# MCP Shield Cloud Console & Marketing Platform
+# MCP Shield Cloud Console & Marketing Platform
 
 Production Next.js 16 web platform, interactive attack simulator, real-time threat telemetry console, and key pairing hub for Model Context Protocol (MCP) and AI Agents.
 
@@ -28,3 +28,7 @@ Open [http://localhost:3000](http://localhost:3000) to view the application.
 ```bash
 npm run build
 ```
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

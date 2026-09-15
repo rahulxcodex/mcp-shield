@@ -195,8 +195,11 @@ export class OSEnforcer {
   /**
    * Wraps an execution command with AppArmor execution tooling (aa-exec).
    */
-  public wrapAppArmorExec(profileName: string, command: string, args: string[] = []): { executable: string; args: string[] } {
+  public wrapAppArmorExec(profileName: string, command: string, args: string[] = [], strict: boolean = false): { executable: string; args: string[] } {
     if (!this.isAppArmorAvailable()) {
+      if (strict) {
+        throw new Error('EPERM_SANDBOX_UNAVAILABLE: AppArmor kernel confinement is required in strict mode but unavailable on host OS');
+      }
       return { executable: command, args };
     }
     return {

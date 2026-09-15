@@ -66,3 +66,7 @@ This document curates foundational specifications, threat frameworks, security s
 - **Issue Tracker**: [GitHub Issues](https://github.com/rahulxcodex/mcp-shield/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/rahulxcodex/mcp-shield/discussions)
 - **Security Disclosures**: [SECURITY.md](SECURITY.md)
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

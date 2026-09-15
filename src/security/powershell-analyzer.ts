@@ -131,18 +131,24 @@ export class PowerShellASTAnalyzer {
     'private_key', 'password', 'db_password', 'api_key', 'token'
   ]);
 
+  public deobfuscateBackticks(cmd: string): string {
+    if (!cmd || !cmd.includes('`')) return cmd;
+    return cmd.replace(/`([a-zA-Z0-9_\-\.\:\$\"\'])/g, '$1');
+  }
+
   public analyzeCommand(command: string, depth = 0): PowerShellAnalysisResult {
     if (!command || !command.trim()) return { isSafe: true };
+    const normalizedCommand = this.deobfuscateBackticks(command);
     if (depth > this.MAX_RECURSION_DEPTH) {
       return { isSafe: false, reason: 'PowerShell AST recursion depth limit exceeded (DoS prevention)' };
     }
 
-    if (command.length > 64 * 1024) {
+    if (normalizedCommand.length > 64 * 1024) {
       return { isSafe: false, reason: 'PowerShell command size exceeds 64KB safety limit' };
     }
 
     // 1. Check for encoded commands (powershell.exe -enc <base64> or pwsh -e <base64>)
-    const encodedMatch = this.extractEncodedCommand(command);
+    const encodedMatch = this.extractEncodedCommand(normalizedCommand);
     if (encodedMatch) {
       const decodedScript = this.decodeBase64(encodedMatch);
       if (decodedScript) {
@@ -159,7 +165,7 @@ export class PowerShellASTAnalyzer {
     }
 
     // 2. Tokenize the PowerShell script
-    const tokens = this.tokenize(command);
+    const tokens = this.tokenize(normalizedCommand);
     if (tokens.length === 0) return { isSafe: true };
 
     // 3. Scan for direct sensitive environment variable leaks e.g. $env:AWS_SECRET_ACCESS_KEY

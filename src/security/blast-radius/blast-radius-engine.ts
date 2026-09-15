@@ -19,7 +19,27 @@ export interface BlastRadiusInputs {
   availableTools?: string[];
 }
 
+export interface BlastRadiusWeights {
+  destructive: number;
+  process: number;
+  credential: number;
+  egress: number;
+  persistence: number;
+  downstream: number;
+  chainDepthMultiplier: number;
+}
+
 export class BlastRadiusEngine {
+  public static VECTOR_WEIGHTS: BlastRadiusWeights = {
+    destructive: 0.25,
+    process: 0.20,
+    credential: 0.20,
+    egress: 0.15,
+    persistence: 0.10,
+    downstream: 0.10,
+    chainDepthMultiplier: 0.15,
+  };
+
   private static DESTRUCTIVE_KEYWORDS = new Set([
     'delete', 'remove', 'rm', 'unlink', 'drop', 'truncate', 'format',
     'overwrite', 'purge', 'destroy', 'wipe', 'reset', 'kill'
@@ -132,17 +152,18 @@ export class BlastRadiusEngine {
     // Scoring formula:
     // Score combines 7 weighted vectors:
     // Destructive (0.25) + Process (0.20) + Credential (0.20) + Egress (0.15) + Persistence (0.10) + Downstream (0.10)
+    const w = BlastRadiusEngine.VECTOR_WEIGHTS;
     let score = 0.0;
-    if (destructiveCapabilities.length > 0) score += 0.25;
-    if (spawnableProcesses.length > 0) score += 0.20;
-    if (reachableCredentials.length > 0) score += 0.20;
-    if (reachableDestinations.length > 0) score += 0.15;
-    if (persistenceMechanisms.length > 0) score += 0.10;
-    if (reachableDownstreamTools.length > 0) score += 0.10;
+    if (destructiveCapabilities.length > 0) score += w.destructive;
+    if (spawnableProcesses.length > 0) score += w.process;
+    if (reachableCredentials.length > 0) score += w.credential;
+    if (reachableDestinations.length > 0) score += w.egress;
+    if (persistenceMechanisms.length > 0) score += w.persistence;
+    if (reachableDownstreamTools.length > 0) score += w.downstream;
 
     // Chain depth amplification: deeper kill-chains multiply blast impact
     if (chainDepth > 1) {
-      score = Math.min(1.0, score * (1 + (chainDepth - 1) * 0.15));
+      score = Math.min(1.0, score * (1 + (chainDepth - 1) * w.chainDepthMultiplier));
     }
 
     const highRiskFlag = score >= 0.5 || destructiveCapabilities.length > 0 || persistenceMechanisms.length > 0;

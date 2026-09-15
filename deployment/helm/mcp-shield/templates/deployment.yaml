@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-shield.fullname" . | default "mcp-shield" }}
+  labels:
+    app.kubernetes.io/name: mcp-shield
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-shield
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mcp-shield
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: mcp-shield
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.env.NODE_ENV | quote }}
+            - name: AIR_GAP_OFFLINE
+              value: {{ .Values.env.AIR_GAP_OFFLINE | quote }}
+            - name: FIPS_MODE
+              value: {{ .Values.env.FIPS_MODE | quote }}
+            - name: PERSISTENT_AUDIT_SQLITE_PATH
+              value: {{ .Values.env.PERSISTENT_AUDIT_SQLITE_PATH | quote }}
+            - name: TIER2_CAUSAL_SIDECAR_ENABLED
+              value: {{ .Values.env.TIER2_CAUSAL_SIDECAR_ENABLED | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: data-volume
+              mountPath: {{ .Values.persistence.mountPath }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data-volume
+          emptyDir: {}

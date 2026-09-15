@@ -1,5 +1,7 @@
 # MCP-Shield Security & Compliance Control Matrix 🛡️
 
+> **Deterministic security controls mapped to OWASP LLM Top 10, MITRE ATT&CK / ATLAS, SOC 2, GDPR, and HIPAA frameworks.**
+
 This matrix provides a comprehensive mapping of MCP-Shield's security controls to industry threat models, cybersecurity standards, and enterprise compliance frameworks, including **SOC 2 Type II**, **GDPR**, **HIPAA Security Rule**, **OWASP Top 10 for LLM Applications**, **MITRE ATT&CK®**, **MITRE ATLAS™**, and the **NIST AI Risk Management Framework (AI RMF 1.0)**.
 
 > For full enterprise audit readiness procedures, SIG/CAIQ questionnaires, and BAA/DPA terms, consult [`COMPLIANCE.md`](file:///c:/Users/Rahul/.gemini/antigravity/scratch/mcp-shield/COMPLIANCE.md) and [`docs/ENTERPRISE_COMPLIANCE_PACK.md`](file:///c:/Users/Rahul/.gemini/antigravity/scratch/mcp-shield/docs/ENTERPRISE_COMPLIANCE_PACK.md).
@@ -34,3 +36,7 @@ Every control in this matrix is accompanied by automated regression and property
 - **Automated SBOM & License Audit**: Permissive MIT/Apache-2.0 verification via [`scripts/generate-sbom.js`](file:///c:/Users/Rahul/.gemini/antigravity/scratch/mcp-shield/scripts/generate-sbom.js)
 - **Adversarial Fuzzing**: Property-based permutations validating parser boundaries.
 - **Fail-Closed Guarantee**: Every control defaults to blocking when unknown errors or malformed payloads are encountered.
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

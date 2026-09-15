@@ -67,6 +67,22 @@ async function getOrCreateProject(supabaseUser: any, user: any): Promise<string 
 
     if (orgErr || !newOrg?.id) {
       console.warn('[KEYS] Organization auto-provision note:', orgErr?.message);
+      // Concurrency check: re-query in case a simultaneous request provisioned the org
+      const { data: retryMembers } = await adminSupabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id);
+      const retryOrgIds = (retryMembers || []).map((m: any) => m.organization_id);
+      if (retryOrgIds.length > 0) {
+        const { data: retryProjects } = await adminSupabase
+          .from('projects')
+          .select('id')
+          .in('organization_id', retryOrgIds)
+          .limit(1);
+        if (retryProjects && retryProjects.length > 0) {
+          return retryProjects[0].id;
+        }
+      }
       return null;
     }
 
@@ -82,6 +98,14 @@ async function getOrCreateProject(supabaseUser: any, user: any): Promise<string 
 
     if (projErr || !newProj?.id) {
       console.warn('[KEYS] Project auto-provision note:', projErr?.message);
+      const { data: fallbackProjects } = await adminSupabase
+        .from('projects')
+        .select('id')
+        .eq('organization_id', newOrg.id)
+        .limit(1);
+      if (fallbackProjects && fallbackProjects.length > 0) {
+        return fallbackProjects[0].id;
+      }
       return null;
     }
 

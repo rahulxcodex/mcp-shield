@@ -178,7 +178,7 @@ export class CmdAnalyzer {
     return { isSafe: true };
   }
 
-  private deobfuscateCarets(cmd: string): string {
+  public deobfuscateCarets(cmd: string): string {
     let result = '';
     let inQuotes = false;
     for (let i = 0; i < cmd.length; i++) {

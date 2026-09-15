@@ -27,6 +27,7 @@ export default function OnboardingWizard({ isOpen, onClose, onComplete }: Onboar
   const [orgName, setOrgName] = useState("Acme Security Team");
   const [projectName, setProjectName] = useState("Production MCP Gateway");
   const [generatedKey, setGeneratedKey] = useState("");
+  const [keyNotice, setKeyNotice] = useState<string | null>(null);
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
@@ -50,14 +51,17 @@ export default function OnboardingWizard({ isOpen, onClose, onComplete }: Onboar
       const data = await res.json();
       if (data?.key?.apiKey) {
         setGeneratedKey(data.key.apiKey);
+        setKeyNotice(null);
       } else {
-        // Fallback to random client key if unauthenticated demo
+        // Explicitly notify user about offline demo evaluation key
         const randomHex = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
         setGeneratedKey(`mcp_live_${randomHex}${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`);
+        setKeyNotice('Offline Demo Key Generated: Control plane API is unreachable or running unauthenticated. This key operates for local proxy testing.');
       }
     } catch {
       const randomHex = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
       setGeneratedKey(`mcp_live_${randomHex}${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`);
+      setKeyNotice('Offline Demo Key Generated: Network failure connecting to cloud control plane. Key configured for local offline testing.');
     } finally {
       setIsGeneratingKey(false);
       setCurrentStep(3);
@@ -97,7 +101,12 @@ export default function OnboardingWizard({ isOpen, onClose, onComplete }: Onboar
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-wizard-title"
+        className="relative w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden"
+      >
         {/* Header with progress */}
         <div className="px-6 py-5 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -105,7 +114,7 @@ export default function OnboardingWizard({ isOpen, onClose, onComplete }: Onboar
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">First-Time Workspace Onboarding</h2>
+              <h2 id="onboarding-wizard-title" className="text-base font-semibold text-white">First-Time Workspace Onboarding</h2>
               <p className="text-xs text-slate-400">Connect your AI agents and MCP tools to zero-trust monitoring in 4 steps.</p>
             </div>
           </div>
@@ -222,6 +231,12 @@ export default function OnboardingWizard({ isOpen, onClose, onComplete }: Onboar
                 <label className="block text-xs font-medium text-slate-300 uppercase tracking-wider mb-1.5">
                   Cryptographic Telemetry Key
                 </label>
+                {keyNotice && (
+                  <div className="mb-3 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+                    <span className="font-semibold shrink-0">Note:</span>
+                    <span>{keyNotice}</span>
+                  </div>
+                )}
                 <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl flex items-center justify-between font-mono text-xs text-emerald-400">
                   <span className="truncate">{generatedKey}</span>
                   <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">

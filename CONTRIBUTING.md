@@ -6,7 +6,7 @@ Thank you for your interest in contributing to **MCP-Shield**! We welcome contri
 
 ## 📜 Code of Conduct
 
-All contributors and participants must adhere to our [Code of Conduct](CODE_OF_CONDUCT.md). Please report any unacceptable behavior to `security@example.com` or repository maintainers.
+All contributors and participants must adhere to our [Code of Conduct](CODE_OF_CONDUCT.md). Please report any unacceptable behavior to `security@example.com` (replace with your organization's security contact) or repository maintainers.
 
 ---
 
@@ -41,7 +41,7 @@ npm run typecheck
 MCP-Shield maintains an extensive test suite across unit, integration, red-team, and adversarial fuzzing harnesses:
 
 ```bash
-# Run the full test suite (470+ tests across 14 test suites)
+# Run the full test suite (1,141 tests across 117 suites)
 npm test
 
 # Run the adversarial red-team bypass test suite
@@ -65,19 +65,27 @@ npm run bench
 mcp-shield/
 ├── benchmarks/              # Performance latency & throughput benchmarks
 ├── bin/                     # CLI entrypoint executable
-├── scripts/                 # Test runners and fuzzing harnesses
+├── cloud-dashboard/         # Next.js 16 web console & marketing platform
+├── scripts/                 # Test runners, fuzzing harnesses & CI gates
 ├── src/
+│   ├── adapters/            # Protocol adapters (MCP, Browser, Coding agent)
 │   ├── audit/               # Tamper-evident SHA-256/HMAC session logging
-│   ├── cli/                 # CLI commands (install, scan, fix, protect, replay)
-│   ├── core/                # JSON-RPC framing, proxy dispatching, session lifecycle
+│   ├── cli/                 # CLI commands (protect, wrap, scan, license, link, replay, stats)
+│   ├── cloud/               # Cloud telemetry emitter & distributed state
+│   ├── config/              # Default policy configuration & plan definitions
+│   ├── core/                # JSON-RPC framing, proxy, dispatcher, guards, pipeline, broker
 │   ├── dashboard/           # Real-time Express & WebSocket telemetry dashboard
+│   ├── microkernel/         # WASM plugin loader, ring buffer, fast-path engine
 │   ├── sandbox/             # Copy-on-Write (COW) FS & Docker container isolation
-│   ├── security/            # AST analyzer, secret sanitizer, policy engine, egress proxy
-│   └── tui/                 # Interactive terminal approval UI bridge
+│   ├── scanner/             # Multi-agent ecosystem auto-discovery (9 environments)
+│   ├── security/            # AST analyzer, DLP sanitizer, policy engine, ML models, graph analysis
+│   ├── tui/                 # Interactive terminal approval UI bridge
+│   └── watermark/           # Cryptographic watermarking & canary tripwires
 ├── tests/
 │   ├── fuzz/                # Permutation and property-based fuzzers
 │   ├── integration/         # Stream framing & end-to-end proxy tests
 │   ├── redteam/             # Adversarial bypass test corpus
+│   ├── security-corpus/     # Cross-platform attack vector regression suites
 │   └── unit/                # Unit tests for individual security modules
 └── shield.config.default.yaml # Default declarative security policy configuration
 ```
@@ -117,3 +125,7 @@ When contributing code to MCP-Shield, adhere to these fundamental design rules:
 
 - **Novel Bypasses & Red-Team Tests**: If you discover a novel evasion technique, please follow [REDTEAM.md](REDTEAM.md) to submit a reproducible test case.
 - **Critical Zero-Days**: For critical host escapes or credential leakage zero-days, please disclose responsibly via [SECURITY.md](SECURITY.md) before opening public PRs.
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

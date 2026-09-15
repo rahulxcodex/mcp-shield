@@ -13,6 +13,7 @@ export interface AuditEvent {
   keyId: string;
   merkleRoot?: string;
   metadata?: Record<string, unknown>;
+  algorithm?: 'sha3-256' | 'sha256';
 }
 
 export interface AuditLedgerExport {
@@ -121,12 +122,14 @@ export class AuditComplianceLedger {
   private sink: DurableAuditSink;
   private inMemoryLedger: AuditEvent[] = [];
   private merkleBlockSize: number = 10;
+  private algorithm: 'sha3-256' | 'sha256';
 
   constructor(options?: {
     signingKey?: string;
     keyId?: string;
     sink?: DurableAuditSink;
     merkleBlockSize?: number;
+    algorithm?: 'sha3-256' | 'sha256';
   }) {
     // Zero hardcoded secrets: use provided key, env variable, or cryptographically generated persistent key
     const envKey = process.env.AUDIT_SIGNING_KEY;
@@ -135,6 +138,8 @@ export class AuditComplianceLedger {
     this.keys.set(this.activeKeyId, initialKey);
     this.sink = options?.sink || new MemoryAuditSink();
     if (options?.merkleBlockSize) this.merkleBlockSize = options.merkleBlockSize;
+    this.algorithm = options?.algorithm || (process.env.FIPS_MODE === 'true' ? 'sha3-256' : 'sha256');
+    this.lastHash = crypto.createHash(this.algorithm).update('GENESIS_MCP_SHIELD_V2').digest('hex');
   }
 
   /**
@@ -182,7 +187,7 @@ export class AuditComplianceLedger {
     this.sequenceCounter += 1;
     const cleanMetadata = AuditComplianceLedger.scrubMetadata(metadata);
     const payloadStr = typeof rawPayload === 'string' ? rawPayload : JSON.stringify(rawPayload);
-    const payloadHash = crypto.createHash('sha256').update(payloadStr).digest('hex');
+    const payloadHash = crypto.createHash(this.algorithm).update(payloadStr).digest('hex');
     const timestamp = new Date().toISOString();
 
     const signingKey = this.keys.get(this.activeKeyId);
@@ -192,7 +197,7 @@ export class AuditComplianceLedger {
 
     // Cryptographic chaining: H_n = HMAC(key, seq || timestamp || actor || action || payloadHash || prevHash)
     const canonicalRecord = `${this.sequenceCounter}:${timestamp}:${actor}:${action}:${payloadHash}:${this.lastHash}`;
-    const signature = crypto.createHmac('sha256', signingKey).update(canonicalRecord).digest('hex');
+    const signature = crypto.createHmac(this.algorithm, signingKey).update(canonicalRecord).digest('hex');
 
     const event: AuditEvent = {
       sequenceNumber: this.sequenceCounter,
@@ -203,7 +208,8 @@ export class AuditComplianceLedger {
       previousHash: this.lastHash,
       signature,
       keyId: this.activeKeyId,
-      metadata: cleanMetadata
+      metadata: cleanMetadata,
+      algorithm: this.algorithm
     };
 
     // Calculate rolling Merkle root every N events
@@ -222,18 +228,18 @@ export class AuditComplianceLedger {
     const windowStart = Math.max(0, endIndex - this.merkleBlockSize);
     const windowEvents = this.inMemoryLedger.slice(windowStart, endIndex);
     const hashes = windowEvents.map((e) => e.signature);
-    return AuditComplianceLedger.computeMerkleRoot(hashes);
+    return AuditComplianceLedger.computeMerkleRoot(hashes, this.algorithm);
   }
 
-  public static computeMerkleRoot(hashes: string[]): string {
-    if (hashes.length === 0) return crypto.createHash('sha256').update('').digest('hex');
+  public static computeMerkleRoot(hashes: string[], algorithm: 'sha3-256' | 'sha256' = 'sha256'): string {
+    if (hashes.length === 0) return crypto.createHash(algorithm).update('').digest('hex');
     let layer = hashes;
     while (layer.length > 1) {
       const nextLayer: string[] = [];
       for (let i = 0; i < layer.length; i += 2) {
         if (i + 1 < layer.length) {
           const combined = crypto
-            .createHash('sha256')
+            .createHash(algorithm)
             .update(layer[i] + layer[i + 1])
             .digest('hex');
           nextLayer.push(combined);
@@ -276,7 +282,8 @@ export class AuditComplianceLedger {
       return { valid: true, verifiedCount: 0 };
     }
 
-    let expectedPrevHash = crypto.createHash('sha256').update('GENESIS_MCP_SHIELD_V2').digest('hex');
+    const initialAlgo = events[0]?.algorithm || 'sha256';
+    let expectedPrevHash = crypto.createHash(initialAlgo).update('GENESIS_MCP_SHIELD_V2').digest('hex');
     let lastSeq = 0;
 
     for (let i = 0; i < events.length; i++) {
@@ -314,7 +321,8 @@ export class AuditComplianceLedger {
       }
 
       const canonicalRecord = `${event.sequenceNumber}:${event.timestamp}:${event.actor}:${event.action}:${event.payloadHash}:${event.previousHash}`;
-      const recomputedSig = crypto.createHmac('sha256', signingKey).update(canonicalRecord).digest('hex');
+      const algo = event.algorithm || 'sha256';
+      const recomputedSig = crypto.createHmac(algo, signingKey).update(canonicalRecord).digest('hex');
 
       if (!crypto.timingSafeEqual(Buffer.from(recomputedSig, 'hex'), Buffer.from(event.signature, 'hex'))) {
         return {
@@ -330,7 +338,8 @@ export class AuditComplianceLedger {
     }
 
     const allSigs = events.map((e) => e.signature);
-    const computedMerkleRoot = this.computeMerkleRoot(allSigs);
+    const primaryAlgo = events[0]?.algorithm || 'sha256';
+    const computedMerkleRoot = this.computeMerkleRoot(allSigs, primaryAlgo);
 
     return {
       valid: true,
