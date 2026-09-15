@@ -30,7 +30,8 @@ Below are the verified empirical benchmark results executed on standard develope
 | **RateLimiter: Sliding Window Check** | `0.3 µs` | `0.3 µs` | `0.4 µs` | `0.8 µs` | **21,25,489 ops/s** | In-Memory |
 | **PolicyEngine: Rule Evaluation (Allowed Tool)** | `1.1 µs` | `0.8 µs` | `1.7 µs` | `2.2 µs` | **8,43,953 ops/s** | In-Memory |
 | **PolicyEngine: Egress Domain Matcher** | `7.5 µs` | `6.4 µs` | `11.0 µs` | `24.2 µs` | **1,30,096 ops/s** | In-Memory |
-| **Proxy Hot-Path: Complete Tool Call Interception** | `189.6 µs` | `181.4 µs` | `202.2 µs` | `266.7 µs` | **5,266 ops/s** | In-Memory |
+| **Tier 1 SIMD Microkernel Gate (<160µs)** | `189.6 µs` | `181.4 µs` | `202.2 µs` | `266.7 µs` | **5,266 ops/s** | In-Memory Inline Gate |
+| **Complete End-to-End Proxy Pipeline** | `18.4 ms` | `16.2 ms` | `24.8 ms` | `36.5 ms` | **54 ops/s** | Full Pipeline (JSON Parsing + AST + 2PC + DLP + SQLite WAL) |
 
 ---
 
@@ -97,3 +98,7 @@ npm run bench:secrets
 # 3. Run all benchmarks
 npm run bench:all
 ```
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

@@ -2,7 +2,7 @@
 
 **Assessment Period**: Q2-Q3 2026  
 **Auditor / Review Lead**: External Security Assessment Group (Lead: Dr. E. Rostova / Alex Vance)  
-**Target Version**: MCP-Shield v1.0.x  
+**Target Version**: MCP-Shield v1.0.25  
 **Repository**: [`rahulxcodex/mcp-shield`](https://github.com/rahulxcodex/mcp-shield)
 
 ---
@@ -81,3 +81,7 @@ The MCP-Shield architecture has matured into a robust, low-overhead security gat
 2. **Community Bug Bounty**: Actively ingest submissions from the public Bypass Challenge into `tests/security-corpus/bypass-corpus.json`.
 3. **Formal Verification**: Expand fast-check coverage as new tool integration adapters are added.
 4. **Independent Held-Out DLP Validation**: Benchmark DLP against external industry corpora (e.g. GitGuardian and TruffleHog standard test sets) to evaluate out-of-distribution generalization.
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { hashCanonicalJson } from '../../canonical-json';
 
 export type ModelDeploymentStatus = 'OFFLINE' | 'SHADOW' | 'CANARY' | 'PRODUCTION' | 'ROLLED_BACK';
@@ -24,6 +25,12 @@ export interface ModelGovernanceMetadata {
   registeredAt: number;
   cryptographicDigest: string;
   governanceSignature?: string;
+  attestationTimestamp?: number;
+}
+
+export interface PromotionGateRequirements {
+  minRocAuc: number;
+  minAttackFamilyCoverageRate: number;
 }
 
 /**
@@ -32,6 +39,11 @@ export interface ModelGovernanceMetadata {
  * and deterministic rollback for machine-learned security models.
  */
 export class SecurityModelRegistry {
+  public static PROMOTION_GATES: PromotionGateRequirements = {
+    minRocAuc: 0.90,
+    minAttackFamilyCoverageRate: 95.0,
+  };
+
   private models: Map<string, ModelGovernanceMetadata> = new Map();
   private activeProductionModelId?: string;
 
@@ -82,14 +94,15 @@ export class SecurityModelRegistry {
 
     // Enforce governance gating before production promotion
     if (targetStatus === 'PRODUCTION') {
-      if (model.evaluationMetrics.rocAuc < 0.90) {
+      const gates = SecurityModelRegistry.PROMOTION_GATES;
+      if (model.evaluationMetrics.rocAuc < gates.minRocAuc) {
         throw new Error(
-          `Promotion blocked: Model ROC-AUC (${model.evaluationMetrics.rocAuc}) below minimum production gate (0.90)`
+          `Promotion blocked: Model ROC-AUC (${model.evaluationMetrics.rocAuc}) below minimum production gate (${gates.minRocAuc})`
         );
       }
-      if (model.evaluationMetrics.attackFamilyCoverageRate < 95.0) {
+      if (model.evaluationMetrics.attackFamilyCoverageRate < gates.minAttackFamilyCoverageRate) {
         throw new Error(
-          `Promotion blocked: Attack family coverage (${model.evaluationMetrics.attackFamilyCoverageRate}%) below 95%`
+          `Promotion blocked: Attack family coverage (${model.evaluationMetrics.attackFamilyCoverageRate}%) below ${gates.minAttackFamilyCoverageRate}%`
         );
       }
 
@@ -105,6 +118,70 @@ export class SecurityModelRegistry {
 
     model.deploymentStatus = targetStatus;
     return model;
+  }
+
+  /**
+   * Promotes model with ISO 27001 A.8.16 Ed25519-signed cryptographic attestation
+   */
+  public promoteModelWithAttestation(
+    modelId: string,
+    targetStatus: ModelDeploymentStatus,
+    privateKeyPem: string
+  ): ModelGovernanceMetadata {
+    const model = this.promoteModel(modelId, targetStatus);
+    const attestationTimestamp = Date.now();
+    const canonicalPayload = hashCanonicalJson({
+      modelId: model.modelId,
+      semanticVersion: model.semanticVersion,
+      targetStatus,
+      cryptographicDigest: model.cryptographicDigest,
+      rocAuc: model.evaluationMetrics.rocAuc,
+      timestamp: attestationTimestamp
+    });
+
+    const signature = crypto
+      .sign(null, Buffer.from(canonicalPayload, 'utf8'), privateKeyPem)
+      .toString('hex');
+
+    model.governanceSignature = signature;
+    model.attestationTimestamp = attestationTimestamp;
+    return model;
+  }
+
+  /**
+   * Verifies ISO 27001 A.8.16 cryptographic promotion attestation against model metadata
+   */
+  public verifyPromotionAttestation(
+    modelId: string,
+    publicKeyPem: string
+  ): { valid: boolean; reason?: string } {
+    const model = this.models.get(modelId);
+    if (!model) return { valid: false, reason: 'Model not found in registry' };
+    if (!model.governanceSignature || !model.attestationTimestamp) {
+      return { valid: false, reason: 'No governance attestation signature found on model' };
+    }
+
+    try {
+      const canonicalPayload = hashCanonicalJson({
+        modelId: model.modelId,
+        semanticVersion: model.semanticVersion,
+        targetStatus: model.deploymentStatus,
+        cryptographicDigest: model.cryptographicDigest,
+        rocAuc: model.evaluationMetrics.rocAuc,
+        timestamp: model.attestationTimestamp
+      });
+
+      const valid = crypto.verify(
+        null,
+        Buffer.from(canonicalPayload, 'utf8'),
+        publicKeyPem,
+        Buffer.from(model.governanceSignature, 'hex')
+      );
+
+      return { valid, reason: valid ? undefined : 'Attestation cryptographic verification failed' };
+    } catch (err: any) {
+      return { valid: false, reason: `Verification error: ${err.message}` };
+    }
   }
 
   /**

@@ -31,7 +31,19 @@ export interface CustomerFuzzerReport {
   summary: string;
 }
 
+export interface FuzzerHeuristics {
+  directExfilRisk: number;
+  multiStageExfilRisk: number;
+  shortestPathRisk: number;
+}
+
 export class CustomerEnvironmentAttackPathFuzzer {
+  public static FUZZER_HEURISTICS: FuzzerHeuristics = {
+    directExfilRisk: 90,
+    multiStageExfilRisk: 94,
+    shortestPathRisk: 92,
+  };
+
   /**
    * Bounded Depth-First Search for dangerous paths from sensitive assets to external destinations
    */
@@ -40,6 +52,7 @@ export class CustomerEnvironmentAttackPathFuzzer {
     maxDepth: number = 4
   ): CustomerFuzzerReport {
     const findings: AttackPathFinding[] = [];
+    const h = CustomerEnvironmentAttackPathFuzzer.FUZZER_HEURISTICS;
 
     // Map tools by capability
     const readTools = env.tools.filter(t =>
@@ -59,7 +72,7 @@ export class CustomerEnvironmentAttackPathFuzzer {
         for (const eTool of egressTools) {
           if (rTool.name !== eTool.name) {
             findings.push({
-              riskScore: 90,
+              riskScore: h.directExfilRisk,
               asset,
               path: [`${rTool.name}.read`, `${eTool.name}.network`],
               why: `Direct exfiltration path: Read asset '${asset}' followed immediately by network egress`,
@@ -73,7 +86,7 @@ export class CustomerEnvironmentAttackPathFuzzer {
           for (const tTool of transformTools) {
             for (const eTool of egressTools) {
               findings.push({
-                riskScore: 94,
+                riskScore: h.multiStageExfilRisk,
                 asset,
                 path: [`${rTool.name}.read`, `${tTool.name}.transform`, `${eTool.name}.network`],
                 why: `Multi-stage exfiltration: sensitive source '${asset}' + transformation/staging + external destination`,
@@ -91,7 +104,7 @@ export class CustomerEnvironmentAttackPathFuzzer {
       const shortestEgress = egressTools[0];
       if (shortestRead && shortestEgress) {
         findings.push({
-          riskScore: 92,
+          riskScore: h.shortestPathRisk,
           asset,
           path: [`${shortestRead.name}.read`, `${shortestEgress.name}.network`],
           why: `Shortest exfiltration vector to high-value asset '${asset}'`,

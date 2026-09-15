@@ -65,6 +65,7 @@ export class TextSecurityClassifier {
   private static readonly DATA_EXFILTRATION_PATTERNS = [
     { pattern: /!\[.*?\]\(https?:\/\/[^\s)]+(?:\?|&)(?:data|secret|token|val|leak|key)=[^)\s]+\)/i, label: 'Markdown image covert exfiltration channel', weight: 0.95 },
     { pattern: /<img\s+[^>]*src=["']https?:\/\/[^"']+(?:\?|&)(?:token|key|secret)=[^"']+["']/i, label: 'HTML image tracking beacon exfiltration', weight: 0.95 },
+    { pattern: /(?:fetch|http|https|request)\s*\(.*?(?:cookie|cookies|token|key|secret)=/i, label: 'Script-driven HTTP cookie exfiltration channel', weight: 0.95 },
     { pattern: /dns:\/\/[a-zA-Z0-9_-]+\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i, label: 'DNS tunneling exfiltration scheme', weight: 0.90 },
     { pattern: /(?:webhook\.site|pipedream\.net|burpcollaborator\.net|interact\.sh|oast\.fun)/i, label: 'Known OOB exfiltration receiver domain', weight: 0.92 }
   ];

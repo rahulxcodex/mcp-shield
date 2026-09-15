@@ -49,3 +49,39 @@ export * from './security/kernel/adapters/mcp-adapter';
 export * from './security/kernel/adapters/browser-adapter';
 export * from './security/kernel/adapters/coding-adapter';
 export * from './security/os-enforcer';
+
+// Tier 1 Fast-Path Micro-Engine
+export * from './microkernel/fastpath/simdjson-tokenizer';
+export * from './microkernel/fastpath/elias-fano';
+export * from './microkernel/fastpath/count-min-sketch';
+export * from './microkernel/fastpath/groupsort-dscnn';
+export * from './microkernel/fastpath/bitboard-motifs';
+export * from './microkernel/fastpath/pthash';
+export * from './microkernel/fastpath/timing-shield';
+export * from './microkernel/fastpath/tier1-micro-kernel';
+
+// Lock-Free Shared Memory Ring Buffer & 2PC Bridge
+export * from './microkernel/ring-buffer/lmax-disruptor';
+export * from './security/bridge/capability-2pc';
+
+// Tier 2 Asynchronous Deep Causal Engine
+export * from './security/causal/tgn-memory';
+export * from './security/causal/monotonic-taint-field';
+export * from './security/causal/causal-hypergraph';
+export * from './security/causal/truncated-bocpd';
+export * from './security/causal/persistent-homology';
+export * from './security/causal/path-integrated-gradients';
+export * from './security/causal/adaptive-conformal-inference';
+export * from './security/causal/tier2-causal-engine';
+
+// Privacy-Preserving Federated Intelligence
+export * from './security/federated/dp-sgd';
+export * from './security/federated/byzantine-secagg';
+
+// Mandatory Remediations: SQLite Audit Sink, Human Oversight, Air-gap, Schema Pinning
+export * from './security/audit/sqlite-audit-sink';
+export * from './security/oversight/human-oversight-service';
+export * from './security/airgap/offline-enforcer';
+export * from './security/airgap/schema-pinning';
+export * from './cli/commands/audit';
+

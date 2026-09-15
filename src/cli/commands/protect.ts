@@ -221,8 +221,23 @@ export class ProtectCommand {
 
       if (patchResult.patched) {
         const backupPath = `${configPath}.backup-${Date.now()}`;
+        const tempPath = `${configPath}.tmp-${Date.now()}`;
+        fs.mkdirSync(path.dirname(configPath), { recursive: true });
         fs.copyFileSync(configPath, backupPath);
-        fs.writeFileSync(configPath, patchResult.content, 'utf8');
+
+        try {
+          fs.writeFileSync(tempPath, patchResult.content, 'utf8');
+          fs.renameSync(tempPath, configPath);
+        } catch (writeErr) {
+          if (fs.existsSync(backupPath)) {
+            fs.copyFileSync(backupPath, configPath);
+          }
+          if (fs.existsSync(tempPath)) {
+            try { fs.unlinkSync(tempPath); } catch { /* ignore */ }
+          }
+          throw writeErr;
+        }
+
         console.log(`[OK] ${name} protected (${patchResult.serverCount} servers found). Backup saved to ${path.basename(backupPath)}.`);
         return true;
       } else {

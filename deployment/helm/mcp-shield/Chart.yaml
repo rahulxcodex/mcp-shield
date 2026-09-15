@@ -1,0 +1,16 @@
+apiVersion: v2
+name: mcp-shield
+description: Helm chart for Self-Hosted Enterprise MCP Shield (Two-Tier Neuro-Symbolic Agent Security Engine)
+type: application
+version: 1.0.25
+appVersion: "1.0.25"
+keywords:
+  - mcp
+  - security
+  - zero-trust
+  - model-context-protocol
+  - ai-agent
+home: https://github.com/rahulxcodex/mcp-shield
+maintainers:
+  - name: MCP Shield Security Team
+    email: security@mcpshield.com

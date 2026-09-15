@@ -96,6 +96,13 @@ describe('OSEnforcer - Kernel & Operating System Boundary Enforcement', () => {
       expect(wrapped.executable).toBeDefined();
       expect(Array.isArray(wrapped.args)).toBe(true);
     });
+
+    it('throws in strict mode when AppArmor is unavailable', () => {
+      jest.spyOn(enforcer, 'isAppArmorAvailable').mockReturnValueOnce(false);
+      expect(() => {
+        enforcer.wrapAppArmorExec('test_profile', 'bash', ['-c', 'echo test'], true);
+      }).toThrow('EPERM_SANDBOX_UNAVAILABLE');
+    });
   });
 
   describe('Secure File Descriptor Opening & TOCTOU Defense', () => {

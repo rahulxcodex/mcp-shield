@@ -30,6 +30,7 @@ export class COWFileSystem {
       this.stagingRoot = this.config?.cowStagingDir || path.join(this.rootDir, '.mcp-shield', 'cow');
     }
     this.ensureSessionDir();
+    COWFileSystem.cleanupStaleStagingDirectories(this.stagingRoot);
   }
 
   private ensureSessionDir() {
@@ -209,6 +210,29 @@ export class COWFileSystem {
   public discard(stagingPath: string): void {
     if (fs.existsSync(stagingPath)) {
       fs.unlinkSync(stagingPath);
+    }
+  }
+
+  public static cleanupStaleStagingDirectories(stagingRoot: string, maxAgeMs: number = 3600 * 1000): void {
+    try {
+      if (!fs.existsSync(stagingRoot)) return;
+      const entries = fs.readdirSync(stagingRoot, { withFileTypes: true });
+      const now = Date.now();
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const dirPath = path.join(stagingRoot, entry.name);
+          const stat = fs.statSync(dirPath);
+          if (now - stat.mtimeMs > maxAgeMs) {
+            try {
+              fs.rmSync(dirPath, { recursive: true, force: true });
+            } catch {
+              // Ignore cleanup failures
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore directory scan failure
     }
   }
 }

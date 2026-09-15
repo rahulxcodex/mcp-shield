@@ -26,6 +26,13 @@ export interface FusedIntelligenceReport {
 
 export type SignalSubscriber = (signal: SecuritySignal) => void;
 
+export interface FusionThresholds {
+  hardBlockSeverity: number;
+  hardBlockConfidence: number;
+  attackPathSeverity: number;
+  compositeRiskHighThreshold: number;
+}
+
 /**
  * Enterprise Security Intelligence Bus (Roadmap Section 7.2)
  * Decouples signal generation from pipeline policy evaluation.
@@ -33,6 +40,13 @@ export type SignalSubscriber = (signal: SecuritySignal) => void;
  * using deterministic precedence invariants.
  */
 export class SecurityIntelligenceBus {
+  public static FUSION_THRESHOLDS: FusionThresholds = {
+    hardBlockSeverity: 0.85,
+    hardBlockConfidence: 0.90,
+    attackPathSeverity: 0.80,
+    compositeRiskHighThreshold: 0.75,
+  };
+
   private subscribers: Map<string, Set<SignalSubscriber>> = new Map();
   private signalBuffer: SecuritySignal[] = [];
   private maxBufferSize: number = 1000;
@@ -111,9 +125,11 @@ export class SecurityIntelligenceBus {
     const rationale: string[] = [];
     const primarySignals: SecuritySignal[] = [];
 
+    const t = SecurityIntelligenceBus.FUSION_THRESHOLDS;
+
     // 1. Check for Deterministic Hard Blocks
     const hardBlocks = signals.filter(
-      (s) => s.hardBlockCandidate || (s.severity >= 0.85 && s.confidence >= 0.90 && s.source.startsWith('deterministic'))
+      (s) => s.hardBlockCandidate || (s.severity >= t.hardBlockSeverity && s.confidence >= t.hardBlockConfidence && s.source.startsWith('deterministic'))
     );
 
     if (hardBlocks.length > 0) {
@@ -135,8 +151,8 @@ export class SecurityIntelligenceBus {
 
     // 2. Check for Attack-Path Multi-Tool Kill Chains
     const attackPathSignals = signals.filter((s) => s.category === 'ATTACK_PATH' || s.category === 'KILL_CHAIN');
-    if (attackPathSignals.length > 0 && attackPathSignals.some((s) => s.severity >= 0.8)) {
-      const killer = attackPathSignals.find((s) => s.severity >= 0.8)!;
+    if (attackPathSignals.length > 0 && attackPathSignals.some((s) => s.severity >= t.attackPathSeverity)) {
+      const killer = attackPathSignals.find((s) => s.severity >= t.attackPathSeverity)!;
       rationale.push(`Attack graph kill-chain detected by ${killer.source}: ${JSON.stringify(killer.evidence)}`);
       primarySignals.push(killer);
 

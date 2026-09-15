@@ -6,6 +6,7 @@ import { PolicyEngine, ShieldConfig } from '../security/policy-engine';
 import { SecretSanitizer } from '../security/sanitizer';
 import { RateLimiter } from '../security/rate-limiter';
 import { SessionLogger } from '../audit/session-logger';
+import { CryptographicSchemaPinner } from '../security/airgap/schema-pinning';
 
 export type SessionState = 'CONNECTING' | 'INITIALIZING' | 'READY' | 'DEGRADED' | 'CLOSING' | 'CLOSED';
 
@@ -15,6 +16,7 @@ export class SecuritySession {
   
   public serverIdentity: string = 'unknown';
   public readonly toolRegistry = new Map<string, RegisteredTool>();
+  public readonly schemaPinner = new CryptographicSchemaPinner();
   
   public readonly policyEngine: PolicyEngine;
   public readonly sanitizer: SecretSanitizer;
@@ -122,25 +124,34 @@ export class SecuritySession {
   }
 
   public validateToolsSnapshot(tools: Array<{ name: string; description?: string; inputSchema?: any; annotations?: any; executionMetadata?: any }>): void {
-    // Generate deterministic signature of tools list including full tool definition (name, description, schema, annotations)
-    const sortedSignatures = tools.map(t => {
-      const defHash = CapabilityInferencer.hashToolDefinition(t);
-      return `${t.name}:${defHash}`;
-    }).sort().join('|');
-
-    const snapshotHash = crypto.createHash('sha256').update(sortedSignatures).digest('hex');
-
     if (this.initialToolsSnapshotHash === null) {
-      this.initialToolsSnapshotHash = snapshotHash;
+      for (const tool of tools) {
+        this.schemaPinner.pinTool(tool);
+      }
+      this.initialToolsSnapshotHash = crypto.createHash('sha3-256').update(tools.map(t => CryptographicSchemaPinner.computeDigest(t)).sort().join('|')).digest('hex');
       this.registeredToolNames = new Set(tools.map(t => t.name));
-    } else if (this.initialToolsSnapshotHash !== snapshotHash) {
-      if (this.allowToolsUpdate) {
-        // Legitimate dynamic tools update (e.g. notifications/tools/list_changed)
-        this.initialToolsSnapshotHash = snapshotHash;
-        this.registeredToolNames = new Set(tools.map(t => t.name));
-        this.allowToolsUpdate = false;
-      } else {
-        throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: Tool list or tool definitions altered dynamically without expected update notice.`);
+    } else {
+      let verificationFailed = false;
+      let failureReason = '';
+      for (const tool of tools) {
+        const verification = this.schemaPinner.verifyToolInvocation(tool);
+        if (!verification.valid) {
+          verificationFailed = true;
+          failureReason = verification.reason || 'Cryptographic schema pinning signature failed';
+          break;
+        }
+      }
+      if (verificationFailed) {
+        if (this.allowToolsUpdate) {
+          for (const tool of tools) {
+            this.schemaPinner.pinTool(tool);
+          }
+          this.initialToolsSnapshotHash = crypto.createHash('sha3-256').update(tools.map(t => CryptographicSchemaPinner.computeDigest(t)).sort().join('|')).digest('hex');
+          this.registeredToolNames = new Set(tools.map(t => t.name));
+          this.allowToolsUpdate = false;
+        } else {
+          throw new Error(`[MCP-SHIELD] SCHEMA PINNING VIOLATION: ${failureReason}`);
+        }
       }
     }
   }

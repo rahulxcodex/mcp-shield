@@ -133,3 +133,7 @@ Once your website is deployed (e.g. at `https://your-app.vercel.app`), connect y
    ```
 
 5. Open `https://your-app.vercel.app/console` to watch all attacks, blocks, and DLP tokenizations stream live with sub-millisecond metrics!
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

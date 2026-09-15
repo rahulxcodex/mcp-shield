@@ -9,7 +9,7 @@ import GithubIcon from '@/components/GithubIcon';
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen flex flex-col bg-[#090a0f] text-slate-100 font-sans">
+    <div className="min-h-screen flex flex-col bg-background text-foreground font-sans selection:bg-emerald-500/20 selection:text-emerald-300">
       <LandingNavbar />
 
       <main className="flex-1">

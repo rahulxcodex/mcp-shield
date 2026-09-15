@@ -22,7 +22,7 @@ If you discover a security vulnerability, bypass, or privilege escalation in MCP
 ### Preferred Reporting Channels
 
 1. **GitHub Private Security Advisory**: Navigate to the repository's **Security** tab and select **"Report a vulnerability"**.
-2. **Security Email**: Send an encrypted or direct email to **`security@example.com`**.
+2. **Security Email**: Send an encrypted or direct email to **`security@example.com`** (replace with your organization's security contact).
 3. **Public Red-Team Bypass Challenge**: For non-critical evasions or filter edge cases, submit via the [Bypass Challenge Template](.github/ISSUE_TEMPLATE/security_bypass.yml).
 
 ---
@@ -159,3 +159,7 @@ For detailed specifications on what is considered in-scope vs out-of-scope for t
 - 📊 [Control Matrix](CONTROL_MATRIX.md)
 - 🧪 [Red-Team Validation Program](REDTEAM.md)
 - 🛡️ [Independent Security Audit Report](SECURITY_AUDIT.md)
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

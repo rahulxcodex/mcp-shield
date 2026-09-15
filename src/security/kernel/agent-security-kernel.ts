@@ -18,6 +18,8 @@ import { BehaviorAnomalyDetector } from '../ml/models/behavior-anomaly-detector'
 import { NoveltyScorer, NoveltyReport } from '../ml/novelty-scorer';
 import { SecurityIntelligenceRegistry, SecurityIntelligenceVersion } from '../ml/intelligence-version';
 import { PathSecurityResolver } from '../path-resolver';
+import { Tier1MicroKernel } from '../../microkernel/fastpath/tier1-micro-kernel';
+import { Tier2CausalEngine } from '../causal/tier2-causal-engine';
 
 export type SupportedProtocol = 'mcp' | 'browser' | 'coding';
 
@@ -162,29 +164,42 @@ export class AgentSecurityKernel {
       evidence.push(modelCResult.evidence);
     }
 
-    // Calculate fused risk score
-    // Invariant: Deterministic hard block is authoritative!
-    let fusedRisk = modelAPred.riskScore;
+    // 8. Tier 1 Fast-Path Microkernel Evaluation (<160us)
+    const tier1Kernel = new Tier1MicroKernel();
+    const t1Result = tier1Kernel.evaluate(stringifiedArgs);
+    if (t1Result.blocked) {
+      hardBlockTriggered = true;
+      if (!primaryViolation) primaryViolation = `Tier 1 Fastpath: ${t1Result.reasons.join('; ')}`;
+      evidence.push({
+        detectorId: 'tier1-microkernel',
+        category: 'PROTOCOL_VIOLATION',
+        severity: t1Result.riskScore,
+        confidence: 1.0,
+        hardBlock: true,
+        features: { motifs: t1Result.activeMotifs.join(',') },
+        explanation: t1Result.reasons.join('; ')
+      });
+    }
+
+    // 9. Unified Decision Fusion Contract (Iteration 5, Section 1)
+    // S_fused = max(S_det, 0.35 * z_T1 + 0.65 * p_hat_T2)
+    const sDet = hardBlockTriggered ? 1.0 : (primaryViolation ? 0.95 : 0.0);
+    const zT1 = t1Result.riskScore;
+    let posteriorBase = modelAPred.riskScore / 100;
     if (modelBResult.category !== 'BENIGN') {
-      fusedRisk = Math.max(fusedRisk, Math.round(modelBResult.severity * 100));
+      posteriorBase = Math.max(posteriorBase, modelBResult.severity);
     }
     if (modelCResult.isAnomalous) {
-      fusedRisk = Math.max(fusedRisk, Math.round(modelCResult.anomalyScore * 80));
+      posteriorBase = Math.max(posteriorBase, modelCResult.anomalyScore);
     }
-    if (hardBlockTriggered) {
-      fusedRisk = Math.max(fusedRisk, 95);
-    }
+
+    const fusedDecision = Tier2CausalEngine.fuseDecision(sDet, zT1, posteriorBase);
+    const fusedRisk = Math.round(fusedDecision.fusedScore * 100);
 
     // Policy Decision
     let decisionAction: KernelSecurityDecision['action'] = 'ALLOW';
-    if (hardBlockTriggered || fusedRisk >= 85) {
-      decisionAction = 'BLOCK';
-    } else if (fusedRisk >= 70) {
-      decisionAction = 'QUARANTINE';
-    } else if (fusedRisk >= 55) {
-      decisionAction = 'SANDBOX';
-    } else if (fusedRisk >= 40) {
-      decisionAction = 'PROMPT';
+    if (fusedDecision.action !== 'MONITOR') {
+      decisionAction = fusedDecision.action as KernelSecurityDecision['action'];
     }
 
     const intelVersion = SecurityIntelligenceRegistry.getActiveVersion();

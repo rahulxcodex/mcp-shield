@@ -103,10 +103,10 @@ Verify that the newly published package is live on the npm registry:
 
 ```bash
 # Query npm registry
-npm view mcp-shield version
+npm view mcpshld version
 
 # Test global execution via npx
-npx mcp-shield@latest --help
+npx mcpshld@latest --help
 ```
 
 ---
@@ -121,3 +121,7 @@ In the event of a critical regression or severe vulnerability introduced in a re
    npm deprecate mcp-shield@<version> "Critical vulnerability detected. Please upgrade to latest."
    ```
 3. **Emergency Hotfix**: Branch off the affected tag (`hotfix/1.0.x`), apply the patch, and publish an immediate PATCH increment (`v1.0.x+1`).
+
+---
+
+*MCP-Shield v1.0.25 • [GitHub](https://github.com/rahulxcodex/mcp-shield) • [MIT License](LICENSE)*

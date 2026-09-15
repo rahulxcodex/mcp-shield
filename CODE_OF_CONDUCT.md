@@ -66,7 +66,7 @@ Community leaders will follow these Community Impact Guidelines in determining t
 
 ## Reporting & Contact
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project team at `security@example.com` or directly to repository maintainers on GitHub. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project team at `security@example.com` (replace with your organization's security contact) or directly to repository maintainers on [GitHub](https://github.com/rahulxcodex/mcp-shield). All complaints will be reviewed and investigated promptly and fairly.
 
 ---
 

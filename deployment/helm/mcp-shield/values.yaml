@@ -1,0 +1,56 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/rahulxcodex/mcp-shield
+  pullPolicy: IfNotPresent
+  tag: "1.0.25"
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: mcp-shield.internal.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+
+env:
+  NODE_ENV: "production"
+  AIR_GAP_OFFLINE: "false"
+  FIPS_MODE: "true"
+  PERSISTENT_AUDIT_SQLITE_PATH: "/data/audit/audit-ledger.sqlite"
+  TIER2_CAUSAL_SIDECAR_ENABLED: "true"
+  LMAX_RING_SIZE: "1024"
+
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClassName: "gp3"
+  mountPath: "/data"
