@@ -8,7 +8,7 @@
 [![Security: Defense-in-Depth](https://img.shields.io/badge/Security-Defense--in--Depth-blue.svg)](SECURITY_ARCHITECTURE.md)
 [![Audit: Standalone Verified](https://img.shields.io/badge/Audit-Standalone%20Verified-brightgreen.svg)](scripts/verify-external-audit.ts)
 
-> 🛡️ **Production Status**: Production Ready (v1.0.25) • Verified Defense-in-Depth Broker • Includes Standalone Third-Party Audit Runner (`scripts/verify-external-audit.ts`).
+> 🛡️ **Production Status**: Production Ready (v1.0.27) • Verified Defense-in-Depth Broker • Includes Standalone Third-Party Audit Runner (`scripts/verify-external-audit.ts`).
 
 > **The Defense-in-Depth Policy & Capability Enforcement Broker, AST Shell Firewall & Bijective Secret Sanitizer for the Model Context Protocol (MCP) and Autonomous AI Agents.**
 

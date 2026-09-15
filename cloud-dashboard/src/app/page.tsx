@@ -23,7 +23,7 @@ export default function HomePage() {
               {/* Release announcement badge */}
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-slate-700 text-xs text-slate-300 shadow-xl hover:border-emerald-500/50 transition">
                 <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                <span className="font-semibold text-emerald-400">Platform v2.4 • Engine mcpshld@1.0.25</span>
+                <span className="font-semibold text-emerald-400">Platform v2.4 • Engine mcpshld@1.0.27</span>
                 <span className="text-slate-500">|</span>
                 <span>Zero-Trust Policy & Capability Enforcement</span>
                 <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
