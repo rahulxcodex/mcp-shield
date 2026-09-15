@@ -17,6 +17,9 @@
     "mcpshld": "./bin/mcp-shield.js",
     "mcpshld-audit": "./bin/mcp-shield.js"
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "files": [
     "dist",
     "bin",
