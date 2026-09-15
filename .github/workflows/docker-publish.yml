@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3.5.0
+        uses: sigstore/cosign-installer@v4.1.2
 
       - name: Set up QEMU for Multi-Arch
         uses: docker/setup-qemu-action@v3
