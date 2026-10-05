@@ -98,7 +98,7 @@
     "tree-sitter": "0.25.1",
     "tree-sitter-bash": "0.25.1",
     "uuid": "^14.0.2",
-    "ws": "^8.21.3",
+    "ws": "^8.22.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -110,7 +110,7 @@
     "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
     "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.18.1",
+    "@types/ws": "^8.18.2",
     "fast-check": "^4.9.0",
     "jest": "^30.5.0",
     "playwright": "^1.62.1",
